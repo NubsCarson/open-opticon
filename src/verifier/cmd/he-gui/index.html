@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<title>open-opticon — the mic that proves what it heard</title>
+<style>
+  :root{
+    --bg:#0a0e14; --bg2:#0f1620; --card:#131c28; --line:#1f2b3a;
+    --txt:#e7eef7; --dim:#8aa0b6; --accent:#2dd4bf; --good:#34d399; --warn:#fbbf24; --bad:#f87171;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
+    color:var(--txt);
+    background:radial-gradient(1200px 800px at 50% -10%, #14202e 0%, var(--bg) 60%);
+    display:flex; flex-direction:column; align-items:center; min-height:100%;
+    -webkit-font-smoothing:antialiased;
+  }
+  header{margin-top:42px; text-align:center}
+  .brand{font-weight:700; letter-spacing:.3px; font-size:15px; color:var(--dim)}
+  h1{font-size:26px; font-weight:650; margin:8px 0 4px; letter-spacing:-.2px}
+  .sub{color:var(--dim); font-size:14px; max-width:430px; margin:0 auto; line-height:1.5}
+
+  main{flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; width:100%; padding:24px}
+
+  /* mic orb */
+  .orb-wrap{position:relative; width:200px; height:200px; display:grid; place-items:center; cursor:pointer; user-select:none}
+  .ring{position:absolute; inset:0; border-radius:50%; border:2px solid var(--line)}
+  .pulse{position:absolute; border-radius:50%; border:2px solid var(--accent); opacity:0; }
+  .orb{
+    width:120px; height:120px; border-radius:50%;
+    background:linear-gradient(160deg,#1b2734,#0e1620);
+    border:1px solid var(--line); display:grid; place-items:center;
+    box-shadow:0 10px 40px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.04);
+    transition:transform .15s ease, box-shadow .3s ease;
+  }
+  .orb svg{width:46px; height:46px; fill:none; stroke:var(--dim); stroke-width:2; transition:stroke .3s}
+  .orb-wrap:hover .orb{transform:translateY(-2px)}
+  body.live .orb{box-shadow:0 0 0 1px var(--accent), 0 0 60px rgba(45,212,191,.25)}
+  body.live .orb svg{stroke:var(--accent)}
+  body.live .pulse{animation:pulse 2.2s ease-out infinite}
+  @keyframes pulse{0%{inset:40px;opacity:.5}100%{inset:-6px;opacity:0}}
+
+  .hint{margin-top:18px; color:var(--dim); font-size:14px; height:20px; letter-spacing:.2px}
+
+  /* live level meter */
+  .meter{display:flex; gap:4px; align-items:flex-end; height:30px; margin-top:14px; opacity:0; transition:opacity .3s}
+  body.live .meter{opacity:1}
+  .meter i{width:4px; height:6px; background:var(--accent); border-radius:2px; transition:height .08s linear; opacity:.85}
+
+  /* result card */
+  .card{
+    margin-top:26px; width:min(440px,92vw); background:var(--card); border:1px solid var(--line);
+    border-radius:18px; padding:22px 22px 18px; text-align:center;
+    opacity:0; transform:translateY(8px); transition:opacity .35s ease, transform .35s ease;
+  }
+  .card.show{opacity:1; transform:none}
+  .emoji{font-size:40px; line-height:1}
+  .verdict{font-size:21px; font-weight:650; margin-top:8px}
+  .pill{display:inline-flex; align-items:center; gap:7px; margin-top:12px; padding:6px 12px; border-radius:999px;
+    font-size:13px; font-weight:600; background:rgba(52,211,153,.12); color:var(--good); border:1px solid rgba(52,211,153,.25)}
+  .pill.bad{background:rgba(248,113,113,.12); color:var(--bad); border-color:rgba(248,113,113,.25)}
+  .pill .dot{width:7px;height:7px;border-radius:50%;background:currentColor}
+  .meta{margin-top:12px; color:var(--dim); font-size:12.5px; line-height:1.5}
+  .leak{margin-top:14px; font-size:13px; color:var(--dim)}
+  .leak b{color:var(--txt); font-weight:600}
+
+  details{margin-top:14px; text-align:left}
+  details summary{color:var(--dim); font-size:12.5px; cursor:pointer; list-style:none}
+  details summary::-webkit-details-marker{display:none}
+  details summary:before{content:"▸ "; color:var(--accent)}
+  details[open] summary:before{content:"▾ "}
+  .proof{margin-top:10px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11.5px; color:var(--dim);
+    background:var(--bg2); border:1px solid var(--line); border-radius:10px; padding:10px 12px; word-break:break-all; line-height:1.6}
+  .proof b{color:var(--accent)}
+
+  .tamper{margin-top:16px; border-top:1px solid var(--line); padding-top:14px}
+  .tnote{font-size:11.5px; color:var(--dim); margin-bottom:10px}
+  .tbtns{display:flex; gap:8px; flex-wrap:wrap; justify-content:center}
+  .tbtn{appearance:none; border:1px solid var(--line); background:var(--bg2); color:var(--dim);
+    font:inherit; font-size:12.5px; padding:8px 13px; border-radius:10px; cursor:pointer; transition:.15s}
+  .tbtn:hover{border-color:var(--accent); color:var(--txt)}
+  .tverdict{margin-top:11px; font-size:13.5px; min-height:18px; font-weight:600}
+  .tverdict.bad{color:var(--bad)} .tverdict.good{color:var(--good)}
+
+  footer{color:var(--dim); font-size:12px; text-align:center; max-width:520px; line-height:1.6; margin:28px 16px 30px}
+  footer a{color:var(--accent); text-decoration:none}
+  .err{color:var(--bad); font-size:13px; margin-top:12px; min-height:16px}
+</style>
+</head>
+<body>
+  <header>
+    <div class="brand">open-opticon</div>
+    <h1>The mic that proves what it heard</h1>
+    <p class="sub">Tap to listen. It tells you <i>one</i> thing — alarm, voice, or quiet — proves it’s genuine, and throws the audio away.</p>
+  </header>
+
+  <main>
+    <div class="orb-wrap" id="orb" role="button" tabindex="0" aria-label="Toggle listening">
+      <div class="ring"></div>
+      <div class="pulse"></div>
+      <div class="orb">
+        <svg viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><line x1="12" y1="18" x2="12" y2="22"/></svg>
+      </div>
+    </div>
+    <div class="hint" id="hint">Tap to listen</div>
+    <div class="meter" id="meter"></div>
+
+    <section class="card" id="card">
+      <div class="emoji" id="emoji">🎧</div>
+      <div class="verdict" id="verdict">Ready</div>
+      <div class="pill" id="pill"><span class="dot"></span><span id="pilltext">verified</span></div>
+      <div class="leak">Audio captured → analyzed → <b>discarded</b>. Only the result above left the device.</div>
+      <details>
+        <summary>Show cryptographic proof</summary>
+        <div class="proof" id="proof"></div>
+      </details>
+
+      <div class="tamper" id="tamperRow" style="display:none">
+        <div class="tnote">Don’t trust it — try to break it. These run the real verifier on the signed claim:</div>
+        <div class="tbtns">
+          <button class="tbtn" id="tamperBtn">🔬 Tamper one byte</button>
+          <button class="tbtn" id="replayBtn">♻️ Replay (stale challenge)</button>
+        </div>
+        <div class="tverdict" id="tverdict"></div>
+      </div>
+    </section>
+    <div class="err" id="err"></div>
+  </main>
+
+  <footer>
+    Host build: signs with the published test key on this machine. On real hardware
+    the signature comes from inside the TrustZone secure enclave and the firmware is
+    attested by Veraison — see <a href="https://github.com/NubsCarson/open-opticon">the repo</a>.
+  </footer>
+
+<script>
+const orb=document.getElementById('orb'), hint=document.getElementById('hint'),
+      card=document.getElementById('card'), emoji=document.getElementById('emoji'),
+      verdict=document.getElementById('verdict'), pill=document.getElementById('pill'),
+      pilltext=document.getElementById('pilltext'), proof=document.getElementById('proof'),
+      meter=document.getElementById('meter'), err=document.getElementById('err'),
+      tamperRow=document.getElementById('tamperRow'), tamperBtn=document.getElementById('tamperBtn'),
+      replayBtn=document.getElementById('replayBtn'), tverdict=document.getElementById('tverdict');
+
+for(let i=0;i<24;i++){const b=document.createElement('i');meter.appendChild(b);}
+const bars=[...meter.children];
+
+const TARGET_RATE=16000, WINDOW_SEC=1.5;
+let listening=false, ctx, stream, source, processor, analyser, acc=[], accLen=0, raf;
+
+const MAP={
+  alarm_tone:{e:'🔔',t:'Alarm tone detected'},
+  voice:{e:'🗣️',t:'Voice present'},
+  none:{e:'🤫',t:'Quiet — nothing flagged'},
+};
+
+function setState(live){
+  listening=live; document.body.classList.toggle('live',live);
+  hint.textContent = live ? 'Listening…' : 'Tap to listen';
+}
+
+orb.addEventListener('click',toggle);
+orb.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' ')toggle();});
+
+async function toggle(){ listening ? stop() : start(); }
+
+async function start(){
+  err.textContent='';
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({audio:{channelCount:1,echoCancellation:false,noiseSuppression:false,autoGainControl:false}});
+  }catch(e){ err.textContent='Microphone access denied. Allow the mic and tap again.'; return; }
+  ctx=new (window.AudioContext||window.webkitAudioContext)();
+  source=ctx.createMediaStreamSource(stream);
+  analyser=ctx.createAnalyser(); analyser.fftSize=512; source.connect(analyser);
+  processor=ctx.createScriptProcessor(4096,1,1);
+  const sink=ctx.createGain(); sink.gain.value=0;   // silent: no feedback
+  source.connect(processor); processor.connect(sink); sink.connect(ctx.destination);
+  const need=Math.floor(ctx.sampleRate*WINDOW_SEC);
+  acc=[]; accLen=0;
+  processor.onaudioprocess=(ev)=>{
+    const d=ev.inputBuffer.getChannelData(0);
+    acc.push(new Float32Array(d)); accLen+=d.length;
+    if(accLen>=need){
+      const win=flatten(acc,accLen); acc=[]; accLen=0;
+      send(downsample(win,ctx.sampleRate,TARGET_RATE));
+    }
+  };
+  setState(true); drawMeter();
+}
+
+function stop(){
+  setState(false);
+  if(raf)cancelAnimationFrame(raf);
+  try{processor&&(processor.onaudioprocess=null);}catch(e){}
+  try{source&&source.disconnect();}catch(e){}
+  try{stream&&stream.getTracks().forEach(t=>t.stop());}catch(e){}
+  try{ctx&&ctx.close();}catch(e){}
+  bars.forEach(b=>b.style.height='6px');
+}
+
+function flatten(chunks,len){const out=new Float32Array(len);let o=0;for(const c of chunks){out.set(c,o);o+=c.length;}return out;}
+
+function downsample(buf,srcRate,dstRate){
+  const ratio=srcRate/dstRate, outLen=Math.floor(buf.length/ratio);
+  const out=new Int16Array(outLen);
+  for(let i=0;i<outLen;i++){
+    const s=buf[Math.floor(i*ratio)]||0;
+    out[i]=Math.max(-32768,Math.min(32767,Math.round(s*32767)));
+  }
+  return out;
+}
+
+async function send(int16){
+  try{
+    const r=await fetch('/listen',{method:'POST',headers:{'Content-Type':'application/octet-stream'},body:int16.buffer});
+    const j=await r.json();
+    render(j);
+  }catch(e){ err.textContent='Server unavailable.'; }
+}
+
+let lastBundle=null;
+function trunc(s,n){n=n||22; s=s||''; return s.length>n ? s.slice(0,n)+'…' : s;}
+function randNonceHex(){const a=new Uint8Array(32); crypto.getRandomValues(a);
+  return [...a].map(b=>b.toString(16).padStart(2,'0')).join('');}
+
+function render(j){
+  err.textContent='';
+  const m=MAP[j.event]||{e:'❔',t:j.event||'—'};
+  emoji.textContent=m.e; verdict.textContent=m.t;
+  if(j.verified){
+    pill.className='pill'; pilltext.textContent='Verified · fresh challenge · signature valid';
+  }else{
+    pill.className='pill bad'; pilltext.textContent='Verification failed: '+(j.reason||'unknown');
+  }
+  proof.innerHTML='<b>nonce</b> '+trunc(j.nonce)+'<br><b>signature</b> '+trunc(j.sig)+'<br><b>counter</b> '+(j.counter||0)+' &nbsp;·&nbsp; <b>verdict</b> '+(j.reason||'');
+  card.classList.add('show');
+  // capture the full signed bundle so the audience can try to break it live
+  if(j.verified && j.payload){
+    lastBundle={nonce:j.nonce, payload:j.payload, sig:j.sig, pub_x:j.pub_x, pub_y:j.pub_y};
+    tamperRow.style.display='block'; tverdict.textContent=''; tverdict.className='tverdict';
+  }
+}
+
+async function postVerify(body){
+  const r=await fetch('/verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  return r.json();
+}
+function flipHex(h,i){const c=h[i]; return h.slice(0,i)+(c==='0'?'f':'0')+h.slice(i+1);}
+function showVerdict(j){
+  tverdict.className='tverdict '+(j.verified?'good':'bad');
+  tverdict.textContent=j.verified ? '(!) unexpectedly accepted' : '✗ Rejected — '+(j.reason||'verification failed');
+}
+if(tamperBtn) tamperBtn.onclick=async()=>{
+  if(!lastBundle)return;
+  await showVerdict(await postVerify({...lastBundle, payload:flipHex(lastBundle.payload,20)}));
+};
+if(replayBtn) replayBtn.onclick=async()=>{
+  if(!lastBundle)return; // re-present the real, validly-signed bundle against a NEW challenge
+  await showVerdict(await postVerify({...lastBundle, nonce:randNonceHex()}));
+};
+
+function drawMeter(){
+  if(!listening)return;
+  const buf=new Uint8Array(analyser.fftSize); analyser.getByteTimeDomainData(buf);
+  let sum=0; for(let i=0;i<buf.length;i++){const v=(buf[i]-128)/128; sum+=v*v;}
+  const rms=Math.sqrt(sum/buf.length);
+  for(let i=0;i<bars.length;i++){
+    const k=1-Math.abs(i-bars.length/2)/(bars.length/2); // taller in the middle
+    const h=6+Math.min(28, rms*180*(0.5+k));
+    bars[i].style.height=h.toFixed(0)+'px';
+  }
+  raf=requestAnimationFrame(drawMeter);
+}
+</script>
+</body>
+</html>

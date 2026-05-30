@@ -1,0 +1,29 @@
+#!/usr/bin/expect -f
+# open-opticon — run he_host (bound AUDIO output) INSIDE the guest TEE and print
+# the signed bundle. Same headless boot as qemu_attest.expect; nonce via $env(HE_NONCE).
+log_user 1
+set B "/optee/build"
+set NONCE $env(HE_NONCE)
+system {pkill -9 qemu-system 2>/dev/null; pkill -9 -f [s]oc_term.py 2>/dev/null; sleep 1; true}
+spawn $B/soc_term.py 54321
+spawn $B/soc_term.py 54320
+set nw $spawn_id
+sleep 4
+spawn bash -lc "cd $B && make run-only CFG_REMOTE_ATTESTATION_PTA=y"
+set mon $spawn_id
+sleep 6
+for {set i 0} {$i < 12} {incr i} { send -i $mon "c\r"; sleep 2 }
+set spawn_id $nw
+set timeout 240
+# Wait until the login prompt is actually up, then BLIND-DRIVE root + (empty)
+# password with sleeps — far more robust than racing prompt regexes over a
+# laggy tcp serial. Run he_host into a file, then cat it between clean markers.
+expect { -re {login:} {} timeout { puts "\n*** TIMEOUT: no login prompt ***"; exit 2 } }
+sleep 1; send "root\r"
+sleep 3; send "\r"
+sleep 2
+send "he_host /usr/bin/clip.pcm $NONCE > /tmp/b.json 2>&1; echo HE_RC=\$?; echo HE_BUNDLE_BEGIN; cat /tmp/b.json; echo HE_BUNDLE_END\r"
+set timeout 120
+expect { -re {HE_BUNDLE_END} {} timeout { puts "\n*** he_host timed out ***" } }
+puts "\n==== driver complete ===="
+system {pkill -9 qemu-system 2>/dev/null; pkill -9 -f [s]oc_term.py 2>/dev/null; true}

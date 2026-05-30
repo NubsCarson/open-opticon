@@ -1,0 +1,39 @@
+#!/usr/bin/expect -f
+# open-opticon — Tier 3 live proof INSIDE the guest TEE, no hardware needed.
+# Boots OP-TEE on QEMU, then runs three steps as root:
+#   1. he_host  -> a normal signed bound output (the device is healthy)
+#   2. he_host --trip -> latch the TA-side tamper flag in Trusted Storage
+#   3. he_host  -> must FAIL CLOSED: ATTEST_AUDIO returns TEE_ERROR_SECURITY
+#      (0xffff0006) even though the firmware is unchanged and correct.
+# This models the enclosure breach in software: open the lid ->
+# the enclave refuses to attest. Nonce via $env(HE_NONCE).
+log_user 1
+set B "/optee/build"
+set NONCE $env(HE_NONCE)
+system {pkill -9 qemu-system 2>/dev/null; pkill -9 -f [s]oc_term.py 2>/dev/null; sleep 1; true}
+spawn $B/soc_term.py 54321
+spawn $B/soc_term.py 54320
+set nw $spawn_id
+sleep 4
+spawn bash -lc "cd $B && make run-only CFG_REMOTE_ATTESTATION_PTA=y"
+set mon $spawn_id
+sleep 6
+for {set i 0} {$i < 12} {incr i} { send -i $mon "c\r"; sleep 2 }
+set spawn_id $nw
+set timeout 240
+expect { -re {login:} {} timeout { puts "\n*** TIMEOUT: no login prompt ***"; exit 2 } }
+sleep 1; send "root\r"
+sleep 3; send "\r"
+sleep 2
+# Step 1 — healthy device: a normal signed bound output.
+send "echo STEP1_HEALTHY_BEGIN; he_host /usr/bin/clip.pcm $NONCE; echo STEP1_RC=\$?; echo STEP1_HEALTHY_END\r"
+set timeout 120
+expect { -re {STEP1_HEALTHY_END} {} timeout { puts "\n*** step1 timed out ***" } }
+# Step 2 — breach: latch the TA tamper flag (what the GPIO watcher's --exec does).
+send "echo STEP2_TRIP_BEGIN; he_host --trip; echo STEP2_RC=\$?; echo STEP2_TRIP_END\r"
+expect { -re {STEP2_TRIP_END} {} timeout { puts "\n*** step2 timed out ***" } }
+# Step 3 — same firmware, same key, same clip: must now FAIL CLOSED.
+send "echo STEP3_AFTER_TAMPER_BEGIN; he_host /usr/bin/clip.pcm $NONCE; echo STEP3_RC=\$?; echo STEP3_AFTER_TAMPER_END\r"
+expect { -re {STEP3_AFTER_TAMPER_END} {} timeout { puts "\n*** step3 timed out ***" } }
+puts "\n==== tamper driver complete ===="
+system {pkill -9 qemu-system 2>/dev/null; pkill -9 -f [s]oc_term.py 2>/dev/null; true}

@@ -1,0 +1,67 @@
+#!/usr/bin/expect -f
+# open-opticon — drive a HEADLESS OP-TEE QEMU boot and run the attestation,
+# capturing everything. Runs INSIDE the optee-attester container.
+#
+# Mechanism (from qemu_v8.mk + common.mk):
+#   - QEMU consoles are on TCP 54320 (normal world) / 54321 (secure world).
+#   - launch-terminal skips its own xterm when the port is already listening,
+#     so we start soc_term.py servers first, then `make run-only` connects QEMU.
+#   - QEMU is -nographic -s -S (frozen): its monitor is on the make stdio, so we
+#     send "c" to continue the CPU, then drive the normal-world login.
+log_user 1
+set B "/optee/build"
+
+# Clear any leftover QEMU/soc_term from a prior run — a stale QEMU still holds
+# the gdb socket (-s :1234) and the console ports, which makes a fresh boot fail.
+# Match qemu by process NAME (no -f) and self-exclude the soc_term pattern with
+# [s] so pkill never kills this very expect process. Braces keep [s] literal in Tcl.
+system {pkill -9 qemu-system 2>/dev/null; pkill -9 -f [s]oc_term.py 2>/dev/null; sleep 1; true}
+
+# secure-world console (kept connected so QEMU's SW serial attaches)
+spawn $B/soc_term.py 54321
+set sw $spawn_id
+# normal-world console — the one we drive
+spawn $B/soc_term.py 54320
+set nw $spawn_id
+
+sleep 4 ;# let both servers bind their ports
+
+# launch QEMU via run-only (monitor on its stdio because of -nographic)
+spawn bash -lc "cd $B && make run-only CFG_REMOTE_ATTESTATION_PTA=y"
+set mon $spawn_id
+
+# QEMU starts frozen (-S); nudge the monitor to "continue". The monitor's
+# ready-time varies with host load, so send `c` repeatedly over a wide window —
+# extra `c`s are harmless once the VM is already running.
+sleep 6
+for {set i 0} {$i < 12} {incr i} {
+    send -i $mon "c\r"
+    sleep 2
+}
+
+# drive the normal-world Linux login
+set spawn_id $nw
+set timeout 200
+expect {
+    -re {login:} { send "root\r" }
+    timeout { puts "\n*** TIMEOUT: no login prompt (boot/console issue) ***"; exit 2 }
+}
+expect {
+    -re {[Pp]assword:} { send "\r"; exp_continue }
+    -re {# } {}
+    timeout { puts "\n*** TIMEOUT: no shell prompt ***"; exit 3 }
+}
+
+puts "\n==== running optee_remote_attestation ===="
+send "optee_remote_attestation\r"
+set timeout 120
+expect {
+    -re {# } {}
+    timeout { puts "\n*** attestation command timed out ***" }
+}
+send "echo HE_ATTEST_RC=\$?\r"
+expect -re {HE_ATTEST_RC=[0-9]+}
+
+puts "\n==== driver complete ===="
+# leave nothing running so the next invocation boots cleanly (self-safe forms)
+system {pkill -9 qemu-system 2>/dev/null; pkill -9 -f [s]oc_term.py 2>/dev/null; true}

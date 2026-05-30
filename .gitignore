@@ -1,0 +1,9 @@
+bin/
+sim/bin/
+src/tamper/bin/
+test/fixtures/*.pcm
+*.o
+*.out
+he_tamper
+he-tamper
+bundle.json
