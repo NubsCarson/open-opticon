@@ -192,13 +192,76 @@ func (s *server) handleAttest(w http.ResponseWriter, r *http.Request) {
 	cli.WriteJSON(w, 200, out)
 }
 
-func (s *server) handleRoot(w http.ResponseWriter, _ *http.Request) {
-	fmt.Fprintf(w, "Honest Ear live challenge verifier.\n"+
-		"  GET  /challenge            -> fresh nonce + session\n"+
-		"  POST /attest?session=<id>  -> verify a bound-output bundle\n"+
-		"  GET  /v?session=<id>       -> mobile verifier page (scan the QR)\n"+
-		"  GET  /status?session=<id>  -> latest verdict (JSON)\n")
+func (s *server) handleRoot(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/" {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, _ = io.WriteString(w, homePage)
 }
+
+const homePage = `<!DOCTYPE html><html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>open-opticon — verification server</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%2309090b'/><circle cx='16' cy='16' r='8.5' fill='none' stroke='%23fafafa' stroke-width='2'/><circle cx='16' cy='16' r='2.6' fill='%23fafafa'/></svg>">
+<style>
+:root{--bg:#09090b;--card:#0b0b0e;--line:#26262b;--fg:#fafafa;--dim:#a1a1aa;--dim2:#71717a;--b:#60a5fa;--g:#4ade80}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);letter-spacing:-.011em;
+font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;line-height:1.6;
+display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:48px 20px}
+.wrap{width:100%;max-width:620px}
+.eyebrow{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;text-transform:uppercase;
+letter-spacing:.09em;color:var(--dim2)}
+h1{font-size:1.6rem;font-weight:650;margin:10px 0 8px;letter-spacing:-.02em}
+p.sub{color:var(--dim);margin:0 0 26px}
+button{appearance:none;border:0;background:var(--fg);color:#0a0a0a;font:inherit;font-weight:500;
+font-size:14px;height:42px;padding:0 18px;border-radius:8px;cursor:pointer}
+button:hover{background:#e4e4e7}
+#out{display:none;margin-top:26px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:18px 20px;margin-bottom:14px}
+.k{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;color:var(--dim2);text-transform:uppercase;letter-spacing:.06em}
+.val{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;word-break:break-all;margin-top:4px;color:var(--fg)}
+a.open{display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 16px;border:1px solid var(--line);
+border-radius:8px;color:var(--fg);text-decoration:none;font-size:14px}
+a.open:hover{border-color:#3a3a40;background:#161619}
+pre{margin:8px 0 0;background:#101014;border:1px solid var(--line);border-radius:8px;padding:12px 14px;
+overflow-x:auto;font-size:12.5px;color:#d4d4d8}
+pre .c{color:var(--dim2)} pre .n{color:var(--b)}
+.foot{color:var(--dim2);font-size:12.5px;margin-top:22px;line-height:1.7}
+.foot code{font-family:ui-monospace,Menlo,Consolas,monospace;color:var(--dim)}
+</style></head><body>
+<div class="wrap">
+  <p class="eyebrow">open-opticon · live verification server</p>
+  <h1>Mint a challenge. Verify the device.</h1>
+  <p class="sub">Trust comes from a fresh nonce signed live by the device key — not a static sticker.
+     Start a challenge, sign it on the device, and watch the verdict.</p>
+  <button id="go">New challenge</button>
+  <div id="out">
+    <div class="card"><div class="k">verifier page (open on a phone, or click)</div>
+      <div class="val"><a class="open" id="vlink" target="_blank">Open the verifier page →</a></div></div>
+    <div class="card"><div class="k">fresh nonce</div><div class="val" id="nonce"></div></div>
+    <div class="card"><div class="k">on the device</div>
+<pre><span class="c"># produce a bound output for this exact nonce</span>
+he_host /usr/bin/clip.pcm <span class="n" id="cn"></span>
+
+<span class="c"># or post a bundle.json straight to the verifier</span>
+curl -X POST "<span class="n" id="cu"></span>" --data @bundle.json</pre></div>
+  </div>
+  <p class="foot">API: <code>GET /challenge</code> · <code>POST /attest?session=&lt;id&gt;</code> ·
+     <code>GET /v?session=&lt;id&gt;</code> · <code>GET /status?session=&lt;id&gt;</code>.
+     A QR for the verifier page is also printed in this server's terminal.</p>
+</div>
+<script>
+document.getElementById("go").onclick=async()=>{
+  const d=await (await fetch("/challenge")).json();
+  document.getElementById("vlink").href="/v?session="+d.session;
+  document.getElementById("nonce").textContent=d.nonce;
+  document.getElementById("cn").textContent=d.nonce;
+  document.getElementById("cu").textContent=d.attest_url;
+  document.getElementById("out").style.display="block";
+};
+</script></body></html>`
 
 // handleStatus reports the latest verdict for a session so the mobile page can
 // poll it: state is "pending" until the device attests, then "done".
