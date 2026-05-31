@@ -29,7 +29,14 @@ From this PoC to a defensible product, in order of trust-impact.
   wraps RISC Zero's verifier and checks the Groth16 receipt for the pinned guest
   `imageId` on a stateless EVM; a real proof fixture verifies on a local EVM
   (`forge test`, no funds/network). A *live testnet* deploy (funded key + RPC) is
-  the one deferred step. The transparency-log checkpoints also have an on-chain
+  the one deferred step.
+- **A heterogeneous 2-of-3 quorum, on-chain.** `HonestEarQuorum.sol` returns a
+  verdict only if a ZK proof of the detector (Groth16) *and* the device's
+  hardware-bound secp256r1 signature over its bound-output payload (OpenZeppelin
+  P256) agree on the predicate — where, unlike the stdlib-only Go verifier, the
+  EVM can verify both proof systems. Proven on a local EVM with a real receipt +
+  a real device bundle; the full stack also deploys + runs live transactions via
+  `DeployLocal.s.sol` (anvil). The transparency-log checkpoints also have an on-chain
   anchor (`onchain/src/CheckpointAnchor.sol`): it verifies an RFC 9162 consistency
   proof on-chain (SHA-256 precompile) so a fork/rewrite is rejected — proven by a
   real `he-log consistency` proof in `forge test`; only the live deploy is deferred.
@@ -49,11 +56,12 @@ From this PoC to a defensible product, in order of trust-impact.
 - **Fold the bound output into the EAT itself** as a custom claim, so there is a
   single attestation token rather than two signatures. (Two signatures is fine
   for the PoC and keeps Veraison freshness untouched.)
-- **Heterogeneous provers for the quorum.** The k-of-n verifier exists
-  (`he-verify --quorum`); add real non-TEE legs (a measured-boot TPM quote, a
-  second-vendor TEE) as enrolled roots so a single broken enclave cannot forge a
-  PASS — the integration that turns the quorum from "tested logic" into
-  "different silicon."
+- **Heterogeneous provers for the quorum.** Done on-chain: `HonestEarQuorum.sol`
+  requires a ZK proof *and* the device's P-256 signature to agree (see "Done"
+  above). Remaining for the *off-chain* Go verifier: enrol more non-TEE legs
+  (a measured-boot TPM quote, a second-vendor TEE) as roots in `he-verify
+  --quorum`. The ZK leg can't be auto-wired into the stdlib-only Go verifier
+  (it can't verify a STARK) — which is exactly why that leg's quorum is on-chain.
 - **Witness cosigning for the transparency log.** Independent witnesses
   countersign checkpoints (the C2SP/Sigstore model) so a single log operator
   cannot present a split view; today one operator could still equivocate.
