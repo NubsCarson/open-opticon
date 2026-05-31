@@ -1,0 +1,91 @@
+// Smoke-test the in-browser WASM verifier (docs/verify.wasm) the same way the
+// page drives it: load the Go wasm runtime, instantiate the module, and call the
+// exported heVerify(bundleJSON, opts). Asserts the wasm produces the SAME verdicts
+// as the he-verify CLI across the happy path and the negative cases — so the
+// browser path can't silently diverge (e.g. fail open). Exits non-zero on any
+// mismatch. Run after `bash tools/build_wasm.sh`:  node test/wasm_verify_test.js
+"use strict";
+const fs = require("fs");
+const path = require("path");
+
+const DOCS = path.join(__dirname, "..", "docs");
+eval(fs.readFileSync(path.join(DOCS, "wasm_exec.js"), "utf8")); // defines globalThis.Go
+
+// A real genesis bundle (alarm clip, published test key) + its nonce.
+const BUNDLE = {
+  schema: "honest-ear/bound-output/v1",
+  payload:
+    "ab00010148d15ea5edc0ffee00020203f40401050c0618c0070108582051e7de71c7f04ed661fcd4588a5399eafa51553fd6a0ac9b2d173eadab73f9d009582076fce813fbb5a4c577d78eb957bcb37962a16a89d3c1151b801acdb96b9b0e2a0a58200000000000000000000000000000000000000000000000000000000000000000",
+  sig:
+    "fd71cb4589d42574da646dd454afe4418dfdadb2d25382309599db72dd6b54000ea476cfd09b3c97c700fe15d14a99663e7c7b06a102294264ed0774a5ec079a",
+  pub_x: "30a0424cd21c2944838a2d75c92b37e76ea20d9f00893a3b4eee8a3c0aafec3e",
+  pub_y: "e04b65e92456d9888b52b379bdfbd51ee869ef1f0fc65b6659695b6cce081723",
+};
+const NONCE = "d15ea5edc0ffee00";
+const ZERO64 = "0".repeat(64);
+
+let failures = 0;
+function check(name, cond) {
+  if (cond) {
+    console.log("  ok:   " + name);
+  } else {
+    console.log("  FAIL: " + name);
+    failures++;
+  }
+}
+
+(async () => {
+  const go = new Go();
+  const bytes = fs.readFileSync(path.join(DOCS, "verify.wasm"));
+  const { instance } = await WebAssembly.instantiate(bytes, go.importObject);
+  go.run(instance); // registers heVerify, then blocks on select{}
+  const H = globalThis.heVerify;
+
+  console.log("wasm_verify_test:");
+  check("heVerify is registered", typeof H === "function");
+  if (typeof H !== "function") process.exit(1);
+
+  // Happy path -> PASS, alarm_tone, genesis chain ok.
+  let r = H(JSON.stringify(BUNDLE), { nonce: NONCE, lastCounter: 0 });
+  check("valid bundle verifies", r.ok === true);
+  check("event is alarm_tone", r.predicate && r.predicate.event === "alarm_tone");
+  check("nextDigest is returned", typeof r.nextDigest === "string" && r.nextDigest.length === 64);
+
+  // Wrong nonce -> FAIL (freshness).
+  r = H(JSON.stringify(BUNDLE), { nonce: "deadbeef", lastCounter: 0 });
+  check("wrong nonce fails", r.ok === false);
+
+  // Empty nonce must NOT fail open.
+  r = H(JSON.stringify(BUNDLE), { nonce: "", lastCounter: 0 });
+  check("empty nonce fails closed", r.ok === false);
+
+  // Replay (counter not advanced) -> FAIL.
+  r = H(JSON.stringify(BUNDLE), { nonce: NONCE, lastCounter: 1 });
+  check("replayed counter fails", r.ok === false);
+
+  // Tampered payload byte -> signature FAIL.
+  const t = JSON.parse(JSON.stringify(BUNDLE));
+  t.payload = t.payload.slice(0, 20) + ((parseInt(t.payload[20], 16) ^ 0xf).toString(16)) + t.payload.slice(21);
+  r = H(JSON.stringify(t), { nonce: NONCE, lastCounter: 0 });
+  check("tampered payload fails", r.ok === false);
+
+  // Chain: genesis expects all-zero prev_digest -> PASS; non-zero -> FAIL (gap).
+  r = H(JSON.stringify(BUNDLE), { nonce: NONCE, lastCounter: 0, expectPrev: ZERO64 });
+  check("genesis chain verifies", r.ok === true);
+  r = H(JSON.stringify(BUNDLE), { nonce: NONCE, lastCounter: 0, expectPrev: "11".repeat(32) });
+  check("chain gap fails", r.ok === false);
+
+  // Half-pin (pinX without pinY) -> usage error.
+  r = H(JSON.stringify(BUNDLE), { nonce: NONCE, pinX: "30a0424c" });
+  check("half pin rejected", r.ok === false);
+
+  // Garbage JSON -> error, not a crash.
+  r = H("{not json", { nonce: NONCE });
+  check("bad JSON handled", r.ok === false);
+
+  console.log(failures === 0 ? "wasm_verify_test: all passed" : `wasm_verify_test: ${failures} FAILURE(S)`);
+  process.exit(failures === 0 ? 0 : 1);
+})().catch((e) => {
+  console.error("wasm_verify_test: error:", e);
+  process.exit(1);
+});

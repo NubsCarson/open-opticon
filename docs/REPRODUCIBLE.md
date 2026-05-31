@@ -12,10 +12,12 @@ the maintainer's binary" into "verify it yourself."
 make repro
 ```
 
-`tools/repro.sh` builds the C simulator/detector and the Go verifier tools
-**twice, in two separate trees at different absolute paths**, with deterministic
-flags, and compares the SHA-256 of every binary. Identical hashes prove the
-output depends only on the source — not the path, the clock, or the machine.
+`tools/repro.sh` builds the C simulator/detector, the Go verifier tools, and the
+in-browser WASM verifier (`docs/verify.wasm`) **twice, in two separate trees at
+different absolute paths**, with deterministic flags, and compares the SHA-256 of
+every artifact. Identical hashes prove the output depends only on the source —
+not the path, the clock, or the machine. The WASM is included because it is a
+committed, user-facing trust artifact (the in-browser verifier).
 
 Deterministic flags used:
 

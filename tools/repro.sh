@@ -34,15 +34,18 @@ build_tree() {
   make -C "$d/sim" all CFLAGS="$cflags" >/dev/null 2>&1
   ( cd "$d/src/verifier"
     export CGO_ENABLED=0 GOPROXY=off GOFLAGS="-trimpath -buildvcs=false"
-    for c in he-verify he-log he-challenge he-gui; do
+    for c in he-verify he-log he-challenge he-gui he-dump; do
       go build -ldflags=-buildid= -o "$d/bin-$c" "./cmd/$c"
-    done )
+    done
+    # The in-browser verifier ships as a committed wasm artifact; prove it is
+    # byte-reproducible too (same determinism flags as tools/build_wasm.sh).
+    GOOS=js GOARCH=wasm go build -ldflags="-s -w -buildid=" -o "$d/verify.wasm" ./cmd/he-verify-wasm )
 }
 
 # Print "sha256  basename" for every produced binary, sorted by name.
 hash_tree() {
   local d="$1"
-  { sha256sum "$d"/sim/bin/* "$d"/bin-* ; } |
+  { sha256sum "$d"/sim/bin/* "$d"/bin-* "$d"/verify.wasm ; } |
     sed -E "s# .*/# #" | awk '{print $1"  "$2}' | sort -k2
 }
 

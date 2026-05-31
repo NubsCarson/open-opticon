@@ -26,6 +26,13 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y build-essential libssl-dev openssl python3
       - name: Run all host tests
         run: make test
+      - name: Build + smoke-test the in-browser WASM verifier
+        # Builds verify.wasm and drives it through the Go wasm runtime under node
+        # (ubuntu-latest ships node), asserting the browser path matches the CLI's
+        # verdicts (incl. fail-closed cases). Guards the in-browser verifier.
+        run: |
+          bash tools/build_wasm.sh
+          node test/wasm_verify_test.js
 
   # Continuous reproducibility: rebuild the host artifacts in two separate trees
   # and fail if they are not byte-identical, then publish the SHA-256 measurement
