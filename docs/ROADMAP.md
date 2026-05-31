@@ -14,7 +14,20 @@ From this PoC to a defensible product, in order of trust-impact.
   an endorsement to be logged. Witness cosigning (below) is the remaining gap.
 - **Reproducible host builds.** `make repro` proves the host artifacts are
   byte-identical across independent build trees; the TA-measurement recipe is in
-  [`REPRODUCIBLE.md`](REPRODUCIBLE.md).
+  [`REPRODUCIBLE.md`](REPRODUCIBLE.md). CI gates every push on this and publishes
+  the SHA-256 measurement manifest.
+- **A zero-knowledge proof of the detector** (a non-TEE prover leg). A RISC Zero
+  zkVM runs a faithful Rust port of the published detector over audio as private
+  witness data and proves the verdict, committing only the predicate — never the
+  audio — with no enclave trusted for the math. Real STARK proof captured +
+  verified end-to-end ([`zk/`](../zk/README.md)). Batch/audit speed (minutes per
+  clip), wired conceptually as a second quorum leg; on-chain receipt verification
+  is the optional public-trust follow-up below.
+- **The primitive generalizes beyond audio.** A vision occupancy detector
+  (`he_vision`, integer-only, same discipline as the acoustic one) emits only
+  `empty`/`occupied` + a region count, never the frame, and rides the *same*
+  bound-output envelope verified by the *same* `he-verify` (`make vision-e2e`).
+  Proves the attestation/binding/verification machinery is sensor-agnostic.
 
 ## Cryptographic / protocol
 - **Promote the bound-output envelope to COSE_Sign1** (RFC 9052/9053). The

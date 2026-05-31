@@ -109,6 +109,9 @@ This is a clean overlay on `optee-ra`; it does not modify the upstream tree
 
 **Verified on any Linux box with `gcc`, `go`, `openssl`, `python3` (`make test`):**
 - the detector classifies silence / alarm-tone / voice / sub-floor noise correctly;
+- the **same machinery generalizes beyond audio**: a vision occupancy detector
+  (`he_vision`) emits only `empty` / `occupied` + a region count, never the
+  frame, and the *identical* `he-verify` binds and verifies it (`make vision-e2e`);
 - the canonical payload encodes to a byte-exact deterministic-CBOR golden vector;
 - the **full crypto + binding + verification pipeline** end-to-end — using the
   *exact same* P-256 test key and SHA-256→ECDSA algorithm the QEMU TA uses — so

@@ -332,6 +332,11 @@ signer-id         : rLsRx+TaIXIFUjzkzhokWuGi…</pre>
         </ul>
       </div>
     </div>
+    <div class="note" style="margin-top:22px">The guarantee is about the <em>machinery</em>, not the microphone: the
+       same attestation, binding, and verifier already drive a vision occupancy detector that emits only
+       <span class="mono">empty</span> / <span class="mono">occupied</span> + a region count — never the frame —
+       verified by the identical <span class="mono">he-verify</span> (<span class="mono">make vision-e2e</span>).
+       A camera that proves it can't see you, from the same primitive.</div>
     <p class="small" style="margin-top:14px">Full analysis:
        <a class="lnk" href="https://github.com/NubsCarson/open-opticon/blob/main/docs/THREAT_MODEL.md">THREAT_MODEL.md</a></p>
   </div>
@@ -389,13 +394,15 @@ signer-id         : rLsRx+TaIXIFUjzkzhokWuGi…</pre>
     <table>
       <tr><th>Approach</th><th>Real-time on a $5–60 board</th><th>Hides raw audio</th><th>Proves which code ran</th><th></th></tr>
       <tr><td><span class="mono">TEE + attestation</span></td><td>Yes, integer detector in-enclave</td><td>Yes, zeroized in the TA</td><td>Yes — that is what attestation proves</td><td><span class="badge ok">chosen</span></td></tr>
-      <tr><td><span class="mono">ZK proof of inference</span></td><td>Not for live audio yet</td><td>Yes</td><td>Yes, of the computation</td><td><span class="badge">future</span></td></tr>
+      <tr><td><span class="mono">ZK proof of the detector</span></td><td>Batch only (~min / clip)</td><td>Yes</td><td>Yes, of the computation</td><td><span class="badge ok"><span class="dot"></span>shipped · 2nd leg</span></td></tr>
       <tr><td><span class="mono">FHE</span></td><td>No, too slow to stream</td><td>Yes</td><td>No, not by itself</td><td><span class="badge">not viable now</span></td></tr>
     </table>
     <div class="note" style="margin-top:22px">A TEE is a hardware trust assumption, not a math proof.
-       The roadmap hardens it: reproducible builds (anyone recomputes the measurement), a 2-of-3
-       multi-prover so no single TEE vendor is load-bearing, and eventually a ZK proof of the
-       attestation. See <a class="lnk" href="https://github.com/NubsCarson/open-opticon/blob/main/docs/WHY_TEE.md">WHY_TEE.md</a> and
+       So it doesn't stand alone: reproducible builds let anyone recompute the measurement, a 2-of-3
+       multi-prover means no single TEE vendor is load-bearing, and a real ZK proof of the detector
+       now ships as an independent batch/audit leg (no enclave trusted for the math — see
+       <a class="lnk" href="https://github.com/NubsCarson/open-opticon/blob/main/zk/README.md">zk/</a>).
+       See <a class="lnk" href="https://github.com/NubsCarson/open-opticon/blob/main/docs/WHY_TEE.md">WHY_TEE.md</a> and
        <a class="lnk" href="https://github.com/NubsCarson/open-opticon/blob/main/docs/ROADMAP.md">ROADMAP.md</a>.</div>
   </div>
 </section>
