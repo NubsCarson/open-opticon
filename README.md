@@ -11,8 +11,8 @@
 thing it claims to — not recording you — and goes cryptographically dead the
 instant someone opens it.**
 
-> **Site (local):** open [`docs/index.html`](docs/index.html) in a browser, or
-> `python3 -m http.server -d docs 8099` then visit <http://localhost:8099>. &nbsp;·&nbsp;
+> **Site:** <https://nubscarson.github.io/open-opticon/> (or open
+> [`docs/index.html`](docs/index.html) locally / `python3 -m http.server -d docs 8099`). &nbsp;·&nbsp;
 > **Walkthrough video:** [`docs/assets/walkthrough.mp4`](docs/assets/walkthrough.mp4)
 > — real captured output: the host pipeline, an OP-TEE attestation on QEMU, the
 > in-enclave bound output, and the tamper fail-closed path.
