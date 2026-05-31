@@ -10,7 +10,7 @@ COMMON_SRC = $(COMMON)/he_detector.c $(COMMON)/he_payload.c
 BINDIR = bin
 
 .PHONY: all clean
-all: $(BINDIR)/he-attest-sim $(BINDIR)/he-detect $(BINDIR)/test_detector $(BINDIR)/test_payload
+all: $(BINDIR)/he-attest-sim $(BINDIR)/he-detect $(BINDIR)/test_detector $(BINDIR)/test_payload $(BINDIR)/test_vision
 
 $(BINDIR):
 	mkdir -p $(BINDIR)
@@ -27,10 +27,14 @@ $(BINDIR)/test_detector: ../test/test_detector.c $(COMMON_SRC) | $(BINDIR)
 $(BINDIR)/test_payload: ../test/test_payload.c $(COMMON_SRC) | $(BINDIR)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $^
 
+$(BINDIR)/test_vision: ../test/test_vision.c $(COMMON)/he_vision.c | $(BINDIR)
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $^
+
 .PHONY: test
 test: all
 	./$(BINDIR)/test_payload
 	./$(BINDIR)/test_detector
+	./$(BINDIR)/test_vision
 
 clean:
 	rm -rf $(BINDIR)

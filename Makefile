@@ -20,7 +20,7 @@ test: units verifier-test e2e tamper-test
 sim:
 	$(MAKE) -C sim all
 
-# C unit tests (detector + payload).
+# C unit tests (audio detector + payload + vision detector).
 units: sim
 	$(MAKE) -C sim test
 
