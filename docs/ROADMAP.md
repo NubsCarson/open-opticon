@@ -38,9 +38,12 @@ From this PoC to a defensible product, in order of trust-impact.
   verifier, the EVM can verify both proof systems. `recordVerdict` enforces
   on-chain anti-replay via the device counter. Proven on a local EVM with a real
   receipt + a real device bundle; the full stack also deploys + runs live
-  transactions via `DeployLocal.s.sol` (anvil). One realisable leg of the broader
-  2-of-3 vision; cryptographically binding both roots to the same audio window
-  (a shared input commitment) is the documented next step. The transparency-log checkpoints also have an on-chain
+  transactions via `DeployLocal.s.sol` (anvil). The two roots are
+  **cryptographically bound to the same verifier nonce**: the guest commits
+  sha256(nonce) and the contract requires it equals sha256(the device payload's
+  nonce), so a proof and a signature from different sessions can't be combined.
+  One realisable leg of the broader 2-of-3 vision; a sha256(audio) commitment in
+  both legs (airtight even against a misbehaving device) is the further step. The transparency-log checkpoints also have an on-chain
   anchor (`onchain/src/CheckpointAnchor.sol`): it verifies an RFC 9162 consistency
   proof on-chain (SHA-256 precompile) so a fork/rewrite is rejected — proven by a
   real `he-log consistency` proof in `forge test`; only the live deploy is deferred.

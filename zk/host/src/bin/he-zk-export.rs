@@ -18,15 +18,25 @@ fn main() {
         .with_env_filter(tracing_subscriber::filter::EnvFilter::from_default_env())
         .init();
 
-    let path = std::env::args().nth(1).expect("usage: he-zk-export <pcm> <out.json>");
-    let out = std::env::args().nth(2).expect("usage: he-zk-export <pcm> <out.json>");
+    let path = std::env::args().nth(1).expect("usage: he-zk-export <pcm> <out.json> [nonce_hex]");
+    let out = std::env::args().nth(2).expect("usage: he-zk-export <pcm> <out.json> [nonce_hex]");
+    // The verifier's challenge the proof is bound to (must match the device
+    // bundle's nonce for the on-chain quorum to accept the pair).
+    let nonce_hex = std::env::args().nth(3).unwrap_or_else(|| "aabbccdd".to_string());
+    let nonce = decode_hex(&nonce_hex);
     let bytes = fs::read(&path).expect("read pcm");
     let pcm: Vec<i16> = bytes
         .chunks_exact(2)
         .map(|c| i16::from_le_bytes([c[0], c[1]]))
         .collect();
 
-    let env = ExecutorEnv::builder().write(&pcm).unwrap().build().unwrap();
+    let env = ExecutorEnv::builder()
+        .write(&pcm)
+        .unwrap()
+        .write(&nonce)
+        .unwrap()
+        .build()
+        .unwrap();
     let receipt = default_prover()
         .prove_with_opts(env, DETECTOR_ELF, &ProverOpts::groth16())
         .expect("groth16 prove (needs x86 + Docker)")
@@ -54,4 +64,12 @@ fn main() {
 
 fn hex(b: &[u8]) -> String {
     b.iter().map(|x| format!("{x:02x}")).collect()
+}
+
+fn decode_hex(s: &str) -> Vec<u8> {
+    assert!(s.len() % 2 == 0, "nonce hex must have even length");
+    (0..s.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(&s[i..i + 2], 16).expect("bad nonce hex"))
+        .collect()
 }

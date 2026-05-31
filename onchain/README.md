@@ -54,10 +54,13 @@ verify both a Groth16 receipt and a secp256r1 signature, so the heterogeneous
 check lives here: `HonestEarQuorum` requires an independent **ZK proof of the
 computation** AND the **device's hardware-bound P-256 signature**, and returns a
 verdict only if both verify and agree. A single broken enclave, or a forged
-signature, is not enough. `recordVerdict` adds on-chain anti-replay (the device
-counter must advance). This is one realisable leg of the broader 2-of-3 vision
-({TEE, ZK, phone}); binding both roots to the same audio window cryptographically
-(a shared input commitment) is the documented next step.
+signature, is not enough. The two roots are **cryptographically bound to the same
+verifier nonce** (the guest commits sha256(nonce); the contract checks it equals
+sha256(the device payload's nonce)), so a proof and a signature from different
+sessions cannot be combined. `recordVerdict` adds on-chain anti-replay (the
+device counter must advance). This is one realisable leg of the broader 2-of-3
+vision ({TEE, ZK, phone}); a sha256(audio) commitment in both legs (airtight even
+against a misbehaving device) is the further step.
 
 ## Deploy the whole stack on a local EVM (no funds)
 

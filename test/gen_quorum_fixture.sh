@@ -31,13 +31,17 @@ w("alarm_short.pcm", [max(-32768, min(32767, int(12000 * math.sin(2*math.pi*3100
 w("silence_short.pcm", [0]*N)
 PY
 
+# Device bundles for nonce aabbccdd (the nonce the zk proof is bound to). The
+# alt-nonce alarm bundle is signed over a DIFFERENT nonce, to test the on-chain
+# cross-root binding rejects mismatched sessions.
 alarm_json="$("$SIM/he-attest-sim" "$FIX/alarm_short.pcm" aabbccdd 1)"
 silence_json="$("$SIM/he-attest-sim" "$FIX/silence_short.pcm" aabbccdd 1)"
+alarmalt_json="$("$SIM/he-attest-sim" "$FIX/alarm_short.pcm" ffeeddcc 1)"
 
 OUT="$ROOT/onchain/test/quorum_fixture.json"
 TMP_OUT="$(mktemp)"
 trap 'rm -f "$TMP_OUT"' EXIT
-ALARM="$alarm_json" SILENCE="$silence_json" python3 - <<'PY' > "$TMP_OUT"
+ALARM="$alarm_json" SILENCE="$silence_json" ALARMALT="$alarmalt_json" python3 - <<'PY' > "$TMP_OUT"
 import json, os
 
 N = 0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551
@@ -61,7 +65,8 @@ def leg(raw):
     }
 
 print(json.dumps({"alarm": leg(os.environ["ALARM"]),
-                  "silence": leg(os.environ["SILENCE"])}, indent=2))
+                  "silence": leg(os.environ["SILENCE"]),
+                  "alarmAltNonce": leg(os.environ["ALARMALT"])}, indent=2))
 PY
 
 mv "$TMP_OUT" "$OUT" # only overwrite the committed fixture on full success

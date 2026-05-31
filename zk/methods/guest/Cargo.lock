@@ -455,6 +455,7 @@ version = "0.1.0"
 dependencies = [
  "oo_detector",
  "risc0-zkvm",
+ "sha2",
 ]
 
 [[package]]

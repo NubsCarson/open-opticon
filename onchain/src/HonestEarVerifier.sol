@@ -14,9 +14,11 @@ import {IRiscZeroVerifier} from "risc0/IRiscZeroVerifier.sol";
 /// instead of a single verifier.
 ///
 /// The journal is the guest's committed tuple of six little-endian u32s
-/// (event, presence, voice_active, frames, active_frames, n_samples); the audio
-/// is never in it. The seal is a Groth16 proof produced by `he-zk-export` and
-/// encoded for Ethereum.
+/// (event, presence, voice_active, frames, active_frames, n_samples) followed by
+/// sha256(nonce) (32 bytes) that binds the proof to the verifier's challenge; the
+/// audio is never in it. The seal is a Groth16 proof produced by `he-zk-export`
+/// and encoded for Ethereum. (HonestEarQuorum uses the nonce hash; this wrapper
+/// just exposes the verdict.)
 contract HonestEarVerifier {
     /// The RISC Zero Groth16 verifier (deployed separately, shared by all apps).
     IRiscZeroVerifier public immutable verifier;
@@ -47,7 +49,8 @@ contract HonestEarVerifier {
         view
         returns (Verdict memory v)
     {
-        require(journal.length == 24, "journal: expected six u32 words");
+        // 6 verdict u32 (24 bytes) + sha256(nonce) (32 bytes) = 56.
+        require(journal.length == 56, "journal: 6 u32 + 32-byte nonce hash");
         verifier.verify(seal, imageId, sha256(journal));
         v.eventClass = _u32le(journal, 0);
         v.presence = _u32le(journal, 4);

@@ -21,6 +21,8 @@ contract HonestEarQuorumTest is Test {
     bytes aSig;
     bytes sPayload;
     bytes sSig;
+    bytes altPayload;
+    bytes altSig;
 
     function setUp() public {
         string memory pf = vm.readFile("./test/proof_fixture.json");
@@ -35,6 +37,8 @@ contract HonestEarQuorumTest is Test {
         aSig = vm.parseJsonBytes(qf, ".alarm.sig");
         sPayload = vm.parseJsonBytes(qf, ".silence.payload");
         sSig = vm.parseJsonBytes(qf, ".silence.sig");
+        altPayload = vm.parseJsonBytes(qf, ".alarmAltNonce.payload");
+        altSig = vm.parseJsonBytes(qf, ".alarmAltNonce.sig");
 
         RiscZeroGroth16Verifier rv =
             new RiscZeroGroth16Verifier(ControlID.CONTROL_ROOT, ControlID.BN254_CONTROL_ID);
@@ -60,6 +64,14 @@ contract HonestEarQuorumTest is Test {
         // zk proof says alarm_tone; the (validly signed) device bundle says none.
         vm.expectRevert(bytes("roots disagree"));
         q.verdict(seal, journal, sPayload, sSig);
+    }
+
+    function test_RejectsNonceMismatch() public {
+        // A validly-signed alarm bundle, same verdict — but for a DIFFERENT nonce
+        // than the zk proof is bound to: the cross-root binding must reject it,
+        // so a proof and a signature from different sessions can't be combined.
+        vm.expectRevert(bytes("nonce mismatch (different sessions)"));
+        q.verdict(seal, journal, altPayload, altSig);
     }
 
     function test_RejectsTamperedReceipt() public {

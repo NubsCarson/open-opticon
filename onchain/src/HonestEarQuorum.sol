@@ -6,26 +6,27 @@ import {P256} from "openzeppelin/contracts/utils/cryptography/P256.sol";
 
 /// @title Honest Ear — on-chain dual-root agreement (a both-required 2-of-2).
 ///
-/// Returns a verdict ONLY if two INDEPENDENT roots both verify and agree:
+/// Returns a verdict ONLY if two INDEPENDENT roots both verify, are bound to the
+/// SAME verifier challenge, and agree:
 ///   (1) a RISC Zero ZK proof of the published detector — no enclave trusted for
-///       the math (Groth16); and
+///       the math (Groth16); its journal commits sha256(nonce); and
 ///   (2) the device's hardware-bound secp256r1 (P-256) signature over its
-///       bound-output payload — the attested device identity (OpenZeppelin P256).
-/// Both are mandatory (an AND of two roots, i.e. 2-of-2), and they must report
-/// the SAME predicate (event, presence, voice_active, frames). The EVM can verify
-/// both proof systems — which the stdlib-only Go verifier cannot (it can't verify
-/// a STARK) — so this heterogeneous check lives on-chain. A broken enclave OR a
-/// forged signature alone fails. It is one realisable leg of the broader "2-of-3"
-/// vision ({TEE, ZK, phone}); a third enrolled root would generalise it.
+///       bound-output payload, which carries that same nonce (OpenZeppelin P256).
+/// The contract checks the zk journal's sha256(nonce) equals sha256(the device
+/// payload's nonce), so the two proofs are CRYPTOGRAPHICALLY BOUND to the same
+/// observation session — not merely matched on the predicate. Both are mandatory
+/// (an AND of two roots, i.e. 2-of-2) and must report the same predicate (event,
+/// presence, voice_active, frames). The EVM can verify both proof systems, which
+/// the stdlib-only Go verifier cannot (it can't verify a STARK), so this
+/// heterogeneous check lives on-chain. A broken enclave OR a forged signature
+/// alone fails. One realisable leg of the broader "2-of-3" vision ({TEE, ZK,
+/// phone}); a third enrolled root would generalise it.
 ///
-/// Scope (honest):
-///   - `recordVerdict` enforces ANTI-REPLAY via the device's monotonic counter.
-///   - Nonce FRESHNESS is an interactive/off-chain property (the Go verifier's
-///     gate 2); it is not re-enforced here.
-///   - The two roots are not yet *cryptographically* bound to the same audio
-///     window — they are matched on the full predicate. A future guest that
-///     commits a hash of its input (mirrored in the device payload) would bind
-///     them cryptographically; that is the documented next step.
+/// Scope (honest): `recordVerdict` enforces ANTI-REPLAY via the device's
+/// monotonic counter. Nonce FRESHNESS (that the challenge was issued recently and
+/// once) remains an interactive/off-chain property (the Go verifier's gate 2);
+/// the contract binds the two roots to *each other's* nonce, not to a
+/// contract-issued challenge.
 contract HonestEarQuorum {
     IRiscZeroVerifier public immutable verifier;
     bytes32 public immutable imageId; // pinned zk guest measurement
@@ -42,6 +43,8 @@ contract HonestEarQuorum {
         uint32 presence;
         uint32 frames;
         uint64 counter;
+        uint256 nonceOffset; // byte offset of the nonce value in the payload
+        uint256 nonceLen;
     }
 
     constructor(IRiscZeroVerifier _verifier, bytes32 _imageId, bytes32 _devX, bytes32 _devY) {
@@ -51,25 +54,30 @@ contract HonestEarQuorum {
         devicePubY = _devY;
     }
 
-    /// Verify both roots and require they agree on the full predicate. Reverts
-    /// unless the zk receipt is valid for imageId, the device signature is a valid
-    /// low-s P-256 signature by the pinned key over a v1 payload, AND the zk
-    /// journal and the device payload report identical (event, presence,
-    /// voice_active, frames). View: does not enforce anti-replay — see
-    /// recordVerdict.
+    /// Verify both roots, require they are bound to the same nonce, and require
+    /// they agree on the full predicate. Reverts unless the zk receipt is valid
+    /// for imageId, the device signature is a valid low-s P-256 signature by the
+    /// pinned key over a v1 payload, the zk journal's sha256(nonce) equals
+    /// sha256(the device payload's nonce), AND the predicates match. View: does
+    /// not enforce anti-replay — see recordVerdict.
     function verdict(
         bytes calldata zkSeal,
         bytes calldata zkJournal,
         bytes calldata devicePayload,
         bytes calldata deviceSig
     ) public view returns (uint32 eventClass, uint32 presence) {
-        // Root 1: the ZK proof of the computation.
+        // Root 1: the ZK proof of the computation. Journal = 6 verdict u32 (24
+        // bytes) + sha256(nonce) (32 bytes).
         verifier.verify(zkSeal, imageId, sha256(zkJournal));
-        require(zkJournal.length == 24, "zk journal len");
+        require(zkJournal.length == 56, "zk journal len");
         uint32 zEvent = _u32le(zkJournal, 0);
         uint32 zPresence = _u32le(zkJournal, 4);
         uint32 zVoice = _u32le(zkJournal, 8);
         uint32 zFrames = _u32le(zkJournal, 12);
+        bytes32 zkNonceHash;
+        assembly {
+            zkNonceHash := calldataload(add(zkJournal.offset, 24))
+        }
 
         // Root 2: the device's hardware-bound P-256 signature over its payload.
         require(deviceSig.length == 64, "sig len");
@@ -82,6 +90,10 @@ contract HonestEarQuorum {
         require(P256.verify(sha256(devicePayload), r, s, devicePubX, devicePubY), "device sig");
         Device memory d = _readDevice(devicePayload);
         require(d.version == 1, "payload version");
+
+        // Cross-root binding: both proofs must be tied to the same nonce.
+        bytes32 devNonceHash = sha256(devicePayload[d.nonceOffset:d.nonceOffset + d.nonceLen]);
+        require(zkNonceHash == devNonceHash, "nonce mismatch (different sessions)");
 
         // 2-of-2: the two independent roots must agree on the full predicate.
         require(
@@ -112,40 +124,52 @@ contract HonestEarQuorum {
             | (uint32(uint8(b[o + 3])) << 24);
     }
 
-    /// Decode the device verdict fields from the deterministic-CBOR he_payload
-    /// (see src/common/he_payload.h): version(0), event(2), voice(3), presence(4),
-    /// frames(5), counter(7). A minimal reader, not a full CBOR library.
+    /// Decode the device fields from the deterministic-CBOR he_payload (see
+    /// src/common/he_payload.h): version(0), nonce(1, located), event(2),
+    /// voice(3), presence(4), frames(5), counter(7). A minimal reader.
     function _readDevice(bytes calldata p) private pure returns (Device memory d) {
         require(uint8(p[0]) == 0xa9, "not a 9-map"); // CBOR map of 9 pairs
         uint256 i = 1;
         uint256 seen;
-        // Walk pairs until the six fields we need (keys 0,2,3,4,5,7) are read.
-        while (i < p.length && seen != 0x3f) {
+        // Walk pairs until the seven fields we need (keys 0,1,2,3,4,5,7) are read.
+        while (i < p.length && seen != 0x7f) {
             uint8 key = uint8(p[i]); // keys are small uints 0x00..0x08 (one byte)
             i += 1;
+            uint256 vstart = i;
             (uint64 v, uint256 ni) = _val(p, i);
             i = ni;
             if (key == 0) {
                 d.version = uint32(v);
                 seen |= 0x01;
+            } else if (key == 1) {
+                (d.nonceOffset, d.nonceLen) = _bstrSpan(p, vstart);
+                seen |= 0x02;
             } else if (key == 2) {
                 d.eventClass = uint32(v);
-                seen |= 0x02;
+                seen |= 0x04;
             } else if (key == 3) {
                 d.voiceActive = uint32(v);
-                seen |= 0x04;
+                seen |= 0x08;
             } else if (key == 4) {
                 d.presence = uint32(v);
-                seen |= 0x08;
+                seen |= 0x10;
             } else if (key == 5) {
                 d.frames = uint32(v);
-                seen |= 0x10;
+                seen |= 0x20;
             } else if (key == 7) {
                 d.counter = v;
-                seen |= 0x20;
+                seen |= 0x40;
             }
         }
-        require(seen == 0x3f, "payload fields missing");
+        require(seen == 0x7f, "payload fields missing");
+    }
+
+    /// Locate a CBOR byte string's data: returns (offset, length) of the bytes.
+    function _bstrSpan(bytes calldata p, uint256 i) private pure returns (uint256 off, uint256 len) {
+        uint8 b = uint8(p[i]);
+        if (b >= 0x40 && b <= 0x57) return (i + 1, uint256(b) - 0x40); // inline len
+        if (b == 0x58) return (i + 2, uint8(p[i + 1])); // 1-byte len
+        revert("nonce not a bstr");
     }
 
     /// Decode one CBOR value at offset i; return its (uint-ish) value and the
