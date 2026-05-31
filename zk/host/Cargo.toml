@@ -2,6 +2,7 @@
 name = "host"
 version = "0.1.0"
 edition = "2021"
+default-run = "he-zk-prove"
 
 # Matches the project's he-* CLI naming (he-verify, he-log, he-detect).
 [[bin]]

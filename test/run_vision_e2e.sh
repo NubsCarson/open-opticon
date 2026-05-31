@@ -7,7 +7,11 @@
 # proves the SAME machinery generalizes to a camera: a grayscale frame
 #   -> he-attest-vision  (he_vision detector + he_payload + the shared bundle
 #                          path, signed with the published QEMU test key)
-#   -> he-verify         (the IDENTICAL verifier — no vision-specific code)
+#   -> he-verify         (the IDENTICAL verifier: its sig/freshness/counter/pin
+#                          gates are modality-agnostic. NB the verifier renders
+#                          the audio field names, so a vision OCCUPIED verdict
+#                          surfaces as event="voice" until a modality-tagged v2
+#                          envelope — see he_vision_sign.c.)
 #
 # Asserts the right scene class AND a PASS verdict, plus one tamper to confirm
 # the binding holds for vision too (the rest is covered modality-agnostically by

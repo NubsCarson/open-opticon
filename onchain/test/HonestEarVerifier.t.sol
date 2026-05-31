@@ -4,12 +4,13 @@ pragma solidity ^0.8.20;
 import {Test} from "forge-std/Test.sol";
 import {RiscZeroGroth16Verifier} from "risc0/groth16/RiscZeroGroth16Verifier.sol";
 import {ControlID} from "risc0/groth16/ControlID.sol";
+import {VerificationFailed} from "risc0/IRiscZeroVerifier.sol";
 import {HonestEarVerifier} from "../src/HonestEarVerifier.sol";
 
 /// Verifies a REAL RISC Zero Groth16 receipt of the Honest Ear detector on a
 /// local EVM — no testnet, no funds. The fixture (test/proof_fixture.json) is a
-/// genuine proof produced by `he-zk-prove --groth16` over the alarm_short clip;
-/// the audio is not in it. Tampering the journal or the seal must revert.
+/// genuine proof produced by `he-zk-export` over the alarm_short clip; the
+/// audio is not in it. Tampering the journal or the seal must revert.
 contract HonestEarVerifierTest is Test {
     HonestEarVerifier hev;
     bytes seal;
@@ -40,14 +41,15 @@ contract HonestEarVerifierTest is Test {
     function test_RejectsTamperedJournal() public {
         bytes memory bad = journal;
         bad[0] = bytes1(uint8(bad[0]) ^ 0xff); // flip the event byte
-        vm.expectRevert();
+        // Assert the CRYPTOGRAPHIC failure specifically, not just any revert.
+        vm.expectRevert(VerificationFailed.selector);
         hev.checkVerdict(seal, bad);
     }
 
     function test_RejectsTamperedSeal() public {
         bytes memory bad = seal;
         bad[bad.length - 1] = bytes1(uint8(bad[bad.length - 1]) ^ 0xff);
-        vm.expectRevert();
+        vm.expectRevert(VerificationFailed.selector);
         hev.checkVerdict(bad, journal);
     }
 }

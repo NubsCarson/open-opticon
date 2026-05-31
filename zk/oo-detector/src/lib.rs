@@ -17,14 +17,17 @@ const ENERGY_FLOOR: i64 = 200000;
 const MIN_ACTIVE_FRAMES: u32 = 8;
 const TONE_RATIO_MIN: i64 = 40;
 
-/// Event classes (mirror he_detector.h): 0=none, 1=voice, 2=alarm_tone.
+/// The detector's verdict, mirroring he_detect_result_t in he_detector.h.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Verdict {
+    /// Event class (mirror he_detector.h): 0=none, 1=voice, 2=alarm_tone.
     pub event: u32,
     pub presence: u32,
     pub voice_active: u32,
     pub frames: u32,
     pub active_frames: u32,
+    // tone_frames/voice_frames exist for parity with the C struct; the event
+    // decision uses the locals, and the guest commits neither (see guest main).
     pub tone_frames: u32,
     pub voice_frames: u32,
 }

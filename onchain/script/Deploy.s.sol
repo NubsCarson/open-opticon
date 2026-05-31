@@ -11,8 +11,11 @@ import {HonestEarVerifier} from "../src/HonestEarVerifier.sol";
 /// (do NOT deploy your own Groth16 verifier in production) — pass its address
 /// via RISC0_VERIFIER and the guest measurement via IMAGE_ID:
 ///
-///   RISC0_VERIFIER=0x... IMAGE_ID=0x48f5... \
+///   RISC0_VERIFIER=0x<canonical router> IMAGE_ID=0x<guest imageId> \
 ///   forge script script/Deploy.s.sol --rpc-url $RPC --broadcast --private-key $PK
+///
+/// IMAGE_ID is the canonical risc0 image id (as printed by he-zk-prove /
+/// he-zk-export, e.g. 0x14d9f548...), NOT a byte-reversed form.
 ///
 /// This is the only step that needs a funded key + an RPC; everything the test
 /// asserts (the proof actually verifies on the EVM) runs locally with no funds.

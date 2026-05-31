@@ -1,6 +1,7 @@
 // Prove + verify that the published detector produced a verdict over some audio,
 // in zero knowledge of the audio. Usage: he-zk-prove <pcm_s16le_mono>
 use methods::{DETECTOR_ELF, DETECTOR_ID};
+use risc0_zkvm::sha::Digest;
 use risc0_zkvm::{default_prover, ExecutorEnv};
 use std::fs;
 
@@ -31,9 +32,6 @@ fn main() {
     println!("  voice_active : {voice_active}");
     println!("  frames       : {frames}  (active {active})");
     println!("  samples      : {n}  (audio itself never revealed)");
-    println!("  image_id     : {}", hex_id(&DETECTOR_ID));
-}
-
-fn hex_id(id: &[u32; 8]) -> String {
-    id.iter().map(|w| format!("{w:08x}")).collect::<Vec<_>>().join("")
+    // Canonical risc0 image id (same bytes the on-chain verifier + he-zk-export use).
+    println!("  image_id     : {}", Digest::from(DETECTOR_ID));
 }

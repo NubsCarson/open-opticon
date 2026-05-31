@@ -45,11 +45,16 @@ void he_vision_run(const he_vision_config_t *cfg, const uint8_t *frame,
     memset(res, 0, sizeof(*res));
     if (!cfg || !frame || cfg->tile == 0 || cfg->width == 0 || cfg->height == 0)
         return;
+    if (cfg->width < cfg->tile || cfg->height < cfg->tile)
+        return; /* frame smaller than one tile: leave res zeroed (tiles==0)
+                   rather than silently report a confident EMPTY */
     if (n_pixels < (size_t)cfg->width * cfg->height)
         return; /* buffer too small for the declared geometry */
 
     const uint32_t W = cfg->width;
     const uint32_t tile = cfg->tile;
+    /* Floor division: a width/height not a multiple of tile leaves a right/
+       bottom margin (< tile wide) unexamined — geometry is in config_hash. */
     const uint32_t tiles_x = W / tile;
     const uint32_t tiles_y = cfg->height / tile;
 

@@ -11,12 +11,15 @@
  *   5. zeroize the image buffer (as the TA does for audio).
  *
  * The signed verdict rides the identical envelope the audio path uses and is
- * checked by the identical he-verify — only the detector and the displayed
- * verdict fields differ. The occupancy verdict is mapped onto the shared
- * predicate slots: event_id = scene class (0=empty,1=occupied), presence =
- * subject present, frames = tiles scanned; voice_active/window_ms are unused
- * for vision (0). (A v2/COSE envelope would give these modality-neutral names;
- * see docs/ROADMAP.)
+ * checked by the identical he-verify — its sig/freshness/counter/pin gates are
+ * modality-agnostic. The occupancy verdict is mapped onto the shared predicate
+ * slots: event_id = scene class (0=empty,1=occupied), presence = subject
+ * present, frames = tiles scanned; voice_active/window_ms are unused for vision
+ * (0). Because those slots carry audio NAMES, he-verify currently RENDERS a
+ * vision OCCUPIED verdict as event="voice" — the bundle JSON below emits the
+ * honest scene/tiles fields. A v2/COSE envelope with a modality tag would give
+ * the slots neutral names and make the verifier print them per modality; see
+ * docs/ROADMAP.
  */
 #include <stdint.h>
 #include <stdio.h>

@@ -5,17 +5,18 @@ import {IRiscZeroVerifier} from "risc0/IRiscZeroVerifier.sol";
 
 /// @title Honest Ear — permissionless on-chain verification of the detector.
 ///
-/// Anyone can call verifyVerdict() with a RISC Zero receipt (seal + journal)
-/// and the contract confirms — with no trust in any operator or enclave — that
-/// the *published* detector (pinned by imageId) produced this verdict in zero
-/// knowledge of the audio, then returns the proven predicate. This is the
-/// public-verifiability leg: the same journal the off-chain quorum agrees on,
-/// checked by a stateless EVM contract instead of a single verifier.
+/// Anyone can call checkVerdict() (or recordVerdict() to also log the fact)
+/// with a RISC Zero receipt (seal + journal) and the contract confirms — with
+/// no trust in any operator or enclave — that the *published* detector (pinned
+/// by imageId) produced this verdict in zero knowledge of the audio, then
+/// returns the proven predicate. This is the public-verifiability leg: the same
+/// journal the off-chain quorum agrees on, checked by a stateless EVM contract
+/// instead of a single verifier.
 ///
 /// The journal is the guest's committed tuple of six little-endian u32s
 /// (event, presence, voice_active, frames, active_frames, n_samples); the audio
-/// is never in it. The seal is a Groth16 proof produced by `he-zk-prove
-/// --groth16` and encoded for Ethereum.
+/// is never in it. The seal is a Groth16 proof produced by `he-zk-export` and
+/// encoded for Ethereum.
 contract HonestEarVerifier {
     /// The RISC Zero Groth16 verifier (deployed separately, shared by all apps).
     IRiscZeroVerifier public immutable verifier;
@@ -46,8 +47,8 @@ contract HonestEarVerifier {
         view
         returns (Verdict memory v)
     {
-        verifier.verify(seal, imageId, sha256(journal));
         require(journal.length == 24, "journal: expected six u32 words");
+        verifier.verify(seal, imageId, sha256(journal));
         v.eventClass = _u32le(journal, 0);
         v.presence = _u32le(journal, 4);
         v.voiceActive = _u32le(journal, 8);
@@ -57,7 +58,7 @@ contract HonestEarVerifier {
     }
 
     /// Same check, but also logs the verdict so an indexer/L2 has an auditable
-    /// record that this device produced a valid, ZK-proven verdict.
+    /// record that the published detector produced a valid, ZK-proven verdict.
     function recordVerdict(bytes calldata seal, bytes calldata journal)
         external
         returns (Verdict memory v)
