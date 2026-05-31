@@ -63,6 +63,13 @@ What this repo has (OP-TEE + Veraison) **plus**:
   hash, so a ZK proof of the (deliberately tiny) detector bolts onto the *same*
   commitment later without re-architecting the capture path.
 
+> Already shipped: a **batch/audit ZK proof of the detector** (RISC Zero zkVM,
+> the audio as private witness) runs today as a non-load-bearing second prover
+> leg, and its receipt is verifiable on an EVM — see [`zk/`](../zk/README.md)
+> and [`onchain/`](../onchain/README.md). That is distinct from the still-future
+> *sub-second, real-time* zkML and the TEE-signed-commitment binding described
+> below.
+
 ## Principled endgame — the multi-prover pattern
 
 Map the **2-of-3 multi-prover** pattern (ZK + optimistic + TEE on disjoint trust
