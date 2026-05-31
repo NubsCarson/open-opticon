@@ -229,7 +229,8 @@ func (s *server) handleVerifyPage(w http.ResponseWriter, r *http.Request) {
 
 const verifyPage = `<!DOCTYPE html><html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>open-opticon — verify</title><style>
+<title>open-opticon — verify</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%2309090b'/><circle cx='16' cy='16' r='8.5' fill='none' stroke='%23fafafa' stroke-width='2'/><circle cx='16' cy='16' r='2.6' fill='%23fafafa'/></svg>"><style>
 :root{--bg:#09090b;--fg:#fafafa;--dim:#a1a1aa;--g:#4ade80;--r:#f87171;--b:#60a5fa}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);letter-spacing:-.011em;
 font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
