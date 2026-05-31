@@ -2,16 +2,41 @@
 
 From this PoC to a defensible product, in order of trust-impact.
 
+## Done in this PoC
+
+- **Multi-prover quorum (verifier side).** `he-verify --quorum k` requires *k* of
+  *n* enrolled independent roots to verify and agree
+  ([`quorum.go`](../src/verifier/quorum.go)). Wiring up genuinely heterogeneous
+  provers (a second-vendor TEE, a TPM quote) is the remaining integration.
+- **Endorsement transparency log.** RFC 6962 append-only Merkle log with
+  inclusion + consistency proofs and a signed checkpoint (`he-log`,
+  [`transparency.go`](../src/verifier/transparency.go)); the verifier can require
+  an endorsement to be logged. Witness cosigning (below) is the remaining gap.
+- **Reproducible host builds.** `make repro` proves the host artifacts are
+  byte-identical across independent build trees; the TA-measurement recipe is in
+  [`REPRODUCIBLE.md`](REPRODUCIBLE.md).
+
 ## Cryptographic / protocol
-- **Promote the bound-output envelope to COSE_Sign1.** The signing primitive is
-  identical (`sign_ecdsa_sha256`); wrap the canonical payload in a standard
-  COSE_Sign1 with a protected `alg` header so any RATS/EAT tooling consumes it.
+- **Promote the bound-output envelope to COSE_Sign1** (RFC 9052/9053). The
+  signing primitive is identical (`sign_ecdsa_sha256`); wrap the canonical
+  payload in a tagged COSE_Sign1 with `alg=ES256` in the protected header so the
+  algorithm is bound and any RATS/EAT tooling consumes it. Deferred here only
+  because it changes the in-enclave wire format already proven on QEMU — it is a
+  TA-side change requiring a re-measure + re-attest, not a host-only edit.
 - **Fold the bound output into the EAT itself** as a custom claim, so there is a
   single attestation token rather than two signatures. (Two signatures is fine
   for the PoC and keeps Veraison freshness untouched.)
-- **Second independent prover (2-of-3).** Add a non-TEE attestation leg (e.g. a
-  measured-boot TPM quote, or a second-vendor TEE) so a single broken enclave
-  does not forge a PASS — directly answers the single-root critique.
+- **Heterogeneous provers for the quorum.** The k-of-n verifier exists
+  (`he-verify --quorum`); add real non-TEE legs (a measured-boot TPM quote, a
+  second-vendor TEE) as enrolled roots so a single broken enclave cannot forge a
+  PASS — the integration that turns the quorum from "tested logic" into
+  "different silicon."
+- **Witness cosigning for the transparency log.** Independent witnesses
+  countersign checkpoints (the C2SP/Sigstore model) so a single log operator
+  cannot present a split view; today one operator could still equivocate.
+- **Sign endorsements as CoRIM.** Provision Veraison with a COSE-signed CoRIM and
+  log the signed CoRIM as the transparency-log entry, so endorser authenticity
+  is covered end-to-end.
 
 ## Hardware identity & tamper
 - **i.MX 8M Plus CAAM** non-extractable black key as the default signing key;
@@ -47,6 +72,10 @@ From this PoC to a defensible product, in order of trust-impact.
   projects separate, bridge at the attestation boundary (don't merge codebases).
 
 ## Ops
-- Reproducible-build attestation of the published firmware (so the measurement
-  is independently re-derivable from source).
-- Transparency log of reference values + endorsements.
+- **Reproducible builds:** host artifacts are byte-reproducible today
+  (`make repro`); finish the **TA** measurement re-derivation so the published
+  firmware hash is independently recomputable from source (recipe in
+  [`REPRODUCIBLE.md`](REPRODUCIBLE.md)). Highest-leverage remaining honesty item.
+- **Transparency log:** the append-only Merkle log + proofs exist (`he-log`);
+  remaining work is operating it for real — periodic checkpoints, witness
+  cosigning, and logging signed CoRIM endorsements.

@@ -68,10 +68,15 @@ src/optee/       OP-TEE integration (builds on the rig):
                    pta/  PTA_SIGN_DATA command + INTEGRATION.md
                    ta/   ATTEST_AUDIO + TRIP_TAMPER TA commands + INTEGRATION.md
                    host/ he_host CA + INTEGRATION.md
-src/verifier/    Go (stdlib only) verifier library + he-verify CLI +
-                 he-challenge live challenge-response server +
-                 he-gui browser click-to-listen web UI (+ live tamper/replay) +
-                 unit tests + FuzzDecodePayload fuzz target (seed corpus in testdata/)
+src/verifier/    Go (stdlib only) verifier:
+                   bound.go        - 4-gate bundle verify (sig/pin/freshness/replay)
+                   quorum.go       - k-of-n multi-prover quorum (reuses bound.go)
+                   transparency.go - RFC 6962 endorsement log (inclusion/consistency)
+                   cmd/he-verify   - verify a bundle, or a --quorum of provers
+                   cmd/he-log      - operate/prove/verify the transparency log
+                   cmd/he-challenge- live nonce server + mobile verifier page (/v)
+                   cmd/he-gui      - browser click-to-listen web UI
+                   + unit tests, exhaustive log tests, and FuzzDecodePayload
 src/tamper/      Linux GPIO tamper-loop watcher (key-destroy on enclosure breach)
 sim/             Host simulator (he-attest-sim) mirroring the TEE crypto path,
                  the detector CLI, and the C unit tests
@@ -79,16 +84,19 @@ test/            Fixture generator + end-to-end test (detect -> sign -> verify)
 tools/           stage_optee.sh   - copy overlay sources into an optee-ra checkout
                  run_qemu.sh      - QEMU bring-up driver (needs Docker + disk)
                  run_gui.sh       - browser click-to-listen web UI
+                 repro.sh         - prove the host build is byte-reproducible
+                 cross.sh         - cross-compile the verifier for Raspberry Pi
                  render_video.py  - render the walkthrough from captured output
-docs/            ARCHITECTURE, THREAT_MODEL, RUNBOOK, ROADMAP, USE_CASES, WHY_TEE
+docs/            ARCHITECTURE, THREAT_MODEL, RUNBOOK, ROADMAP, REPRODUCIBLE,
+                 USE_CASES, WHY_TEE
 ```
 
 ## Docs
 
 [Use cases](docs/USE_CASES.md) · [Why a TEE? (vs ZK/FHE)](docs/WHY_TEE.md) ·
 [Architecture](docs/ARCHITECTURE.md) · [Threat model & scope](docs/THREAT_MODEL.md) ·
-[Runbook](docs/RUNBOOK.md) · [Roadmap](docs/ROADMAP.md) ·
-[Sample attestation (QEMU)](docs/SAMPLE_ATTESTATION.md)
+[Runbook](docs/RUNBOOK.md) · [Reproducible builds](docs/REPRODUCIBLE.md) ·
+[Roadmap](docs/ROADMAP.md) · [Sample attestation (QEMU)](docs/SAMPLE_ATTESTATION.md)
 
 ## What is proven *here* vs *on the rig*
 
@@ -148,6 +156,39 @@ N=$(openssl rand -hex 32)
 sim/bin/he-attest-sim test/fixtures/alarm.pcm "$N" 1 > bundle.json
 (cd src/verifier && go run ./cmd/he-verify --nonce "$N" ../../bundle.json)
 ```
+
+## Raspberry Pi
+
+This is meant to run on a Pi. The detector and host code are integer-only C that
+compiles natively on Raspberry Pi OS (`make sim`, `make -C src/tamper`), and
+OP-TEE remote attestation runs on the **Raspberry Pi 3B+** (a Tier-1 target in
+[`docs/RUNBOOK.md`](docs/RUNBOOK.md)). The Go verifier is pure stdlib with CGO
+off, so it cross-compiles to the Pi from any machine with no toolchain:
+
+```sh
+make cross        # -> dist/linux-arm64/  (Pi 3B+/4/5, 64-bit OS)
+                  #    dist/linux-armv7/  (32-bit Raspberry Pi OS)
+                  #    dist/linux-amd64/
+scp dist/linux-arm64/he-verify  pi@raspberrypi:~   # then run it on the Pi
+```
+
+On the Pi itself, `make test` runs the whole host pipeline exactly as on a laptop.
+
+## Trust hardening
+
+```sh
+make repro        # prove the host build is byte-identical across two trees
+                  # (path/time-independent; anyone can recompute the bytes)
+```
+
+- **Transparency log** — append-only Merkle log of device endorsements with
+  inclusion + consistency proofs and a signed checkpoint, so trust in a key
+  can't be equivocated (`he-log`; CT/RFC-6962 model).
+- **Multi-prover quorum** — require *k* of *n* independent roots (e.g. the
+  OP-TEE device + a second-vendor TEE + a TPM quote) to agree, so one broken
+  enclave can't forge a verdict (`he-verify --quorum`).
+- **Reproducible builds** — `make repro` for the host today; the TA-measurement
+  recipe is in [`docs/REPRODUCIBLE.md`](docs/REPRODUCIBLE.md).
 
 ## License
 
