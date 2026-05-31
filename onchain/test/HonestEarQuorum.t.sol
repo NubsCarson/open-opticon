@@ -60,14 +60,17 @@ contract HonestEarQuorumTest is Test {
         q.recordVerdict(seal, journal, aPayload, aSig);
     }
 
-    function test_RejectsDisagreement() public {
-        // zk proof says alarm_tone; the (validly signed) device bundle says none.
-        vm.expectRevert(bytes("roots disagree"));
+    function test_RejectsAudioMismatch() public {
+        // A validly-signed device bundle for a DIFFERENT clip (silence) than the
+        // zk proof attests (alarm): the audio binding must reject it, so a proof
+        // and a signature about different inputs can't be combined — even against
+        // a misbehaving device. (Same nonce, so the audio check is what fires.)
+        vm.expectRevert(bytes("audio mismatch (different input)"));
         q.verdict(seal, journal, sPayload, sSig);
     }
 
     function test_RejectsNonceMismatch() public {
-        // A validly-signed alarm bundle, same verdict — but for a DIFFERENT nonce
+        // A validly-signed alarm bundle for the SAME clip but a DIFFERENT nonce
         // than the zk proof is bound to: the cross-root binding must reject it,
         // so a proof and a signature from different sessions can't be combined.
         vm.expectRevert(bytes("nonce mismatch (different sessions)"));

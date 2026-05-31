@@ -32,7 +32,7 @@ fn main() {
     // Anyone can verify the receipt against the published guest image id.
     receipt.verify(DETECTOR_ID).expect("zk receipt failed to verify");
 
-    let (event, presence, voice_active, frames, active, n, nonce_hash): (
+    let (event, presence, voice_active, frames, active, n, nonce_hash, audio_hash): (
         u32,
         u32,
         u32,
@@ -40,16 +40,20 @@ fn main() {
         u32,
         u32,
         [u32; 8],
+        [u32; 8],
     ) = receipt.journal.decode().unwrap();
     let name = ["none", "voice", "alarm_tone"][event as usize];
-    let nh: String = nonce_hash.iter().flat_map(|w| w.to_le_bytes()).map(|b| format!("{b:02x}")).collect();
+    let hx = |w: &[u32; 8]| -> String {
+        w.iter().flat_map(|x| x.to_le_bytes()).map(|b| format!("{b:02x}")).collect()
+    };
     println!("ZK-VERIFIED  detector(audio) proven in zero knowledge");
     println!("  event        : {name}");
     println!("  presence     : {presence}");
     println!("  voice_active : {voice_active}");
     println!("  frames       : {frames}  (active {active})");
     println!("  samples      : {n}  (audio itself never revealed)");
-    println!("  nonce_sha256 : {nh}  (binds the proof to the challenge)");
+    println!("  nonce_sha256 : {}  (binds the proof to the challenge)", hx(&nonce_hash));
+    println!("  audio_sha256 : {}  (binds the proof to the exact input)", hx(&audio_hash));
     // Canonical risc0 image id (same bytes the on-chain verifier + he-zk-export use).
     println!("  image_id     : {}", Digest::from(DETECTOR_ID));
 }
