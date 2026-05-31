@@ -11,12 +11,15 @@
 // A QR is rendered to the terminal (via the `qrencode` CLI if present) that
 // opens a mobile verifier page (/v) on a phone: the page polls /status and shows
 // a plain-language live PASS/FAIL verdict for that session, so a non-expert can
-// watch the device prove itself. Dependency-free Go stdlib; state is in-memory
-// (PoC scope).
+// watch the device prove itself. With `--sim <he-attest-sim>`, the home page also
+// gets a "simulate a device" button (POST /simulate) that signs the nonce with
+// the host simulator, so the whole loop completes in the browser with no separate
+// device. Dependency-free Go stdlib; state is in-memory (PoC scope).
 package main
 
 import (
 	"crypto/rand"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"flag"
@@ -24,7 +27,9 @@ import (
 	"html"
 	"io"
 	"log"
+	"math"
 	"net/http"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -53,6 +58,9 @@ type server struct {
 	// optional endorsement pin (device-identity gate)
 	pinX, pinY []byte
 	ttl        time.Duration
+	// optional in-browser demo: sign the challenge with the host simulator so /v
+	// reaches a real verdict without a separate device. Empty = disabled.
+	simPath, clipPath string
 }
 
 func main() {
@@ -60,6 +68,7 @@ func main() {
 	base := flag.String("base-url", "", "externally reachable base URL (for the QR); defaults to http://<addr>")
 	pinX := flag.String("pin-x", "", "pinned endorsement pub X (hex), optional")
 	pinY := flag.String("pin-y", "", "pinned endorsement pub Y (hex), optional")
+	sim := flag.String("sim", "", "path to he-attest-sim — enables a 'simulate a device' button so the loop completes in the browser (optional)")
 	flag.Parse()
 
 	s := &server{
@@ -85,13 +94,22 @@ func main() {
 		s.pinY = y
 	}
 
+	if *sim != "" {
+		clip, err := writeAlarmClip()
+		if err != nil {
+			log.Fatalf("could not create demo clip: %v", err)
+		}
+		s.simPath, s.clipPath = *sim, clip
+		http.HandleFunc("/simulate", s.handleSimulate)
+	}
+
 	http.HandleFunc("/challenge", s.handleChallenge)
 	http.HandleFunc("/attest", s.handleAttest)
 	http.HandleFunc("/status", s.handleStatus)
 	http.HandleFunc("/v", s.handleVerifyPage)
 	http.HandleFunc("/", s.handleRoot)
 
-	log.Printf("Honest Ear challenge verifier listening on %s (base %s)", *addr, s.baseURL)
+	log.Printf("open-opticon challenge verifier listening on %s (base %s)", *addr, s.baseURL)
 	log.Fatal(http.ListenAndServe(*addr, nil))
 }
 
@@ -139,32 +157,59 @@ func (s *server) handleAttest(w http.ResponseWriter, r *http.Request) {
 		cli.WriteJSON(w, 404, map[string]string{"verdict": "FAIL", "reason": "unknown or expired session"})
 		return
 	}
-
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // bound the body (DoS guard)
 	var b verifier.Bundle
 	if err := json.NewDecoder(r.Body).Decode(&b); err != nil {
 		cli.WriteJSON(w, 400, map[string]string{"verdict": "FAIL", "reason": "bad bundle: " + err.Error()})
 		return
 	}
+	cli.WriteJSON(w, 200, s.verifyAndRecord(sid, sess, b))
+}
 
+// handleSimulate signs the session's nonce with the host simulator and runs it
+// through the same verify+record path, so the /v page reaches a real verdict in
+// the browser without a separate device. Only registered when --sim is set.
+func (s *server) handleSimulate(w http.ResponseWriter, r *http.Request) {
+	sid := r.URL.Query().Get("session")
+	s.mu.Lock()
+	sess := s.sessions[sid]
+	ctr := uint64(0)
+	if sess != nil {
+		ctr = sess.lastCounter + 1
+	}
+	s.mu.Unlock()
+	if sess == nil {
+		cli.WriteJSON(w, 404, map[string]string{"verdict": "FAIL", "reason": "unknown or expired session"})
+		return
+	}
+	out, err := exec.Command(s.simPath, s.clipPath, hex.EncodeToString(sess.nonce),
+		fmt.Sprint(ctr)).Output()
+	if err != nil {
+		cli.WriteJSON(w, 500, map[string]string{"verdict": "FAIL", "reason": "simulator failed: " + err.Error()})
+		return
+	}
+	var b verifier.Bundle
+	if err := json.Unmarshal(out, &b); err != nil {
+		cli.WriteJSON(w, 500, map[string]string{"verdict": "FAIL", "reason": "bad sim output: " + err.Error()})
+		return
+	}
+	cli.WriteJSON(w, 200, s.verifyAndRecord(sid, sess, b))
+}
+
+// verifyAndRecord verifies a bundle for a session and atomically advances the
+// anti-replay counter + records the verdict (shared by /attest and /simulate).
+// VerifyBundle runs against a snapshot of lastCounter, so two concurrent attests
+// could both clear Gate 3; re-checking under the lock makes the per-session
+// compare-and-advance atomic and also guards a session GC'd mid-verification.
+func (s *server) verifyAndRecord(sid string, sess *session, b verifier.Bundle) map[string]any {
 	res := verifier.VerifyBundle(b, verifier.Options{
-		ExpectedNonce: sess.nonce,
-		PinPubX:       s.pinX,
-		PinPubY:       s.pinY,
-		LastCounter:   sess.lastCounter,
+		ExpectedNonce: sess.nonce, PinPubX: s.pinX, PinPubY: s.pinY, LastCounter: sess.lastCounter,
 	})
-
-	// Decide the verdict and advance the anti-replay counter atomically under the
-	// lock. VerifyBundle ran against a snapshot of lastCounter, so two concurrent
-	// attests could both clear Gate 3 against the same snapshot; re-checking and
-	// advancing here makes the per-session compare-and-advance atomic. The same
-	// critical section guards against the session being GC'd mid-verification.
 	ok, reason := res.OK, res.Reason
 	s.mu.Lock()
 	_, live := s.sessions[sid]
 	switch {
 	case !live:
-		// session expired during verification: report the verdict, don't store it
 	case ok && res.Predicate.Counter <= sess.lastCounter:
 		ok = false
 		reason = fmt.Sprintf("counter %d not greater than last seen %d (concurrent replay)",
@@ -189,7 +234,27 @@ func (s *server) handleAttest(w http.ResponseWriter, r *http.Request) {
 		out["counter"] = res.Predicate.Counter
 	}
 	log.Printf("attest session=%s verdict=%s reason=%s", sid, verdict, reason)
-	cli.WriteJSON(w, 200, out)
+	return out
+}
+
+// writeAlarmClip writes a 1 s 3.1 kHz s16le-mono tone to a temp file — the demo
+// audio the --sim "simulate a device" path feeds to the host simulator.
+func writeAlarmClip() (string, error) {
+	const rate = 16000
+	buf := make([]byte, rate*2)
+	for i := 0; i < rate; i++ {
+		v := int16(8000 * math.Sin(2*math.Pi*3100*float64(i)/float64(rate)))
+		binary.LittleEndian.PutUint16(buf[i*2:], uint16(v))
+	}
+	f, err := os.CreateTemp("", "he-clip-*.pcm")
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	if _, err := f.Write(buf); err != nil {
+		return "", err
+	}
+	return f.Name(), nil
 }
 
 func (s *server) handleRoot(w http.ResponseWriter, r *http.Request) {
@@ -198,7 +263,11 @@ func (s *server) handleRoot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = io.WriteString(w, homePage)
+	simDisplay := "none" // the "simulate a device" button only appears with --sim
+	if s.simPath != "" {
+		simDisplay = "inline-flex"
+	}
+	_, _ = io.WriteString(w, strings.ReplaceAll(homePage, "{{SIM}}", simDisplay))
 }
 
 const homePage = `<!DOCTYPE html><html lang="en"><head>
@@ -237,7 +306,9 @@ pre .c{color:var(--dim2)} pre .n{color:var(--b)}
   <p class="sub">Trust comes from a fresh nonce signed live by the device key — not a static sticker.
      Start a challenge, sign it on the device, and watch the verdict.</p>
   <button id="go">New challenge</button>
+  <button id="sim" style="display:{{SIM}};margin-left:8px;background:transparent;border:1px solid var(--line);color:var(--fg)">Simulate a device</button>
   <div id="out">
+    <div class="card" id="simout" style="display:none;border-color:#1f3d2b"><div class="k" style="color:var(--g)">simulated device</div><div class="val" id="simmsg"></div></div>
     <div class="card"><div class="k">verifier page (open on a phone, or click)</div>
       <div class="val"><a class="open" id="vlink" target="_blank">Open the verifier page →</a></div></div>
     <div class="card"><div class="k">fresh nonce</div><div class="val" id="nonce"></div></div>
@@ -253,13 +324,26 @@ curl -X POST "<span class="n" id="cu"></span>" --data @bundle.json</pre></div>
      A QR for the verifier page is also printed in this server's terminal.</p>
 </div>
 <script>
+let sid="";
 document.getElementById("go").onclick=async()=>{
   const d=await (await fetch("/challenge")).json();
+  sid=d.session;
   document.getElementById("vlink").href="/v?session="+d.session;
   document.getElementById("nonce").textContent=d.nonce;
   document.getElementById("cn").textContent=d.nonce;
   document.getElementById("cu").textContent=d.attest_url;
+  document.getElementById("simout").style.display="none";
   document.getElementById("out").style.display="block";
+};
+document.getElementById("sim").onclick=async()=>{
+  if(!sid){alert("Mint a challenge first.");return;}
+  const r=await fetch("/simulate?session="+encodeURIComponent(sid),{method:"POST"});
+  const d=await r.json();
+  const msg=document.getElementById("simmsg");
+  msg.textContent=d.verdict==="PASS"
+    ? "✓ "+d.verdict+" — "+(d.event||"event")+". Open the verifier page above to see it."
+    : "✗ "+(d.reason||"failed");
+  document.getElementById("simout").style.display="block";
 };
 </script></body></html>`
 

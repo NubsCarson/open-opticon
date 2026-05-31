@@ -27,7 +27,8 @@ make -C "$ROOT/sim" all >/dev/null || { echo "sim build failed"; exit 1; }
 
 python3 -m http.server -d "$ROOT/docs" "$LANDING_PORT" >/dev/null 2>&1 & pids+=($!)
 /tmp/oo-he-gui --addr ":$GUI_PORT" --sim "$ROOT/sim/bin/he-attest-sim" >/dev/null 2>&1 & pids+=($!)
-/tmp/oo-he-challenge --addr ":$CHAL_PORT" --base-url "http://localhost:$CHAL_PORT" >/dev/null 2>&1 & pids+=($!)
+/tmp/oo-he-challenge --addr ":$CHAL_PORT" --base-url "http://localhost:$CHAL_PORT" \
+  --sim "$ROOT/sim/bin/he-attest-sim" >/dev/null 2>&1 & pids+=($!)
 sleep 1.5
 
 sid="$(curl -s "http://localhost:$CHAL_PORT/challenge" \
