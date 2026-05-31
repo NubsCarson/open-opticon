@@ -1,0 +1,6 @@
+# Foundry build output + deps (deps are restored with `forge install`, see README).
+out/
+cache/
+lib/
+broadcast/
+.env

@@ -1,6 +1,9 @@
 bin/
 sim/bin/
 src/tamper/bin/
+# ...but zk/host/src/bin is Rust source, not build output.
+!zk/host/src/bin/
+!zk/host/src/bin/**
 test/fixtures/*.pcm
 test/fixtures/*.pgm
 *.o

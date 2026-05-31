@@ -8,8 +8,12 @@ edition = "2021"
 name = "he-zk-prove"
 path = "src/main.rs"
 
+# Groth16 export for on-chain verification (src/bin/he-zk-export.rs is
+# auto-discovered as a second binary).
+
 [dependencies]
 methods = { path = "../methods" }
 risc0-zkvm = { version = "^3.0.5" }
+risc0-ethereum-contracts = "3.0"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 serde = "1.0"
