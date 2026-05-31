@@ -150,10 +150,11 @@ This is a clean overlay on `optee-ra`; it does not modify the upstream tree
   project also proves, on-chain: a **heterogeneous 2-of-2 check** (a ZK proof
   *and* the device's secp256r1 signature must both verify and agree — one
   realisable leg of the broader 2-of-3 vision) and an **append-only log anchor**
-  (RFC 9162 consistency verified on-chain, so a fork/rewrite reverts). The full
-  stack deploys + runs live transactions on a **local anvil devnet** (a real EVM,
-  not a public testnet — `DeployLocal.s.sol`); a public testnet deploy is the one
-  deferred step.
+  (RFC 9162 consistency verified on-chain, so a fork/rewrite reverts). The two
+  roots are cryptographically bound to the same verifier nonce. The full stack is
+  **deployed live on Ethereum Sepolia** (addresses + Etherscan links in
+  [`onchain/README.md`](onchain/README.md)) — a real `eth_call` to the deployed
+  quorum returns the agreed verdict — and also runs locally on anvil.
 
 **Reviewed and runbook-driven — builds/runs on an Arm rig (see [`docs/RUNBOOK.md`](docs/RUNBOOK.md)):**
 - the OP-TEE TA/PTA/host code and the live QEMU / RPi 3B+ / i.MX 8M Plus

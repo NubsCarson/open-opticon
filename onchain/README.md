@@ -62,6 +62,25 @@ device counter must advance). This is one realisable leg of the broader 2-of-3
 vision ({TEE, ZK, phone}); a sha256(audio) commitment in both legs (airtight even
 against a misbehaving device) is the further step.
 
+## Live on Sepolia (public testnet)
+
+The full stack is deployed and verified on Ethereum Sepolia — anyone can call it
+permissionlessly (no trust in this repo or its operator):
+
+| Contract | Address |
+|---|---|
+| HonestEarQuorum (ZK + device P-256, nonce-bound 2-of-2) | [`0x5d91D5C07048A3e9a8f57A9198f031F7021707f6`](https://sepolia.etherscan.io/address/0x5d91D5C07048A3e9a8f57A9198f031F7021707f6) |
+| HonestEarVerifier (zk receipt) | [`0xA14D86C47B9D7702b81EF1789b5152f81a2c4817`](https://sepolia.etherscan.io/address/0xA14D86C47B9D7702b81EF1789b5152f81a2c4817) |
+| CheckpointAnchor (log anchor) | [`0x9B50374B32E88123c36ca6227a59ce8fb76D9240`](https://sepolia.etherscan.io/address/0x9B50374B32E88123c36ca6227a59ce8fb76D9240) |
+| RiscZeroGroth16Verifier | [`0xe0ABbE2DA2D8aA05C41bF11F7E335663637f17E7`](https://sepolia.etherscan.io/address/0xe0ABbE2DA2D8aA05C41bF11F7E335663637f17E7) |
+
+The two `CheckpointAnchor.anchor()` transactions (a consistency-proven 3→5
+extension) executed on-chain, and a live `eth_call` to `HonestEarQuorum.verdict`
+with the committed fixtures returns `(2, 1)` — alarm_tone, presence — i.e. the ZK
+proof and the device signature agree, on a public chain. (Deployed from a
+disposable testnet key; in production you'd reuse RISC Zero's canonical verifier
+router rather than deploy your own.)
+
 ## Deploy the whole stack on a local EVM (no funds)
 
 ```sh
@@ -74,8 +93,8 @@ anvil is a real EVM implementation (a local devnet, not a public testnet). The
 script deploys the verifier, the receipt wrapper, the log anchor, and the quorum,
 then runs live state-changing transactions — anchoring a consistency-proven
 checkpoint sequence — and reads back both the zk verdict and the dual-root agreed
-verdict via view calls. The same script targets a public testnet with a funded
-key + RPC (the one deferred step).
+verdict via view calls. The same script deployed the live Sepolia stack above
+(`--rpc-url <sepolia> --private-key <funded>`).
 
 ## Verify the proof yourself (local, no funds)
 
@@ -102,13 +121,13 @@ cargo run --release --bin he-zk-export -- \
 The STARK→SNARK wrap runs in a container; it is a batch/audit step (minutes),
 like the STARK proof. The seal it emits is what the EVM verifier checks.
 
-## Deploying to a testnet (the only deferred step)
+## Deploying to another chain (production note)
 
-Verifying the proof is fully proven locally above. A *live* deployment is the
-one piece that needs a funded key + an RPC, so it is left as a documented step
-rather than faked here. On a live chain, reuse RISC Zero's canonical, audited
+The Sepolia stack above was deployed with `DeployLocal.s.sol` (which also deploys
+its own RISC Zero verifier — fine for a self-contained demo). On a production
+chain, reuse RISC Zero's canonical, audited
 [verifier router](https://dev.risczero.com/api/blockchain-integration/contracts/verifier)
-for that chain — do not deploy your own Groth16 verifier in production:
+for that chain instead of deploying your own Groth16 verifier:
 
 ```sh
 RISC0_VERIFIER=0x<canonical router> IMAGE_ID=0x<guest imageId> \

@@ -22,14 +22,14 @@ From this PoC to a defensible product, in order of trust-impact.
   audio — with no enclave trusted for the math. Real STARK proof captured +
   verified end-to-end ([`zk/`](../zk/README.md)). Batch/audit speed (minutes per
   clip), wired conceptually as a second quorum leg; on-chain verification of that
-  receipt is done locally (see the on-chain bullet below), with only a live
-  testnet deploy deferred.
+  receipt is done (see the on-chain bullet below) — locally and live on Sepolia.
 - **On-chain (permissionless) verification of the zk receipt.** A Foundry project
   ([`onchain/`](../onchain/README.md)) whose `onchain/src/HonestEarVerifier.sol`
   wraps RISC Zero's verifier and checks the Groth16 receipt for the pinned guest
   `imageId` on a stateless EVM; a real proof fixture verifies on a local EVM
-  (`forge test`, no funds/network). A *live testnet* deploy (funded key + RPC) is
-  the one deferred step.
+  (`forge test`, no funds/network) **and is deployed live on Ethereum Sepolia**
+  (addresses + Etherscan links in onchain/README) where a real `eth_call` to the
+  quorum returns the agreed verdict.
 - **A heterogeneous dual-root check, on-chain (a both-required 2-of-2).**
   `HonestEarQuorum.sol` returns a verdict only if a ZK proof of the detector
   (Groth16) *and* the device's hardware-bound secp256r1 signature over its
@@ -37,8 +37,8 @@ From this PoC to a defensible product, in order of trust-impact.
   (event, presence, voice_active, frames) — where, unlike the stdlib-only Go
   verifier, the EVM can verify both proof systems. `recordVerdict` enforces
   on-chain anti-replay via the device counter. Proven on a local EVM with a real
-  receipt + a real device bundle; the full stack also deploys + runs live
-  transactions via `DeployLocal.s.sol` (anvil). The two roots are
+  receipt + a real device bundle, and **deployed live on Ethereum Sepolia** (full
+  stack via `DeployLocal.s.sol`; addresses in onchain/README). The two roots are
   **cryptographically bound to the same verifier nonce**: the guest commits
   sha256(nonce) and the contract requires it equals sha256(the device payload's
   nonce), so a proof and a signature from different sessions can't be combined.
