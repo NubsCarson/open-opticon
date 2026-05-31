@@ -229,12 +229,16 @@ function render(j){
   verdict.textContent = MAP[j.event] || j.event || '—';
   if(j.verified){
     pill.className='pill'; pilltext.textContent='Verified · fresh challenge · signature valid';
-  }else{
+  }else if(j.payload){
+    // a real signed bundle the verifier rejected — a genuine cryptographic failure
     pill.className='pill bad'; pilltext.textContent='Verification failed: '+(j.reason||'unknown');
+  }else{
+    // no bundle was produced (no audio / input or sim error) — nothing was verified
+    pill.className='pill'; pilltext.textContent=(j.reason||'waiting for audio…');
   }
   proof.innerHTML='<b>nonce</b> '+trunc(j.nonce)+'<br><b>signature</b> '+trunc(j.sig)+'<br><b>counter</b> '+(j.counter||0)+' &nbsp;·&nbsp; <b>verdict</b> '+(j.reason||'');
   card.classList.add('show');
-  // capture the full signed bundle so the audience can try to break it live
+  // capture the full signed bundle so it can be re-verified live (the tamper test)
   if(j.verified && j.payload){
     lastBundle={nonce:j.nonce, payload:j.payload, sig:j.sig, pub_x:j.pub_x, pub_y:j.pub_y};
     tamperRow.style.display='block'; tverdict.textContent=''; tverdict.className='tverdict';

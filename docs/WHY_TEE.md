@@ -60,8 +60,8 @@ What this repo has (OP-TEE + Veraison) **plus**:
   token-hash)` commitments, so the device cannot lie *consistently* without
   public detection of counter-rollback or equivocation.
 - **A TEE-signed commitment to the predicate's input** under a SNARK-friendly
-  hash, so a ZK proof of the (deliberately tiny) detector bolts onto the *same*
-  commitment later without re-architecting the capture path.
+  hash, so a future ZK proof can bind to the *same* commitment (tighter than
+  today's standalone batch proof) without re-architecting the capture path.
 
 > Already shipped: a **batch/audit ZK proof of the detector** (RISC Zero zkVM,
 > the audio as private witness) runs today as a non-load-bearing second prover
@@ -76,8 +76,11 @@ Map the **2-of-3 multi-prover** pattern (ZK + optimistic + TEE on disjoint trust
 assumptions) onto sensing:
 
 - **The TEE keeps the analog/capture boundary forever** (only it can).
-- **ZK progressively absorbs the predicate.** Because the detector is *tiny by
-  design*, a sub-second zkML proof of it is the *easy* case, not the hard one.
+- **ZK already absorbs the predicate as a non-TEE prover leg (`zk/`).** Because
+  the detector is *tiny by design*, even a CPU STARK proof of it is tractable as
+  a batch/audit step (~6 min for a ~0.2 s clip; faster on GPU), and the receipt
+  verifies in milliseconds — appropriate for spot-audits and the quorum, not
+  per-frame real time. Sub-second real-time zkML remains the future case.
 - **Add a second heterogeneous root** (a measured-boot TPM event log alongside
   the CAAM key) as a near-free poor-man's multi-root.
 

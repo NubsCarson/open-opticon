@@ -1,11 +1,15 @@
 # Honest Ear — top-level developer convenience targets (host side).
 #
-#   make test   - build + run all host-runnable tests (C units, Go units, e2e)
-#   make sim    - build the host simulator + CLIs
-#   make e2e    - run the end-to-end pipeline test
-#   make clean  - remove build artifacts
+#   make test       - all host tests (C units, Go units, e2e + vision-e2e, tamper)
+#   make sim        - build the host simulators + CLIs
+#   make e2e        - audio end-to-end pipeline;  make vision-e2e - vision pipeline
+#   make gui/sites/fuzz/repro/cross - GUI, static site, fuzzing, reproducible-build,
+#                     Raspberry Pi cross-compile
+#   make clean      - remove build artifacts
 #
 # The OP-TEE TA/PTA/host code is built on the target rig — see docs/RUNBOOK.md.
+# The zk/ (RISC Zero, cargo) and onchain/ (Foundry, forge) legs build via their
+# own subdir tooling, not this Makefile — see zk/README.md and onchain/README.md.
 
 VERIFIER = src/verifier
 

@@ -35,7 +35,12 @@ emitted**, and **why non-panopticon matters there**.
 The flagship use case pairs the first two: **proof-of-non-recording + a verifiable
 safety event** — least ML risk, cleanest privacy story.
 
-## Video — the next step (same primitive, richer predicate)
+## Video — the same primitive, richer predicates
+
+A vision occupancy detector (`he_vision`) already rides the same envelope —
+empty/occupied + a region count, never the frame, verified by the same
+`he-verify` via `make vision-e2e` — proving the primitive is sensor-agnostic.
+The richer predicates below remain future:
 
 - **Incident attestation** — "an assault/robbery/fire occurred at T," with the
   clip optionally *sealed in-enclave* under a multi-party / warrant key. Verifiable
@@ -52,9 +57,10 @@ safety event** — least ML risk, cleanest privacy story.
   unedited," proven in-enclave (the C2PA gap closed) — and you can prove
   authenticity *without publishing* footage full of bystanders.
 
-Audio is the right MVP precisely because video ML in a TEE is heavy; the audio
-detector is light enough to run the whole pipeline today as a PoC (the detector
-itself is still a threshold stub — see [`ROADMAP.md`](ROADMAP.md)).
+Audio was the first MVP; a light integer-only vision occupancy detector now
+rides the same pipeline (`make vision-e2e`). Richer video *ML* in a TEE remains
+heavy — that work is future (and the detectors here are still threshold stubs —
+see [`ROADMAP.md`](ROADMAP.md)).
 
 ## Generalization: verifiable claims about reality
 

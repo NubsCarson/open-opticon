@@ -11,15 +11,30 @@ Prereqs: `gcc`, `go` (>=1.23), `openssl`, `python3`.
 
 ```sh
 cd honest-ear
-make test          # C unit tests + Go unit tests + end-to-end pipeline + tamper self-test
+make test          # C unit tests + Go unit tests + e2e (audio + vision) + tamper self-test
 ```
 
 Expected: detector unit tests pass, payload golden vector matches, Go verifier
-tests pass, and the e2e prints `13 passed, 0 failed` (4 positive fixtures, each
-asserting event-class + verify-PASS = 8, plus 5 rejection cases = 13). This
-validates everything except OP-TEE itself.
+tests pass, and the audio e2e prints `13 passed, 0 failed` (4 positive fixtures,
+each asserting event-class + verify-PASS = 8, plus 5 rejection cases = 13). The
+vision occupancy e2e (`make vision-e2e`) also runs and passes, exercising the
+same bind+verify path on camera-style frames (empty/occupied + a tamper case).
+This validates everything except OP-TEE itself.
 
 Manual single run + live challenge flow: see the project README quickstart.
+
+### Phase A+ — optional public-verifiability legs (host, laptop-runnable)
+
+Both run on a laptop with their own toolchains; only a *live testnet* deploy is
+deferred (funded key + RPC).
+
+```sh
+cd zk && cargo test -p oo_detector   # the Rust detector port matches the C one
+cd zk && cargo run --release -- ../test/fixtures/alarm.pcm   # STARK prove+verify (~min)
+cd onchain && forge install && forge test   # verify the Groth16 receipt on a local EVM
+```
+
+See [`zk/README.md`](../zk/README.md) and [`onchain/README.md`](../onchain/README.md).
 
 ---
 

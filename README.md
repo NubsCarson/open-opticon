@@ -62,7 +62,9 @@ that emits speech. The device proves its own restraint.
 src/common/      Shared, pure-C, integer-only sources compiled into BOTH the TA
                  and the host tests (so tests exercise production code):
                    he_detector.[ch]  - VAD + Goertzel alarm-tone detector
+                   he_vision.[ch]    - vision occupancy detector (empty/occupied)
                    he_payload.[ch]   - deterministic-CBOR bound-output payload
+                   he_serialize.h    - shared big-endian config-blob serializer
                    he_testkey.h      - published QEMU test key (NOT secret)
 src/optee/       OP-TEE integration (builds on the rig):
                    pta/  PTA_SIGN_DATA command + INTEGRATION.md
@@ -80,10 +82,19 @@ src/verifier/    Go (stdlib only) verifier:
 zk/              RISC Zero zkVM proof of the detector (Rust): a faithful no_std
                  port of he_detector.c proven over private audio, committing only
                  the verdict — a non-TEE prover leg for the quorum (see zk/README.md)
+onchain/         Foundry project: HonestEarVerifier.sol verifies the zk Groth16
+                 receipt for the pinned guest imageId on an EVM, so the verdict is
+                 permissionlessly checkable with no operator/enclave trusted; a real
+                 proof fixture verifies on a local EVM via `forge test` (see
+                 onchain/README.md)
 src/tamper/      Linux GPIO tamper-loop watcher (key-destroy on enclosure breach)
-sim/             Host simulator (he-attest-sim) mirroring the TEE crypto path,
-                 the detector CLI, and the C unit tests
-test/            Fixture generator + end-to-end test (detect -> sign -> verify)
+sim/             Host simulators mirroring the TEE crypto path: he-attest-sim
+                 (audio) and the vision signer (he_vision_sign.c), both emitting
+                 via the one shared signing+envelope path (he_bundle.[ch]); plus
+                 the detector CLI (he_detect_cli.c)
+test/            Fixture generators (audio + vision), C unit tests
+                 (detector/payload/vision), and the end-to-end tests
+                 (detect -> sign -> verify, audio + vision)
 tools/           stage_optee.sh   - copy overlay sources into an optee-ra checkout
                  run_qemu.sh      - QEMU bring-up driver (needs Docker + disk)
                  run_gui.sh       - browser click-to-listen web UI
@@ -100,7 +111,8 @@ docs/            ARCHITECTURE, THREAT_MODEL, RUNBOOK, HARDWARE, ROADMAP,
 [Architecture](docs/ARCHITECTURE.md) · [Threat model & scope](docs/THREAT_MODEL.md) ·
 [Runbook](docs/RUNBOOK.md) · [Hardware & device](docs/HARDWARE.md) ·
 [Reproducible builds](docs/REPRODUCIBLE.md) · [Roadmap](docs/ROADMAP.md) ·
-[Sample attestation (QEMU)](docs/SAMPLE_ATTESTATION.md)
+[Sample attestation (QEMU)](docs/SAMPLE_ATTESTATION.md) ·
+[ZK proof of the detector](zk/README.md) · [On-chain verification](onchain/README.md)
 
 ## What is proven *here* vs *on the rig*
 
@@ -126,6 +138,16 @@ This is a clean overlay on `optee-ra`; it does not modify the upstream tree
 - the tamper watcher's breach action securely erases the device **key file** and
   writes the tamper-**flag file** (the on-device TA-side `TRIP_TAMPER` latch and
   the GPIO path are reviewed-but-run-on-rig).
+
+**Two independent verification legs (own toolchains, laptop-runnable):**
+- a **zero-knowledge proof of the detector** — a RISC Zero zkVM runs the
+  published detector over audio as *private* witness data and proves the verdict,
+  committing only the predicate. A real STARK proof is verified end-to-end
+  (`zk/`, `cargo run`; ~6 min/clip — batch/audit, not live).
+- **on-chain verification of that proof** — a Foundry test verifies the real
+  Groth16 receipt for the pinned guest `imageId` on a local EVM, with no enclave
+  or operator trusted (`onchain/`, `forge test`; no funds/network). A live
+  testnet deploy is the one deferred step.
 
 **Reviewed and runbook-driven — builds/runs on an Arm rig (see [`docs/RUNBOOK.md`](docs/RUNBOOK.md)):**
 - the OP-TEE TA/PTA/host code and the live QEMU / RPi 3B+ / i.MX 8M Plus

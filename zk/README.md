@@ -18,7 +18,8 @@ zk/
                  none (the same classes he-detect emits); a byte-level
                  differential test against he-detect is not yet automated.
   methods/guest/ the zkVM guest: read samples (private) -> oo_detector::detect ->
-                 commit ONLY (event, presence, voice_active, frames, active, n).
+                 commit ONLY (event, presence, voice_active, frames,
+                 active_frames, n_samples).
   host/          he-zk-prove:  prove + verify a STARK receipt, print the verdict.
                  he-zk-export: produce a Groth16 receipt + Ethereum seal fixture
                                for on-chain verification (see ../onchain).

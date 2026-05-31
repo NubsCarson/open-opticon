@@ -91,6 +91,14 @@ loop around the clear enclosure; on breach it erases the device key material
 and latches a TA-side flag (`TRIP_TAMPER`) so the enclave refuses to attest even
 with correct firmware — "an opened device is cryptographically dead."
 
+**The envelope is sensor-agnostic, and the math has a second prover.** A vision
+occupancy detector (`he_vision`) emits only empty/occupied + a region count
+through the *same* `he_payload` envelope and is verified by the *same*
+`he-verify` (`make vision-e2e`) — the attestation/binding/verification machinery
+is not audio-specific. Independently, a non-TEE ZK prover leg (`zk/`) proves the
+detector's verdict with no enclave trusted for the math, and its Groth16 receipt
+is verifiable on an EVM (`onchain/`); both can feed the existing k-of-n quorum.
+
 ## Hardware tiers
 
 | Tier | Target | Signing key | What it proves |

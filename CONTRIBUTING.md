@@ -18,6 +18,11 @@ The OP-TEE TA/PTA/host code under `src/optee/` builds on an Arm rig against the
 optee-ra tree — see [`docs/RUNBOOK.md`](docs/RUNBOOK.md). Please don't claim a
 change is "tested" if you've only built the host side; say which.
 
+The optional public-verifiability legs build via their own tooling, not
+`make test`: `zk/` (RISC Zero zkVM, `cargo` — see [`zk/README.md`](zk/README.md))
+and `onchain/` (Foundry, `forge test` — see [`onchain/README.md`](onchain/README.md)).
+If you touch either, run and note its own tests.
+
 ## Style
 
 - **Go:** `gofmt` clean and `go vet ./...` clean (stdlib only — no new deps).

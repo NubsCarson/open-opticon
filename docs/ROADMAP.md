@@ -21,8 +21,16 @@ From this PoC to a defensible product, in order of trust-impact.
   witness data and proves the verdict, committing only the predicate — never the
   audio — with no enclave trusted for the math. Real STARK proof captured +
   verified end-to-end ([`zk/`](../zk/README.md)). Batch/audit speed (minutes per
-  clip), wired conceptually as a second quorum leg; on-chain receipt verification
-  is the optional public-trust follow-up below.
+  clip), wired conceptually as a second quorum leg; on-chain verification of that
+  receipt is done locally (see the on-chain bullet below), with only a live
+  testnet deploy deferred.
+- **On-chain (permissionless) verification of the zk receipt.** A Foundry project
+  ([`onchain/`](../onchain/README.md)) whose `onchain/src/HonestEarVerifier.sol`
+  wraps RISC Zero's verifier and checks the Groth16 receipt for the pinned guest
+  `imageId` on a stateless EVM; a real proof fixture verifies on a local EVM
+  (`forge test`, no funds/network). A *live testnet* deploy (funded key + RPC) is
+  the one deferred step. Anchoring the transparency-log checkpoints to an L2 is a
+  natural companion (same deploy path).
 - **The primitive generalizes beyond audio.** A vision occupancy detector
   (`he_vision`, integer-only, same discipline as the acoustic one) emits only
   `empty`/`occupied` + a region count, never the frame, and rides the *same*
