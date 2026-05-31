@@ -289,11 +289,28 @@ func FuzzDecodePayload(f *testing.F) {
 	f.Add(mustHex("a90001"))                      // truncated map
 	f.Add(mustHex("a1" + "001b0000000000000001")) // 1-entry map, 8-byte uint
 	f.Add(mustHex("0101"))                        // not a map at all
-	f.Add(mustHex("a90142ffff"))                  // bstr len overruns buffer
+	f.Add(mustHex("a90142ffff")) // bstr len overruns buffer
+	// Format-change (key 9 input_hash) + canonicality surface:
+	f.Add(mustHex("a9" + "0001" + "0142aabb" + "0202" + "03f4" + "0401" +
+		"050a" + "0618a0" + "0707" + "085820" +
+		"1111111111111111111111111111111111111111111111111111111111111111")) // old 9-key (missing input_hash) -> reject
+	f.Add(mustHex("a2" + "0202" + "0001")) // out-of-order keys -> reject (non-canonical)
+	f.Add(mustHex("a2" + "0001" + "0001")) // duplicate key -> reject
+	f.Add(mustHex("a1" + "00" + "1800"))   // non-minimal uint (0 as 1-byte) -> reject
+	f.Add(mustHex("aa" + "0001" + "0142aabb" + "0202" + "03f4" + "0401" +
+		"050a" + "0618a0" + "0707" + "085820" +
+		"1111111111111111111111111111111111111111111111111111111111111111" +
+		"0950" + "2222222222222222222222222222222222")) // key 9 wrong bstr len (16, not 32)
 	f.Fuzz(func(t *testing.T, b []byte) {
-		p, err := DecodePayload(b) // must not panic
+		p, err := DecodePayload(b) // must not panic on ANY input
 		if err == nil && p == nil {
 			t.Fatal("nil predicate with nil error")
+		}
+		if err == nil {
+			// A successful decode must be deterministic + re-decode identically.
+			if _, err2 := DecodePayload(b); err2 != nil {
+				t.Fatalf("decode non-deterministic: ok then %v", err2)
+			}
 		}
 	})
 }

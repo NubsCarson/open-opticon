@@ -89,3 +89,16 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y build-essential libssl-dev openssl python3
       - name: C detector == Rust port (differential)
         run: bash test/run_port_diff.sh
+
+  # Bounded fuzzing of the hand-rolled CBOR payload decoder — it sits on the
+  # trust boundary, so a continuous (short) fuzz pass guards against panics /
+  # accepted-malformed inputs beyond the committed seed corpus.
+  fuzz-decoder:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+      - name: Fuzz DecodePayload (30s)
+        run: cd src/verifier && GOPROXY=off go test -run x -fuzz FuzzDecodePayload -fuzztime 30s .
