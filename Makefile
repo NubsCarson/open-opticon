@@ -9,9 +9,9 @@
 
 VERIFIER = src/verifier
 
-.PHONY: test units sim verifier-test e2e tamper-test gui sites fuzz repro cross clean
+.PHONY: test units sim verifier-test e2e vision-e2e tamper-test gui sites fuzz repro cross clean
 
-test: units verifier-test e2e tamper-test
+test: units verifier-test e2e vision-e2e tamper-test
 	@echo ""
 	@echo "==================================================="
 	@echo " ALL HOST TESTS PASSED"
@@ -31,6 +31,10 @@ verifier-test:
 # Full detect -> sign -> verify pipeline incl. negative attacks.
 e2e:
 	bash test/run_e2e.sh
+
+# Same machinery, a camera: vision detect -> bind -> verify with the same he-verify.
+vision-e2e:
+	bash test/run_vision_e2e.sh
 
 # Tamper watcher breach action (key-shred + flag-latch), no hardware.
 tamper-test:

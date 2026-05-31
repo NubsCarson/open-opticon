@@ -2,6 +2,7 @@ bin/
 sim/bin/
 src/tamper/bin/
 test/fixtures/*.pcm
+test/fixtures/*.pgm
 *.o
 *.out
 bundle.json
