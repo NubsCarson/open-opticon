@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+#
+# Generate onchain/test/quorum_fixture.json — real device bound-output bundles
+# (he-attest-sim, the published test key) for the SAME clips the zk proofs use,
+# so the on-chain 2-of-3 quorum can check the ZK leg and the device-signature
+# leg agree. The P-256 signature is normalized to low-s (OZ P256 requires it).
+# 0x-prefixed for Foundry; commit the output so forge test needs no C toolchain.
+set -u
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+SIM="$ROOT/sim/bin"
+FIX="$ROOT/test/fixtures"
+
+make -C "$ROOT/sim" all >/dev/null || { echo "C build failed"; exit 1; }
+
+# Short 12-frame clips (3072 samples) — same ones the zk proofs use. Generate
+# them deterministically if absent (they are gitignored), so this is self-contained.
+mkdir -p "$FIX"
+FIX="$FIX" python3 - <<'PY'
+import math, os, struct
+fix = os.environ["FIX"]
+N = 256 * 12  # 12 frames
+def w(name, samples):
+    p = os.path.join(fix, name)
+    if not os.path.exists(p):
+        with open(p, "wb") as f:
+            f.write(struct.pack("<%dh" % len(samples), *samples))
+w("alarm_short.pcm", [max(-32768, min(32767, int(12000 * math.sin(2*math.pi*3100*i/16000)))) for i in range(N)])
+w("silence_short.pcm", [0]*N)
+PY
+
+alarm_json="$("$SIM/he-attest-sim" "$FIX/alarm_short.pcm" aabbccdd 1)"
+silence_json="$("$SIM/he-attest-sim" "$FIX/silence_short.pcm" aabbccdd 1)"
+
+ALARM="$alarm_json" SILENCE="$silence_json" python3 - <<'PY' > "$ROOT/onchain/test/quorum_fixture.json"
+import json, os
+
+N = 0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551
+HALF_N = N // 2
+EVENT = {"none": 0, "voice": 1, "alarm_tone": 2}
+
+def leg(raw):
+    d = json.loads(raw)
+    sig = bytes.fromhex(d["sig"])
+    r, s = int.from_bytes(sig[:32], "big"), int.from_bytes(sig[32:], "big")
+    if s > HALF_N:                      # normalize to low-s for OZ P256
+        s = N - s
+    sig = r.to_bytes(32, "big") + s.to_bytes(32, "big")
+    return {
+        "payload": "0x" + d["payload"],
+        "sig": "0x" + sig.hex(),
+        "pubX": "0x" + d["pub_x"],
+        "pubY": "0x" + d["pub_y"],
+        "event": EVENT[d["event"]],
+        "presence": d["presence"],
+    }
+
+print(json.dumps({"alarm": leg(os.environ["ALARM"]),
+                  "silence": leg(os.environ["SILENCE"])}, indent=2))
+PY
+
+echo "wrote onchain/test/quorum_fixture.json"
+python3 -c "import json;d=json.load(open('$ROOT/onchain/test/quorum_fixture.json'));print('alarm event/presence:',d['alarm']['event'],d['alarm']['presence']);print('silence event/presence:',d['silence']['event'],d['silence']['presence'])"
