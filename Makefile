@@ -9,7 +9,7 @@
 
 VERIFIER = src/verifier
 
-.PHONY: test units sim verifier-test e2e tamper-test gui fuzz clean
+.PHONY: test units sim verifier-test e2e tamper-test gui fuzz repro cross clean
 
 test: units verifier-test e2e tamper-test
 	@echo ""
@@ -43,6 +43,14 @@ gui:
 # Fuzz the CBOR decoder (Ctrl-C to stop; the seed corpus runs under `make test`).
 fuzz:
 	cd $(VERIFIER) && GOPROXY=off go test -run x -fuzz FuzzDecodePayload .
+
+# Prove the host build is path/time-independent (byte-identical rebuilds).
+repro:
+	bash tools/repro.sh
+
+# Cross-compile the Go verifier tools for Raspberry Pi (arm64 + armv7) and amd64.
+cross:
+	bash tools/cross.sh
 
 clean:
 	$(MAKE) -C sim clean

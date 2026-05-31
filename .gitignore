@@ -7,3 +7,5 @@ test/fixtures/*.pcm
 he_tamper
 he-tamper
 bundle.json
+dist/
+he-log.json
