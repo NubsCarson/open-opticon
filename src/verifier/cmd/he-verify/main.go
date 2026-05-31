@@ -1,8 +1,18 @@
-// he-verify — verify a single Honest Ear bound-output bundle.
+// he-verify — verify Honest Ear bound-output bundles.
+//
+// Single prover:
 //
 //	he-verify --nonce <hex> [--pin-x <hex> --pin-y <hex>] [--last-counter N] [bundle.json]
 //
-// Reads the bundle from the file argument or stdin. Exits 0 on PASS, 1 on FAIL.
+// Quorum (k-of-n independent provers):
+//
+//	he-verify --nonce <hex> --quorum 2 \
+//	    --root tee-a:<pubXhex>:<pubYhex> --root tpm-b:<pubXhex>:<pubYhex> ... \
+//	    a.json b.json c.json
+//
+// Single-prover mode reads one bundle from the file argument or stdin; quorum
+// mode reads one bundle per file argument. Exits 0 on PASS, 1 on FAIL, 2 on
+// usage/IO error.
 package main
 
 import (
@@ -12,25 +22,46 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	verifier "honest-ear/verifier"
 )
 
+// repeatable --root flag.
+type rootList []string
+
+func (r *rootList) String() string { return strings.Join(*r, ",") }
+func (r *rootList) Set(v string) error {
+	*r = append(*r, v)
+	return nil
+}
+
+func die(format string, a ...any) {
+	fmt.Fprintf(os.Stderr, "error: "+format+"\n", a...)
+	os.Exit(2)
+}
+
 func main() {
 	nonceHex := flag.String("nonce", "", "expected fresh nonce (hex) — required")
-	pinX := flag.String("pin-x", "", "pinned endorsement pub X (hex), optional")
-	pinY := flag.String("pin-y", "", "pinned endorsement pub Y (hex), optional")
+	pinX := flag.String("pin-x", "", "pinned endorsement pub X (hex); use with --pin-y")
+	pinY := flag.String("pin-y", "", "pinned endorsement pub Y (hex); use with --pin-x")
 	lastCounter := flag.Uint64("last-counter", 0, "highest counter already accepted for this device")
+	quorum := flag.Int("quorum", 0, "require k-of-n independent provers (quorum mode)")
+	var roots rootList
+	flag.Var(&roots, "root", "enrolled prover as name:pubXhex:pubYhex (repeatable, quorum mode)")
 	flag.Parse()
 
 	if *nonceHex == "" {
-		fmt.Fprintln(os.Stderr, "error: --nonce is required")
-		os.Exit(2)
+		die("--nonce is required")
 	}
 	nonce, err := hex.DecodeString(*nonceHex)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: bad --nonce hex: %v\n", err)
-		os.Exit(2)
+		die("bad --nonce hex: %v", err)
+	}
+
+	if *quorum > 0 {
+		runQuorum(nonce, *quorum, roots, *lastCounter)
+		return
 	}
 
 	var raw []byte
@@ -40,25 +71,23 @@ func main() {
 		raw, err = io.ReadAll(os.Stdin)
 	}
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: reading bundle: %v\n", err)
-		os.Exit(2)
+		die("reading bundle: %v", err)
 	}
-
-	var b verifier.Bundle
-	if err := json.Unmarshal(raw, &b); err != nil {
-		fmt.Fprintf(os.Stderr, "error: parsing bundle JSON: %v\n", err)
-		os.Exit(2)
+	b, err := parseBundle(raw)
+	if err != nil {
+		die("%v", err)
 	}
 
 	opt := verifier.Options{ExpectedNonce: nonce, LastCounter: *lastCounter}
-	if *pinX != "" || *pinY != "" {
+	if (*pinX == "") != (*pinY == "") {
+		die("--pin-x and --pin-y must be provided together")
+	}
+	if *pinX != "" {
 		if opt.PinPubX, err = hex.DecodeString(*pinX); err != nil {
-			fmt.Fprintf(os.Stderr, "error: bad --pin-x: %v\n", err)
-			os.Exit(2)
+			die("bad --pin-x: %v", err)
 		}
 		if opt.PinPubY, err = hex.DecodeString(*pinY); err != nil {
-			fmt.Fprintf(os.Stderr, "error: bad --pin-y: %v\n", err)
-			os.Exit(2)
+			die("bad --pin-y: %v", err)
 		}
 	}
 
@@ -70,9 +99,59 @@ func main() {
 		}
 		os.Exit(1)
 	}
-
 	fmt.Printf("\033[1;32mPASS\033[0m  bound output verified (signature + freshness + anti-replay)\n")
 	printPredicate(res.Predicate)
+}
+
+func runQuorum(nonce []byte, k int, rootSpecs rootList, lastCounter uint64) {
+	roots := make([]verifier.Root, 0, len(rootSpecs))
+	for _, spec := range rootSpecs {
+		parts := strings.Split(spec, ":")
+		if len(parts) != 3 {
+			die("--root must be name:pubXhex:pubYhex, got %q", spec)
+		}
+		px, err := hex.DecodeString(parts[1])
+		if err != nil {
+			die("bad pub X for root %q: %v", parts[0], err)
+		}
+		py, err := hex.DecodeString(parts[2])
+		if err != nil {
+			die("bad pub Y for root %q: %v", parts[0], err)
+		}
+		roots = append(roots, verifier.Root{Name: parts[0], PubX: px, PubY: py})
+	}
+
+	var bundles []verifier.Bundle
+	for _, path := range flag.Args() {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			die("reading %s: %v", path, err)
+		}
+		b, err := parseBundle(raw)
+		if err != nil {
+			die("%s: %v", path, err)
+		}
+		bundles = append(bundles, b)
+	}
+
+	res := verifier.VerifyQuorum(bundles, verifier.QuorumOptions{
+		ExpectedNonce: nonce, Roots: roots, Threshold: k, LastCounter: lastCounter,
+	})
+	if !res.OK {
+		fmt.Printf("\033[1;31mFAIL\033[0m  quorum not reached: %s\n", res.Reason)
+		os.Exit(1)
+	}
+	fmt.Printf("\033[1;32mPASS\033[0m  %d-of-%d quorum reached by independent provers: %s\n",
+		k, len(roots), strings.Join(res.PassedRoots, ", "))
+	printPredicate(res.Agreed)
+}
+
+func parseBundle(raw []byte) (verifier.Bundle, error) {
+	var b verifier.Bundle
+	if err := json.Unmarshal(raw, &b); err != nil {
+		return b, fmt.Errorf("parsing bundle JSON: %w", err)
+	}
+	return b, nil
 }
 
 func printPredicate(p *verifier.Predicate) {

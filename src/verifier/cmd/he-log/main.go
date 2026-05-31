@@ -1,0 +1,227 @@
+// he-log — operate the Honest Ear endorsement transparency log.
+//
+// The log is an append-only Merkle tree (RFC 6962) of endorsement entries
+// (e.g. a device's pub_x||pub_y). The operator periodically signs a checkpoint
+// (size + root); a verifier trusts an endorsement only with an inclusion proof
+// under a signed checkpoint. Auditors gossip checkpoints + consistency proofs so
+// the log cannot fork or rewrite history.
+//
+//	he-log genkey                                   # P-256 log key: priv/pub
+//	he-log --log L add <entryHex>                   # append, prints index
+//	he-log --log L root                             # current size + root
+//	he-log --log L checkpoint --key <privHex> --origin honest-ear.log/v1
+//	he-log --log L prove --index N --key <privHex>  # signed inclusion proof bundle
+//	he-log verify --proof <proof.json>              # check a proof bundle
+//
+// State is a JSON file: {"leaves":["<hex>", ...]}. Stdlib only.
+package main
+
+import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
+	"flag"
+	"fmt"
+	"math/big"
+	"os"
+
+	verifier "honest-ear/verifier"
+)
+
+type logFile struct {
+	Leaves []string `json:"leaves"`
+}
+
+// proofBundle is the self-contained artifact a verifier checks.
+type proofBundle struct {
+	Entry      string   `json:"entry"` // hex of the logged endorsement
+	Index      int      `json:"index"`
+	Proof      []string `json:"proof"`      // hex of each audit-path node
+	Checkpoint string   `json:"checkpoint"` // signed checkpoint body (text)
+	CheckSig   string   `json:"checkpoint_sig"`
+	LogPubX    string   `json:"log_pub_x"`
+	LogPubY    string   `json:"log_pub_y"`
+}
+
+func die(format string, a ...any) {
+	fmt.Fprintf(os.Stderr, "error: "+format+"\n", a...)
+	os.Exit(2)
+}
+
+func load(path string) *verifier.MerkleLog {
+	l := &verifier.MerkleLog{}
+	raw, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return l
+	}
+	if err != nil {
+		die("reading %s: %v", path, err)
+	}
+	var lf logFile
+	if err := json.Unmarshal(raw, &lf); err != nil {
+		die("parsing %s: %v", path, err)
+	}
+	for _, h := range lf.Leaves {
+		b, err := hex.DecodeString(h)
+		if err != nil {
+			die("bad leaf hex in %s: %v", path, err)
+		}
+		l.Leaves = append(l.Leaves, b)
+	}
+	return l
+}
+
+func save(path string, l *verifier.MerkleLog) {
+	lf := logFile{}
+	for _, leaf := range l.Leaves {
+		lf.Leaves = append(lf.Leaves, hex.EncodeToString(leaf))
+	}
+	raw, _ := json.MarshalIndent(lf, "", "  ")
+	if err := os.WriteFile(path, raw, 0o644); err != nil {
+		die("writing %s: %v", path, err)
+	}
+}
+
+func loadKey(privHex string) *ecdsa.PrivateKey {
+	d, err := hex.DecodeString(privHex)
+	if err != nil {
+		die("bad --key hex: %v", err)
+	}
+	k := new(ecdsa.PrivateKey)
+	k.PublicKey.Curve = elliptic.P256()
+	k.D = new(big.Int).SetBytes(d)
+	k.PublicKey.X, k.PublicKey.Y = elliptic.P256().ScalarBaseMult(d)
+	return k
+}
+
+func pad32(n *big.Int) []byte {
+	b := make([]byte, 32)
+	n.FillBytes(b)
+	return b
+}
+
+func main() {
+	if len(os.Args) < 2 {
+		fmt.Fprintln(os.Stderr, "usage: he-log <genkey|add|root|checkpoint|prove|verify> [flags] (see -h)")
+		os.Exit(2)
+	}
+	cmd := os.Args[1]
+	logPath := flag.String("log", "he-log.json", "log state file")
+	keyHex := flag.String("key", "", "log P-256 private key (hex), for checkpoint")
+	origin := flag.String("origin", "honest-ear.log/v1", "checkpoint origin line")
+	index := flag.Int("index", 0, "leaf index, for prove")
+	proofPath := flag.String("proof", "", "proof bundle JSON, for verify")
+	flag.CommandLine.Parse(os.Args[2:]) // subcommand-first; flags follow it
+
+	switch cmd {
+	case "genkey":
+		k, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		if err != nil {
+			die("%v", err)
+		}
+		fmt.Printf("priv : %x\n", pad32(k.D))
+		fmt.Printf("pub_x: %x\n", pad32(k.PublicKey.X))
+		fmt.Printf("pub_y: %x\n", pad32(k.PublicKey.Y))
+
+	case "add":
+		entry, err := hex.DecodeString(flag.Arg(0))
+		if err != nil {
+			die("entry must be hex (usage: he-log add --log L <entryHex>): %v", err)
+		}
+		l := load(*logPath)
+		i := l.Add(entry)
+		save(*logPath, l)
+		fmt.Printf("added at index %d (size now %d)\n", i, l.Size())
+
+	case "root":
+		l := load(*logPath)
+		r := l.Root()
+		fmt.Printf("size : %d\nroot : %x\n", l.Size(), r[:])
+
+	case "checkpoint":
+		if *keyHex == "" {
+			die("checkpoint needs --key <privHex>")
+		}
+		l := load(*logPath)
+		key := loadKey(*keyHex)
+		root := l.Root()
+		sig, err := verifier.SignCheckpoint(*origin, l.Size(), root, key)
+		if err != nil {
+			die("%v", err)
+		}
+		fmt.Printf("%s", verifier.CheckpointBody(*origin, l.Size(), root))
+		fmt.Printf("sig  : %x\n", sig)
+		fmt.Printf("log_pub_x: %x\nlog_pub_y: %x\n", pad32(key.PublicKey.X), pad32(key.PublicKey.Y))
+
+	case "prove":
+		if *keyHex == "" {
+			die("prove needs --key <privHex> to sign the checkpoint it proves against")
+		}
+		l := load(*logPath)
+		proof, err := l.InclusionProof(*index)
+		if err != nil {
+			die("%v", err)
+		}
+		key := loadKey(*keyHex)
+		root := l.Root()
+		sig, err := verifier.SignCheckpoint(*origin, l.Size(), root, key)
+		if err != nil {
+			die("%v", err)
+		}
+		pb := proofBundle{
+			Entry:      hex.EncodeToString(l.Leaves[*index]),
+			Index:      *index,
+			Checkpoint: string(verifier.CheckpointBody(*origin, l.Size(), root)),
+			CheckSig:   hex.EncodeToString(sig),
+			LogPubX:    hex.EncodeToString(pad32(key.PublicKey.X)),
+			LogPubY:    hex.EncodeToString(pad32(key.PublicKey.Y)),
+		}
+		for _, node := range proof {
+			pb.Proof = append(pb.Proof, hex.EncodeToString(node[:]))
+		}
+		out, _ := json.MarshalIndent(pb, "", "  ")
+		fmt.Println(string(out))
+
+	case "verify":
+		if *proofPath == "" {
+			die("verify needs --proof <proof.json>")
+		}
+		raw, err := os.ReadFile(*proofPath)
+		if err != nil {
+			die("reading proof: %v", err)
+		}
+		var pb proofBundle
+		if err := json.Unmarshal(raw, &pb); err != nil {
+			die("parsing proof: %v", err)
+		}
+		entry := mustHex(pb.Entry, "entry")
+		var proof [][32]byte
+		for _, h := range pb.Proof {
+			var node [32]byte
+			copy(node[:], mustHex(h, "proof node"))
+			proof = append(proof, node)
+		}
+		err = verifier.CheckLoggedEndorsement(entry, pb.Index, proof,
+			[]byte(pb.Checkpoint), mustHex(pb.CheckSig, "sig"),
+			mustHex(pb.LogPubX, "log_pub_x"), mustHex(pb.LogPubY, "log_pub_y"))
+		if err != nil {
+			fmt.Printf("\033[1;31mFAIL\033[0m  %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("\033[1;32mPASS\033[0m  endorsement is in the signed, append-only log (index %d)\n", pb.Index)
+
+	default:
+		fmt.Fprintln(os.Stderr, "usage: he-log [genkey|add|root|checkpoint|prove|verify] (see -h)")
+		os.Exit(2)
+	}
+}
+
+func mustHex(s, what string) []byte {
+	b, err := hex.DecodeString(s)
+	if err != nil {
+		die("bad %s hex: %v", what, err)
+	}
+	return b
+}

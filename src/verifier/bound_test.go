@@ -109,13 +109,9 @@ func TestDecodeRejectsMissingKeys(t *testing.T) {
 	}
 }
 
-// signGolden signs SHA-256(payload) and returns a Bundle + the pub coords.
-func signGolden(t *testing.T, payload []byte) (Bundle, []byte, []byte) {
+// signWith signs SHA-256(payload) with key and returns the on-the-wire Bundle.
+func signWith(t *testing.T, payload []byte, key *ecdsa.PrivateKey) Bundle {
 	t.Helper()
-	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	if err != nil {
-		t.Fatal(err)
-	}
 	h := sha256.Sum256(payload)
 	r, s, err := ecdsa.Sign(rand.Reader, key, h[:])
 	if err != nil {
@@ -124,19 +120,24 @@ func signGolden(t *testing.T, payload []byte) (Bundle, []byte, []byte) {
 	sig := make([]byte, 64)
 	r.FillBytes(sig[:32])
 	s.FillBytes(sig[32:])
-	px := key.PublicKey.X.Bytes()
-	py := key.PublicKey.Y.Bytes()
-	// left-pad to 32 bytes
-	px = leftPad(px, 32)
-	py = leftPad(py, 32)
-	b := Bundle{
+	return Bundle{
 		Schema:  "honest-ear/bound-output/v1",
 		Payload: hex.EncodeToString(payload),
 		Sig:     hex.EncodeToString(sig),
-		PubX:    hex.EncodeToString(px),
-		PubY:    hex.EncodeToString(py),
+		PubX:    hex.EncodeToString(leftPad(key.PublicKey.X.Bytes(), 32)),
+		PubY:    hex.EncodeToString(leftPad(key.PublicKey.Y.Bytes(), 32)),
 	}
-	return b, px, py
+}
+
+// signGolden signs SHA-256(payload) with a fresh key and returns the Bundle + pub coords.
+func signGolden(t *testing.T, payload []byte) (Bundle, []byte, []byte) {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return signWith(t, payload, key),
+		leftPad(key.PublicKey.X.Bytes(), 32), leftPad(key.PublicKey.Y.Bytes(), 32)
 }
 
 func leftPad(b []byte, n int) []byte {

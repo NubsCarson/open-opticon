@@ -1,0 +1,153 @@
+package verifier
+
+import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"encoding/hex"
+	"fmt"
+	"testing"
+)
+
+// Anchored RFC 6962 vectors we are certain of: the empty tree hashes the empty
+// string, and a one-leaf tree hashes 0x00||leaf.
+func TestMerkleAnchors(t *testing.T) {
+	var empty MerkleLog
+	er := empty.Root()
+	if got := hex.EncodeToString(er[:]); got !=
+		"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" {
+		t.Errorf("empty root = %s", got)
+	}
+	one := MerkleLog{Leaves: [][]byte{{}}}
+	or := one.Root()
+	if got := hex.EncodeToString(or[:]); got !=
+		"6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d" {
+		t.Errorf("single-empty-leaf root = %s", got)
+	}
+}
+
+func buildLog(n int) *MerkleLog {
+	l := &MerkleLog{}
+	for i := 0; i < n; i++ {
+		l.Add([]byte(fmt.Sprintf("entry-%d", i)))
+	}
+	return l
+}
+
+// For every tree size 1..24 and every index, the inclusion proof must verify and
+// must fail under any corruption.
+func TestInclusionExhaustive(t *testing.T) {
+	for n := 1; n <= 24; n++ {
+		l := buildLog(n)
+		root := l.Root()
+		for i := 0; i < n; i++ {
+			proof, err := l.InclusionProof(i)
+			if err != nil {
+				t.Fatalf("n=%d i=%d: %v", n, i, err)
+			}
+			if !VerifyInclusion(l.Leaves[i], i, n, proof, root) {
+				t.Fatalf("n=%d i=%d: valid proof rejected", n, i)
+			}
+			// wrong entry
+			if VerifyInclusion([]byte("forged"), i, n, proof, root) {
+				t.Fatalf("n=%d i=%d: forged entry accepted", n, i)
+			}
+			// corrupted root
+			bad := root
+			bad[0] ^= 0xff
+			if VerifyInclusion(l.Leaves[i], i, n, proof, bad) {
+				t.Fatalf("n=%d i=%d: bad root accepted", n, i)
+			}
+			// corrupted proof element
+			if len(proof) > 0 {
+				cp := append([][32]byte{}, proof...)
+				cp[0][0] ^= 0xff
+				if VerifyInclusion(l.Leaves[i], i, n, cp, root) {
+					t.Fatalf("n=%d i=%d: tampered proof accepted", n, i)
+				}
+			}
+		}
+	}
+}
+
+// For every (oldSize, newSize) the consistency proof must verify and fail under
+// corruption — this is the append-only / no-rewrite guarantee.
+func TestConsistencyExhaustive(t *testing.T) {
+	for n := 1; n <= 24; n++ {
+		newLog := buildLog(n)
+		newRoot := newLog.Root()
+		for m := 1; m <= n; m++ {
+			oldRoot := (&MerkleLog{Leaves: newLog.Leaves[:m]}).Root()
+			proof, err := newLog.ConsistencyProof(m)
+			if err != nil {
+				t.Fatalf("n=%d m=%d: %v", n, m, err)
+			}
+			if !VerifyConsistency(m, n, proof, oldRoot, newRoot) {
+				t.Fatalf("n=%d m=%d: valid consistency proof rejected", n, m)
+			}
+			// a different (wrong) old root must fail
+			bad := oldRoot
+			bad[0] ^= 0xff
+			if VerifyConsistency(m, n, proof, bad, newRoot) {
+				t.Fatalf("n=%d m=%d: wrong old root accepted", n, m)
+			}
+			if len(proof) > 0 {
+				cp := append([][32]byte{}, proof...)
+				cp[len(cp)-1][0] ^= 0xff
+				if VerifyConsistency(m, n, cp, oldRoot, newRoot) {
+					t.Fatalf("n=%d m=%d: tampered consistency proof accepted", n, m)
+				}
+			}
+		}
+	}
+}
+
+func TestCheckpointAndLoggedEndorsement(t *testing.T) {
+	logKey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	lpx := leftPad(logKey.PublicKey.X.Bytes(), 32)
+	lpy := leftPad(logKey.PublicKey.Y.Bytes(), 32)
+
+	// Log three device endorsements (pub_x||pub_y).
+	l := &MerkleLog{}
+	var endorsements [][]byte
+	for i := 0; i < 3; i++ {
+		dk, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		e := append(leftPad(dk.PublicKey.X.Bytes(), 32), leftPad(dk.PublicKey.Y.Bytes(), 32)...)
+		endorsements = append(endorsements, e)
+		l.Add(e)
+	}
+	root := l.Root()
+	cpBody := CheckpointBody("honest-ear.log/v1", l.Size(), root)
+	cpSig, err := SignCheckpoint("honest-ear.log/v1", l.Size(), root, logKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// A genuine endorsement with its proof under the signed checkpoint passes.
+	for i, e := range endorsements {
+		proof, _ := l.InclusionProof(i)
+		if err := CheckLoggedEndorsement(e, i, proof, cpBody, cpSig, lpx, lpy); err != nil {
+			t.Fatalf("i=%d: genuine logged endorsement rejected: %v", i, err)
+		}
+	}
+
+	// A key that was never logged must fail.
+	proof0, _ := l.InclusionProof(0)
+	if err := CheckLoggedEndorsement([]byte("never-logged-key................................................."),
+		0, proof0, cpBody, cpSig, lpx, lpy); err == nil {
+		t.Error("unlogged endorsement accepted")
+	}
+
+	// A checkpoint signed by the wrong key must fail.
+	wrongKey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err := CheckLoggedEndorsement(endorsements[0], 0, proof0, cpBody, cpSig,
+		leftPad(wrongKey.PublicKey.X.Bytes(), 32), leftPad(wrongKey.PublicKey.Y.Bytes(), 32)); err == nil {
+		t.Error("checkpoint verified under wrong log key")
+	}
+
+	// A tampered checkpoint body (claims a different size) must fail the signature.
+	if err := CheckLoggedEndorsement(endorsements[0], 0, proof0,
+		CheckpointBody("honest-ear.log/v1", 99, root), cpSig, lpx, lpy); err == nil {
+		t.Error("tampered checkpoint accepted")
+	}
+}
