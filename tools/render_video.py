@@ -273,6 +273,8 @@ def main():
     print(f"{fr.i} frames @ {FPS}fps = {fr.i / FPS:.1f}s  (render {W}x{H} → 1280x720)")
     poster = os.path.join(args.out, "walkthrough_poster.png")
     intro.resize((W // S, H // S)).save(poster)
+    og = os.path.join(args.out, "og.png")        # social-preview card (1200x630)
+    intro.resize((1200, 630)).save(og)
     mp4 = os.path.join(args.out, "walkthrough.mp4")
     gif = os.path.join(args.out, "walkthrough.gif")
     pal = f"{tmp}/pal.png"
@@ -292,7 +294,7 @@ def main():
 
     cast = os.path.join(args.out, "walkthrough.cast")
     write_cast(cast, scs)
-    for p in (poster, mp4, gif, cast):
+    for p in (poster, og, mp4, gif, cast):
         print(f"  wrote {p}  ({os.path.getsize(p) // 1024} KB)")
 
 

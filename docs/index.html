@@ -8,6 +8,13 @@
 <meta property="og:title" content="open-opticon">
 <meta property="og:description" content="A sensor that proves what it isn't doing. Verifiable, non-panopticon sensing on OP-TEE remote attestation.">
 <meta property="og:type" content="website">
+<meta property="og:url" content="https://nubscarson.github.io/open-opticon/">
+<meta property="og:image" content="https://nubscarson.github.io/open-opticon/assets/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="open-opticon">
+<meta name="twitter:description" content="A sensor that proves what it isn't doing — verifiable, non-panopticon sensing.">
+<meta name="twitter:image" content="https://nubscarson.github.io/open-opticon/assets/og.png">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%2309090b'/><circle cx='16' cy='16' r='8.5' fill='none' stroke='%23fafafa' stroke-width='2'/><circle cx='16' cy='16' r='2.6' fill='%23fafafa'/></svg>">
 <style>
   :root{
     --bg:#09090b; --card:#0b0b0e; --card2:#101014; --border:#26262b; --border2:#1c1c20;
@@ -294,8 +301,8 @@ signer-id         : rLsRx+TaIXIFUjzkzhokWuGi…</pre>
 <span class="cr">FAIL</span>  counter 1 not greater than last seen 1</pre>
     </figure>
     <p class="small" style="margin-top:12px">Full appraisal + reproduction steps:
-       <a class="lnk" href="SAMPLE_ATTESTATION.md">SAMPLE_ATTESTATION.md</a> ·
-       <a class="lnk" href="RUNBOOK.md">RUNBOOK.md</a></p>
+       <a class="lnk" href="https://github.com/NubsCarson/open-opticon/blob/main/docs/SAMPLE_ATTESTATION.md">SAMPLE_ATTESTATION.md</a> ·
+       <a class="lnk" href="https://github.com/NubsCarson/open-opticon/blob/main/docs/RUNBOOK.md">RUNBOOK.md</a></p>
   </div>
 </section>
 
@@ -326,7 +333,7 @@ signer-id         : rLsRx+TaIXIFUjzkzhokWuGi…</pre>
       </div>
     </div>
     <p class="small" style="margin-top:14px">Full analysis:
-       <a class="lnk" href="THREAT_MODEL.md">THREAT_MODEL.md</a></p>
+       <a class="lnk" href="https://github.com/NubsCarson/open-opticon/blob/main/docs/THREAT_MODEL.md">THREAT_MODEL.md</a></p>
   </div>
 </section>
 
@@ -385,8 +392,8 @@ signer-id         : rLsRx+TaIXIFUjzkzhokWuGi…</pre>
     <div class="note" style="margin-top:22px">A TEE is a hardware trust assumption, not a math proof.
        The roadmap hardens it: reproducible builds (anyone recomputes the measurement), a 2-of-3
        multi-prover so no single TEE vendor is load-bearing, and eventually a ZK proof of the
-       attestation. See <a class="lnk" href="WHY_TEE.md">WHY_TEE.md</a> and
-       <a class="lnk" href="ROADMAP.md">ROADMAP.md</a>.</div>
+       attestation. See <a class="lnk" href="https://github.com/NubsCarson/open-opticon/blob/main/docs/WHY_TEE.md">WHY_TEE.md</a> and
+       <a class="lnk" href="https://github.com/NubsCarson/open-opticon/blob/main/docs/ROADMAP.md">ROADMAP.md</a>.</div>
   </div>
 </section>
 
@@ -413,8 +420,8 @@ signer-id         : rLsRx+TaIXIFUjzkzhokWuGi…</pre>
                                                 <span class="cb">└──────────────┘</span></pre>
     </figure>
     <p class="small" style="margin-top:12px">Deep dive:
-       <a class="lnk" href="ARCHITECTURE.md">ARCHITECTURE.md</a> ·
-       <a class="lnk" href="USE_CASES.md">USE_CASES.md</a></p>
+       <a class="lnk" href="https://github.com/NubsCarson/open-opticon/blob/main/docs/ARCHITECTURE.md">ARCHITECTURE.md</a> ·
+       <a class="lnk" href="https://github.com/NubsCarson/open-opticon/blob/main/docs/USE_CASES.md">USE_CASES.md</a></p>
   </div>
 </section>
 
@@ -436,8 +443,8 @@ signer-id         : rLsRx+TaIXIFUjzkzhokWuGi…</pre>
 <span class="cp">$</span> make cross    <span class="cd"># cross-compile the verifier for Raspberry Pi (arm64 / armv7)</span></pre>
     </figure>
     <p class="small" style="margin-top:12px">The OP-TEE/QEMU attestation (Docker, ~40 GB) is the full
-       reference in <a class="lnk" href="RUNBOOK.md">RUNBOOK.md</a>; reproducibility details in
-       <a class="lnk" href="REPRODUCIBLE.md">REPRODUCIBLE.md</a>.</p>
+       reference in <a class="lnk" href="https://github.com/NubsCarson/open-opticon/blob/main/docs/RUNBOOK.md">RUNBOOK.md</a>; reproducibility details in
+       <a class="lnk" href="https://github.com/NubsCarson/open-opticon/blob/main/docs/REPRODUCIBLE.md">REPRODUCIBLE.md</a>.</p>
   </div>
 </section>
 
@@ -498,11 +505,11 @@ signer-id         : rLsRx+TaIXIFUjzkzhokWuGi…</pre>
   <div class="wrap">
     <div class="links">
       <a href="https://github.com/NubsCarson/open-opticon">GitHub</a>
-      <a href="RUNBOOK.md">Runbook</a>
-      <a href="SAMPLE_ATTESTATION.md">Sample attestation</a>
-      <a href="THREAT_MODEL.md">Threat model</a>
-      <a href="ROADMAP.md">Roadmap</a>
-      <a href="REPRODUCIBLE.md">Reproducible builds</a>
+      <a href="https://github.com/NubsCarson/open-opticon/blob/main/docs/RUNBOOK.md">Runbook</a>
+      <a href="https://github.com/NubsCarson/open-opticon/blob/main/docs/SAMPLE_ATTESTATION.md">Sample attestation</a>
+      <a href="https://github.com/NubsCarson/open-opticon/blob/main/docs/THREAT_MODEL.md">Threat model</a>
+      <a href="https://github.com/NubsCarson/open-opticon/blob/main/docs/ROADMAP.md">Roadmap</a>
+      <a href="https://github.com/NubsCarson/open-opticon/blob/main/docs/REPRODUCIBLE.md">Reproducible builds</a>
     </div>
     <p>open-opticon — open-source, non-panopticon (internal codename <span class="mono">honest-ear</span>,
        which is why the schema string and on-device paths use it). A working proof-of-concept, not a
