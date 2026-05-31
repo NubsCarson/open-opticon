@@ -65,25 +65,22 @@ phone}).
 
 ## Live on Sepolia (public testnet)
 
-A full stack is deployed live on Ethereum Sepolia — anyone can call it
-permissionlessly (no trust in this repo or its operator). The deployed contracts
-below are the **nonce-bound (v1)** version; the **audio+nonce-bound version in
-this repo** is verified locally (`forge test`, 12/12) and a live re-deploy is
-pending a small testnet top-up (the addresses will be updated when it lands).
+The full **audio+nonce-bound** stack is deployed live on Ethereum Sepolia — anyone
+can call it permissionlessly (no trust in this repo or its operator):
 
-| Contract (v1, nonce-bound — live) | Address |
+| Contract | Address |
 |---|---|
-| HonestEarQuorum (ZK + device P-256, 2-of-2) | [`0x5d91D5C07048A3e9a8f57A9198f031F7021707f6`](https://sepolia.etherscan.io/address/0x5d91D5C07048A3e9a8f57A9198f031F7021707f6) |
-| HonestEarVerifier (zk receipt) | [`0xA14D86C47B9D7702b81EF1789b5152f81a2c4817`](https://sepolia.etherscan.io/address/0xA14D86C47B9D7702b81EF1789b5152f81a2c4817) |
-| CheckpointAnchor (log anchor) | [`0x9B50374B32E88123c36ca6227a59ce8fb76D9240`](https://sepolia.etherscan.io/address/0x9B50374B32E88123c36ca6227a59ce8fb76D9240) |
-| RiscZeroGroth16Verifier | [`0xe0ABbE2DA2D8aA05C41bF11F7E335663637f17E7`](https://sepolia.etherscan.io/address/0xe0ABbE2DA2D8aA05C41bF11F7E335663637f17E7) |
+| HonestEarQuorum (ZK + device P-256, audio+nonce-bound 2-of-2) | [`0x05DAa5dc9C21f4d17e930a158A3fc636de5D1815`](https://sepolia.etherscan.io/address/0x05DAa5dc9C21f4d17e930a158A3fc636de5D1815) |
+| HonestEarVerifier (zk receipt) | [`0xdf52D19185CE798b7842874649344Ae5de5e40e2`](https://sepolia.etherscan.io/address/0xdf52D19185CE798b7842874649344Ae5de5e40e2) |
+| CheckpointAnchor (log anchor) | [`0xB6F85c08e35799300Fa66dD421D10C3467b54634`](https://sepolia.etherscan.io/address/0xB6F85c08e35799300Fa66dD421D10C3467b54634) |
+| RiscZeroGroth16Verifier | [`0x819162b456674F8B98f560d1aB375aD4e5401507`](https://sepolia.etherscan.io/address/0x819162b456674F8B98f560d1aB375aD4e5401507) |
 
 The two `CheckpointAnchor.anchor()` transactions (a consistency-proven 3→5
-extension) executed on-chain, and a live `eth_call` to that v1
-`HonestEarQuorum.verdict` returned `(2, 1)` — alarm_tone, presence — i.e. the ZK
-proof and the device signature agree, on a public chain. (Deployed from a
-disposable testnet key; in production you'd reuse RISC Zero's canonical verifier
-router rather than deploy your own.)
+extension) executed on-chain, and a live `eth_call` to `HonestEarQuorum.verdict`
+with the committed fixtures returns `(2, 1)` — alarm_tone, presence — i.e. the ZK
+proof and the device signature, bound to the SAME nonce and the SAME audio, agree
+on a public chain. (Deployed from a disposable testnet key; in production you'd
+reuse RISC Zero's canonical verifier router rather than deploy your own.)
 
 ## Deploy the whole stack on a local EVM (no funds)
 
