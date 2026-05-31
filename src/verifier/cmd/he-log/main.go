@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"math/big"
 	"os"
+	"strings"
 
 	verifier "honest-ear/verifier"
 	"honest-ear/verifier/internal/cli"
@@ -69,6 +70,13 @@ type cosignBundle struct {
 	PubY    string `json:"witness_pub_y"`
 	Sig     string `json:"cosignature"`
 }
+
+// witnessList is a repeatable --witness flag (name:pubXhex:pubYhex), the set of
+// enrolled witnesses whose cosignatures count toward the threshold.
+type witnessList []string
+
+func (w *witnessList) String() string     { return strings.Join(*w, ",") }
+func (w *witnessList) Set(v string) error { *w = append(*w, v); return nil }
 
 func load(path string) *verifier.MerkleLog {
 	l := &verifier.MerkleLog{}
@@ -134,6 +142,7 @@ commands (subcommand first, then flags):
   prove --log L --index N --key <privHex>            signed inclusion-proof bundle
   consistency --log L --index OLD                    RFC 9162 consistency proof OLD->now
   cosign --checkpoint <body> --key <privHex> --witness NAME   witness-cosign a checkpoint
+  cosign-verify --checkpoint <body> --cosigs <c.json> --enrolled name:x:y --witness-threshold k
   verify --proof <proof.json>                        check an inclusion-proof bundle
 
 State is a JSON file (--log, default he-log.json). Stdlib only.`
@@ -155,6 +164,10 @@ func main() {
 	proofPath := flag.String("proof", "", "proof bundle JSON, for verify")
 	cpPath := flag.String("checkpoint", "", "checkpoint body file, for cosign")
 	witness := flag.String("witness", "", "witness name, for cosign")
+	cosigsPath := flag.String("cosigs", "", "cosignatures JSON array, for cosign-verify")
+	threshold := flag.Int("witness-threshold", 1, "min enrolled witness cosigs, for cosign-verify")
+	var enrolledWitnesses witnessList
+	flag.Var(&enrolledWitnesses, "enrolled", "enrolled witness as name:pubXhex:pubYhex (repeatable, for cosign-verify)")
 	flag.CommandLine.Parse(os.Args[2:]) // subcommand-first; flags follow it
 
 	switch cmd {
@@ -270,6 +283,56 @@ func main() {
 		}
 		out, _ := json.MarshalIndent(cb, "", "  ")
 		fmt.Println(string(out))
+
+	case "cosign-verify":
+		if *cpPath == "" || *cosigsPath == "" {
+			cli.Die("cosign-verify needs --checkpoint <body> --cosigs <cosigs.json> --enrolled name:x:y [...] [--witness-threshold k]")
+		}
+		body, err := os.ReadFile(*cpPath)
+		if err != nil {
+			cli.Die("reading checkpoint: %v", err)
+		}
+		if _, _, _, err := verifier.ParseCheckpoint(body); err != nil {
+			cli.Die("not a valid checkpoint body: %v", err)
+		}
+		raw, err := os.ReadFile(*cosigsPath)
+		if err != nil {
+			cli.Die("reading cosigs: %v", err)
+		}
+		var cbs []cosignBundle
+		if err := json.Unmarshal(raw, &cbs); err != nil {
+			cli.Die("parsing cosigs: %v", err)
+		}
+		var cosigs []verifier.Cosignature
+		for _, cb := range cbs {
+			cosigs = append(cosigs, verifier.Cosignature{
+				Witness: cb.Witness,
+				PubX:    mustHex(cb.PubX, "witness pub_x"),
+				PubY:    mustHex(cb.PubY, "witness pub_y"),
+				Sig:     mustHex(cb.Sig, "cosignature"),
+			})
+		}
+		enrolled := make([]verifier.Prover, 0, len(enrolledWitnesses))
+		for _, spec := range enrolledWitnesses {
+			parts := strings.Split(spec, ":")
+			if len(parts) != 3 {
+				cli.Die("--enrolled must be name:pubXhex:pubYhex, got %q", spec)
+			}
+			enrolled = append(enrolled, verifier.Prover{
+				Name: parts[0],
+				PubX: mustHex(parts[1], "enrolled pub_x"),
+				PubY: mustHex(parts[2], "enrolled pub_y"),
+			})
+		}
+		ok := verifier.VerifyCheckpointWitnesses(body, cosigs, enrolled)
+		if len(ok) >= *threshold {
+			fmt.Printf("%s  %d-of-%d enrolled witnesses cosigned: %s\n",
+				cli.Pass(), len(ok), *threshold, strings.Join(ok, ", "))
+		} else {
+			fmt.Printf("%s  only %d enrolled witness cosignature(s), need %d\n",
+				cli.Fail(), len(ok), *threshold)
+			os.Exit(1)
+		}
 
 	case "verify":
 		if *proofPath == "" {

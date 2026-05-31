@@ -17,8 +17,8 @@ From this PoC to a defensible product, in order of trust-impact.
   **enrolled, pinned-key** witnesses (a cosig only counts if its name + key match
   an enrolled witness, like the prover quorum), so a single operator can't mint
   keys to equivocate — the off-chain analogue of the on-chain `CheckpointAnchor`.
-  Remaining: wiring the threshold check into a CLI verify path + running real
-  gossiping/consistency-checking witnesses.
+  A CLI verify path enforces the threshold (`he-log cosign-verify`); remaining
+  is running real, independent gossiping/consistency-checking witnesses.
 - **Reproducible host builds.** `make repro` proves the host artifacts are
   byte-identical across independent build trees; the TA-measurement recipe is in
   [`REPRODUCIBLE.md`](REPRODUCIBLE.md). CI gates every push on this and publishes
