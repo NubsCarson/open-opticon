@@ -9,7 +9,7 @@
 
 VERIFIER = src/verifier
 
-.PHONY: test units sim verifier-test e2e tamper-test gui fuzz repro cross clean
+.PHONY: test units sim verifier-test e2e tamper-test gui sites fuzz repro cross clean
 
 test: units verifier-test e2e tamper-test
 	@echo ""
@@ -39,6 +39,10 @@ tamper-test:
 # Browser click-to-listen web UI (http://localhost:8095).
 gui:
 	tools/run_gui.sh
+
+# Launch all local web surfaces (landing site + GUI + challenge/phone page).
+sites:
+	bash tools/sites.sh
 
 # Fuzz the CBOR decoder (Ctrl-C to stop; the seed corpus runs under `make test`).
 fuzz:
