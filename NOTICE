@@ -1,0 +1,9 @@
+open-opticon
+
+This project is an overlay on OP-TEE remote attestation
+(github.com/iisec-suzaki/optee-ra), which is distributed under its own
+BSD-2-Clause license.
+
+The embedded P-256 key in src/common/he_testkey.h is a published, non-secret
+test key from that upstream project for the QEMU path only. It is not a
+production secret.
