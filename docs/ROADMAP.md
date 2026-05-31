@@ -29,8 +29,10 @@ From this PoC to a defensible product, in order of trust-impact.
   wraps RISC Zero's verifier and checks the Groth16 receipt for the pinned guest
   `imageId` on a stateless EVM; a real proof fixture verifies on a local EVM
   (`forge test`, no funds/network). A *live testnet* deploy (funded key + RPC) is
-  the one deferred step. Anchoring the transparency-log checkpoints to an L2 is a
-  natural companion (same deploy path).
+  the one deferred step. The transparency-log checkpoints also have an on-chain
+  anchor (`onchain/src/CheckpointAnchor.sol`): it verifies an RFC 9162 consistency
+  proof on-chain (SHA-256 precompile) so a fork/rewrite is rejected — proven by a
+  real `he-log consistency` proof in `forge test`; only the live deploy is deferred.
 - **The primitive generalizes beyond audio.** A vision occupancy detector
   (`he_vision`, integer-only, same discipline as the acoustic one) emits only
   `empty`/`occupied` + a region count, never the frame, and rides the *same*

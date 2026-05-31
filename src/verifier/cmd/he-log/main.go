@@ -6,12 +6,15 @@
 // under a signed checkpoint. Auditors gossip checkpoints + consistency proofs so
 // the log cannot fork or rewrite history.
 //
-//	he-log genkey                                   # P-256 log key: priv/pub
-//	he-log --log L add <entryHex>                   # append, prints index
-//	he-log --log L root                             # current size + root
-//	he-log --log L checkpoint --key <privHex> --origin honest-ear.log/v1
-//	he-log --log L prove --index N --key <privHex>  # signed inclusion proof bundle
-//	he-log verify --proof <proof.json>              # check a proof bundle
+// Subcommand first, then flags (e.g. `he-log add --log L <entryHex>`):
+//
+//	he-log genkey                                    # P-256 log key: priv/pub
+//	he-log add --log L <entryHex>                    # append, prints index
+//	he-log root --log L                              # current size + root
+//	he-log checkpoint --log L --key <privHex> --origin honest-ear.log/v1
+//	he-log prove --log L --index N --key <privHex>   # signed inclusion proof bundle
+//	he-log consistency --log L --index OLD           # RFC 9162 consistency proof OLD->now
+//	he-log verify --proof <proof.json>               # check a proof bundle
 //
 // State is a JSON file: {"leaves":["<hex>", ...]}. Stdlib only.
 package main
@@ -44,6 +47,17 @@ type proofBundle struct {
 	CheckSig   string   `json:"checkpoint_sig"`
 	LogPubX    string   `json:"log_pub_x"`
 	LogPubY    string   `json:"log_pub_y"`
+}
+
+// consistencyBundle proves the current tree is an append-only extension of an
+// earlier tree of size old_size (RFC 9162 consistency proof). Auditors gossip
+// these so the log cannot fork or rewrite history.
+type consistencyBundle struct {
+	OldSize int      `json:"old_size"`
+	NewSize int      `json:"new_size"`
+	OldRoot string   `json:"old_root"`
+	NewRoot string   `json:"new_root"`
+	Proof   []string `json:"proof"`
 }
 
 func load(path string) *verifier.MerkleLog {
@@ -102,13 +116,14 @@ const usage = `he-log — operate the Honest Ear endorsement transparency log (a
 
 usage: he-log <command> [flags]
 
-commands:
-  genkey                                       P-256 log key: prints priv/pub
-  --log L add <entryHex>                        append an entry, prints its index
-  --log L root                                  current log size + Merkle root
-  --log L checkpoint --key <privHex> [--origin O]   sign a (size, root) checkpoint
-  --log L prove --index N --key <privHex>       signed inclusion-proof bundle
-  verify --proof <proof.json>                   check an inclusion-proof bundle
+commands (subcommand first, then flags):
+  genkey                                            P-256 log key: prints priv/pub
+  add --log L <entryHex>                             append an entry, prints its index
+  root --log L                                       current log size + Merkle root
+  checkpoint --log L --key <privHex> [--origin O]    sign a (size, root) checkpoint
+  prove --log L --index N --key <privHex>            signed inclusion-proof bundle
+  consistency --log L --index OLD                    RFC 9162 consistency proof OLD->now
+  verify --proof <proof.json>                        check an inclusion-proof bundle
 
 State is a JSON file (--log, default he-log.json). Stdlib only.`
 
@@ -196,6 +211,26 @@ func main() {
 			pb.Proof = append(pb.Proof, hex.EncodeToString(node[:]))
 		}
 		out, _ := json.MarshalIndent(pb, "", "  ")
+		fmt.Println(string(out))
+
+	case "consistency":
+		l := load(*logPath)
+		oldSize := *index
+		proof, err := l.ConsistencyProof(oldSize)
+		if err != nil {
+			cli.Die("%v", err)
+		}
+		oldRoot := (&verifier.MerkleLog{Leaves: l.Leaves[:oldSize]}).Root()
+		newRoot := l.Root()
+		cb := consistencyBundle{
+			OldSize: oldSize, NewSize: l.Size(),
+			OldRoot: hex.EncodeToString(oldRoot[:]),
+			NewRoot: hex.EncodeToString(newRoot[:]),
+		}
+		for _, node := range proof {
+			cb.Proof = append(cb.Proof, hex.EncodeToString(node[:]))
+		}
+		out, _ := json.MarshalIndent(cb, "", "  ")
 		fmt.Println(string(out))
 
 	case "verify":

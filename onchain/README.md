@@ -24,6 +24,15 @@ test/proof_fixture.json     a genuine Groth16 receipt of the alarm_short clip
                             (imageId + journal + Ethereum-encoded seal), produced by
                             `he-zk-export` (zk/host). Committed so the test is
                             reproducible without re-proving (which needs Docker).
+src/CheckpointAnchor.sol    anchors the transparency-log signed checkpoints to an
+                            immutable ledger: each new checkpoint must be a proven
+                            append-only extension of the last (RFC 9162 consistency
+                            verified on-chain via the SHA-256 precompile), so a fork
+                            or rewrite is rejected. A faithful port of
+                            VerifyConsistency in src/verifier/transparency.go.
+test/CheckpointAnchor.t.sol + test/checkpoint_fixture.json  a REAL consistency proof
+                            (tree size 3 -> 5 from `he-log consistency`) anchors;
+                            a forked root and a rollback both revert.
 script/Deploy.s.sol         deploy the wrapper against a canonical RISC Zero verifier.
 ```
 
@@ -66,4 +75,6 @@ RISC0_VERIFIER=0x<canonical router> IMAGE_ID=0x<guest imageId> \
 ```
 
 Anchoring the transparency-log checkpoints to an L2 (the censorship-resistant
-registry) is the companion item on the roadmap; it shares this deployment path.
+registry) is implemented as `CheckpointAnchor.sol` — its consistency enforcement
+is proven locally by `forge test`; the same live-deploy step (funded key + RPC)
+is all that's deferred, sharing this deployment path.
