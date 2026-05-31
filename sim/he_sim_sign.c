@@ -33,12 +33,16 @@ int main(int argc, char **argv)
 {
     if (argc < 3) {
         fprintf(stderr,
-                "usage: %s <pcm_s16le_mono> <nonce_hex> [counter]\n", argv[0]);
+                "usage: %s <pcm_s16le_mono> <nonce_hex> [counter] [prev_digest_hex]\n",
+                argv[0]);
         return 2;
     }
     const char *pcm_path = argv[1];
     const char *nonce_hex = argv[2];
     uint64_t counter = (argc >= 4) ? strtoull(argv[3], NULL, 10) : 1;
+    /* prev_digest: SHA-256 of the previous payload (chains the stream); absent =
+     * 32 zero bytes = the genesis bundle. */
+    const char *prev_hex = (argc >= 5) ? argv[4] : NULL;
 
     int16_t *pcm = NULL;
     size_t n_samples = 0;
@@ -92,6 +96,13 @@ int main(int argc, char **argv)
     pred.counter = counter;
     memcpy(pred.config_hash, cfg_hash, 32);
     memcpy(pred.input_hash, input_hash, 32);
+    if (prev_hex) {
+        size_t plen = 0;
+        if (he_hex2bin(prev_hex, pred.prev_digest, HE_PREV_DIGEST_LEN, &plen) || plen != HE_PREV_DIGEST_LEN) {
+            fprintf(stderr, "error: prev_digest must be 32 bytes hex\n");
+            return 1;
+        }
+    } /* else: pred.prev_digest stays zero (genesis) */
 
     if (he_bundle_emit_open(&pred) != HE_PAYLOAD_OK) {
         fprintf(stderr, "error: payload encode/sign\n");

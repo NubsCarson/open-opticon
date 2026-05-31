@@ -133,9 +133,11 @@ contract HonestEarQuorum {
 
     /// Decode the device fields from the deterministic-CBOR he_payload (see
     /// src/common/he_payload.h): version(0), nonce(1, located), event(2),
-    /// voice(3), presence(4), frames(5), counter(7), input_hash(9). A minimal reader.
+    /// voice(3), presence(4), frames(5), counter(7), input_hash(9). A minimal
+    /// reader; it stops once those eight fields are seen, so the trailing
+    /// prev_digest(10, the stream hash-chain link) is simply not read on-chain.
     function _readDevice(bytes calldata p) private pure returns (Device memory d) {
-        require(uint8(p[0]) == 0xaa, "not a 10-map"); // CBOR map of 10 pairs
+        require(uint8(p[0]) == 0xab, "not an 11-map"); // CBOR map of 11 pairs
         uint256 i = 1;
         uint256 seen;
         // Walk pairs until the eight fields we need (keys 0,1,2,3,4,5,7,9) are read.

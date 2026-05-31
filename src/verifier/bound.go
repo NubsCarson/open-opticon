@@ -43,6 +43,7 @@ const (
 	keyCounter    = 7
 	keyConfigHash = 8
 	keyInputHash  = 9
+	keyPrevDigest = 10
 )
 
 // Event classes (mirror he_detector.h).
@@ -64,6 +65,7 @@ type Predicate struct {
 	Counter     uint64
 	ConfigHash  []byte
 	InputHash   []byte
+	PrevDigest  []byte
 }
 
 // EventName returns a human label for the predicate's event class.
@@ -92,6 +94,10 @@ type VerifyResult struct {
 	Predicate *Predicate
 	OK        bool
 	Reason    string
+	// NextDigest is SHA-256 of this bundle's payload — the value the NEXT bundle
+	// in this device's stream must carry as its prev_digest. Thread it back in as
+	// Options.ExpectedPrevDigest to follow an append-only chain (gap detection).
+	NextDigest []byte
 }
 
 // Options pins what the verifier expects.
@@ -107,6 +113,12 @@ type Options struct {
 	// LastCounter is the highest counter previously accepted for this device.
 	// The bundle's counter must be strictly greater. Use 0 for first contact.
 	LastCounter uint64
+	// ExpectedPrevDigest, if set, must equal the bundle's prev_digest — i.e. this
+	// bundle must chain onto the last one accepted (use the previous result's
+	// NextDigest). This makes the stream append-only: a suppressed window breaks
+	// the chain. Use 32 zero bytes for the genesis (first) bundle. Leave nil to
+	// skip the chain check (single-bundle verification).
+	ExpectedPrevDigest []byte
 }
 
 var (
@@ -177,7 +189,17 @@ func VerifyBundle(b Bundle, opt Options) VerifyResult {
 				pred.Counter, opt.LastCounter)}
 	}
 
-	return VerifyResult{Predicate: pred, OK: true, Reason: "verified"}
+	// Gate 4 (optional): stream continuity — this bundle must chain onto the last
+	// one accepted, so a host can't silently drop a window (the chain breaks).
+	if opt.ExpectedPrevDigest != nil {
+		if subtle.ConstantTimeCompare(pred.PrevDigest, opt.ExpectedPrevDigest) != 1 {
+			return VerifyResult{Predicate: pred,
+				Reason: "prev_digest mismatch (a window was suppressed or the chain forked)"}
+		}
+	}
+
+	next := sha256.Sum256(payload)
+	return VerifyResult{Predicate: pred, OK: true, Reason: "verified", NextDigest: next[:]}
 }
 
 func verifySig(payload, sig, px, py []byte) error {
@@ -338,7 +360,7 @@ func DecodePayload(b []byte) (*Predicate, error) {
 		return nil, fmt.Errorf("payload is not a CBOR map (major %d)", major)
 	}
 	p := &Predicate{}
-	const allKeys = (1 << 10) - 1 // keys 0..9 required
+	const allKeys = (1 << 11) - 1 // keys 0..10 required
 	var seen uint
 	haveLast := false
 	var lastKey uint64
@@ -354,7 +376,7 @@ func DecodePayload(b []byte) (*Predicate, error) {
 		}
 		lastKey = key
 		haveLast = true
-		if key < 10 {
+		if key < 11 {
 			if seen&(1<<key) != 0 {
 				return nil, fmt.Errorf("duplicate key %d", key)
 			}
@@ -381,6 +403,8 @@ func DecodePayload(b []byte) (*Predicate, error) {
 			p.ConfigHash, err = r.readBstr()
 		case keyInputHash:
 			p.InputHash, err = r.readBstr()
+		case keyPrevDigest:
+			p.PrevDigest, err = r.readBstr()
 		default:
 			return nil, fmt.Errorf("unknown payload key %d", key)
 		}

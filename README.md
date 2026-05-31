@@ -54,6 +54,7 @@ that emits speech. The device proves its own restraint.
 | Raw media leaves the trusted boundary | yes (signs after capture) | yes | **no — zeroized in-enclave** |
 | Output bound to attested key | no | no | **yes — `PTA_SIGN_DATA` over canonical payload** |
 | Anti-replay / live challenge | n/a | n/a | **yes — fresh nonce + monotonic counter** |
+| Anti-suppression (dropped window) | n/a | n/a | **yes — append-only `prev_digest` hash-chain** |
 | Open / permissionless verification | partial | no | **yes — Veraison + open verifier** |
 
 ## Repository layout
@@ -130,6 +131,10 @@ This is a clean overlay on `optee-ra`; it does not modify the upstream tree
   the bytes the Go verifier accepts here are the bytes the device would emit;
 - the verifier **rejects** tampered payloads, stale nonces, replayed counters,
   substituted keys, endorsement-pin mismatches, and non-canonical CBOR;
+- a device's stream is an **append-only hash-chain** (`prev_digest` = SHA-256 of
+  the previous payload): the counter defeats *replay*, the chain additionally
+  defeats *suppression* — a dropped window is a detectable gap, not a silent one
+  (`make chain-e2e` verifies a genuine stream and rejects a spliced one);
 - the CBOR payload decoder is **fuzzed** (`FuzzDecodePayload`; the seed corpus
   runs under `make test`, deeper exploration via `make fuzz`);
 - the browser GUI displays **only the verifier's bound/verified predicate**,

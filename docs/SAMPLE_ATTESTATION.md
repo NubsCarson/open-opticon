@@ -136,3 +136,13 @@ challenge → verify the bound output**, all on the laptop, no simulator.
   i.MX 8M Plus CAAM hardware-bound key (see [`THREAT_MODEL.md`](THREAT_MODEL.md)).
 - `configuration`/`file-system`/`sourced-data` are `0` (no claim) — neutral, not
   a failure.
+- **Format note (honest).** This bundle is a *real, unedited* QEMU capture from an
+  earlier build: its payload is a 9-key CBOR map (`a9…`), recorded before the wire
+  format appended `input_hash` (key 9, cross-prover audio binding) and
+  `prev_digest` (key 10, the streaming hash-chain). The current `he-verify`
+  requires all 11 keys, so re-running it against *this archived* bundle reports
+  missing keys — the bytes are kept verbatim rather than re-faked, since this
+  capture cannot be reproduced without the rig. A freshly captured bundle is an
+  11-key map (`ab…`); the host sim (`make demo`/`make chain-e2e`) emits the
+  current format on any laptop. See [`he_payload.h`](../src/common/he_payload.h)
+  for the stable key schema.

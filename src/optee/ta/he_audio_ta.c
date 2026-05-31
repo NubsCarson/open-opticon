@@ -239,6 +239,9 @@ TEE_Result he_attest_audio(uint32_t param_types, TEE_Param params[4])
     if (res != TEE_SUCCESS)
         return res;
     memcpy(pred.input_hash, input_hash, sizeof(input_hash));
+    /* prev_digest stays zero (genesis) here; per-window stream chaining needs a
+     * Trusted-Storage "last payload digest" alongside he_counter_next (rig TODO).
+     * The host sim demonstrates the chain; the verifier's Gate 4 enforces it. */
     res = he_counter_next(&pred.counter);
     if (res != TEE_SUCCESS)
         return res;

@@ -1,21 +1,35 @@
 package verifier
 
 import (
+	"bytes"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"math/big"
 	"testing"
 )
 
+const zero32 = "0000000000000000000000000000000000000000000000000000000000000000"
+
+// chainPayload builds an 11-key golden payload identical to `golden` except the
+// monotonic counter (must be < 24 for single-byte encoding) and the prev_digest
+// (32-byte hex). Used to exercise the stream hash-chain (Gate 4).
+func chainPayload(counter byte, prevHex string) []byte {
+	return mustHex("ab" + "0001" + "0142aabb" + "0202" + "03f4" + "0401" +
+		"050a" + "0618a0" + "07" + fmt.Sprintf("%02x", counter) +
+		"085820" + cfg32 + "095820" + inp32 + "0a5820" + prevHex)
+}
+
 // golden is the exact deterministic-CBOR payload from test_payload.c:
 // {version:1, nonce:AABB, event:2, voice:false, presence:1, frames:10,
 //
-//	window_ms:160, counter:7, config_hash:0x11*32}
+//	window_ms:160, counter:7, config_hash:0x11*32, input_hash:0x22*32,
+//	prev_digest:0x33*32}
 var golden = mustHex(
-	"aa" +
+	"ab" +
 		"0001" +
 		"0142aabb" +
 		"0202" +
@@ -24,10 +38,9 @@ var golden = mustHex(
 		"050a" +
 		"0618a0" +
 		"0707" +
-		"085820" +
-		"1111111111111111111111111111111111111111111111111111111111111111" +
-		"095820" +
-		"2222222222222222222222222222222222222222222222222222222222222222")
+		"085820" + cfg32 +
+		"095820" + inp32 +
+		"0a5820" + prev32)
 
 func mustHex(s string) []byte {
 	b, err := hex.DecodeString(s)
@@ -77,11 +90,13 @@ func TestDecodeRejectsTrailingBytes(t *testing.T) {
 }
 
 const cfg32 = "1111111111111111111111111111111111111111111111111111111111111111"
+const inp32 = "2222222222222222222222222222222222222222222222222222222222222222"
+const prev32 = "3333333333333333333333333333333333333333333333333333333333333333"
 
 func TestDecodeRejectsNonMinimalInt(t *testing.T) {
 	// version=1 re-encoded in the 1-byte form (0x18 0x01) instead of 0x01.
-	bad := mustHex("a9" + "001801" + "0142aabb" + "0202" + "03f4" + "0401" +
-		"050a" + "0618a0" + "0707" + "085820" + cfg32)
+	bad := mustHex("ab" + "001801" + "0142aabb" + "0202" + "03f4" + "0401" +
+		"050a" + "0618a0" + "0707" + "085820" + cfg32 + "095820" + inp32 + "0a5820" + prev32)
 	if _, err := DecodePayload(bad); err == nil {
 		t.Error("expected error on non-minimal integer encoding")
 	}
@@ -197,11 +212,8 @@ func TestVerifyRejectsStaleNonce(t *testing.T) {
 func TestVerifyRejectsEmptyNonceFailOpen(t *testing.T) {
 	// Same golden payload but with an EMPTY nonce bstr (0140, not 0142aabb).
 	emptyNonce := mustHex(
-		"aa" + "0001" + "0140" + "0202" + "03f4" + "0401" + "050a" + "0618a0" +
-			"0707" + "085820" +
-			"1111111111111111111111111111111111111111111111111111111111111111" +
-			"095820" +
-			"2222222222222222222222222222222222222222222222222222222222222222")
+		"ab" + "0001" + "0140" + "0202" + "03f4" + "0401" + "050a" + "0618a0" +
+			"0707" + "085820" + cfg32 + "095820" + inp32 + "0a5820" + prev32)
 	b, _, _ := signGolden(t, emptyNonce) // valid signature, so only freshness is on trial
 	for name, opt := range map[string]Options{
 		"empty expected nonce": {ExpectedNonce: []byte{}},
@@ -249,8 +261,8 @@ func TestVerifyRejectsOffCurveKey(t *testing.T) {
 
 func TestVerifyRejectsWrongVersion(t *testing.T) {
 	// golden with the version value re-encoded as 2 (key 0 -> 2): "0001" -> "0002".
-	v2 := mustHex("a9" + "0002" + "0142aabb" + "0202" + "03f4" + "0401" +
-		"050a" + "0618a0" + "0707" + "085820" + cfg32)
+	v2 := mustHex("ab" + "0002" + "0142aabb" + "0202" + "03f4" + "0401" +
+		"050a" + "0618a0" + "0707" + "085820" + cfg32 + "095820" + inp32 + "0a5820" + prev32)
 	b, _, _ := signGolden(t, v2)
 	res := VerifyBundle(b, Options{ExpectedNonce: mustHex("aabb")})
 	if res.OK {
@@ -278,6 +290,64 @@ func TestVerifyRejectsPinMismatch(t *testing.T) {
 	}
 }
 
+// TestVerifyChainContinuity exercises Gate 4: a genesis bundle (prev_digest =
+// zeros) chains to sha256(payload); the next window must carry that digest as
+// its prev_digest. A suppressed/forked window breaks the chain and is rejected.
+func TestVerifyChainContinuity(t *testing.T) {
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	px := leftPad(key.PublicKey.X.Bytes(), 32)
+	py := leftPad(key.PublicKey.Y.Bytes(), 32)
+
+	// Genesis window: prev_digest = 32 zero bytes, counter 1.
+	genesis := chainPayload(1, zero32)
+	bGen := signWith(t, genesis, key)
+	resGen := VerifyBundle(bGen, Options{
+		ExpectedNonce:      mustHex("aabb"),
+		PinPubX:            px,
+		PinPubY:            py,
+		LastCounter:        0,
+		ExpectedPrevDigest: mustHex(zero32), // genesis must chain from zeros
+	})
+	if !resGen.OK {
+		t.Fatalf("genesis: %s", resGen.Reason)
+	}
+	want := sha256.Sum256(genesis)
+	if !bytes.Equal(resGen.NextDigest, want[:]) {
+		t.Fatalf("NextDigest = %x, want sha256(payload) = %x", resGen.NextDigest, want[:])
+	}
+
+	// Window 2: prev_digest = genesis's NextDigest, counter 2 -> verifies.
+	win2 := chainPayload(2, hex.EncodeToString(resGen.NextDigest))
+	b2 := signWith(t, win2, key)
+	res2 := VerifyBundle(b2, Options{
+		ExpectedNonce:      mustHex("aabb"),
+		PinPubX:            px,
+		PinPubY:            py,
+		LastCounter:        1,
+		ExpectedPrevDigest: resGen.NextDigest,
+	})
+	if !res2.OK {
+		t.Fatalf("window2: %s", res2.Reason)
+	}
+
+	// Gap detection: the verifier expects window2's NextDigest as the next
+	// prev_digest, but a suppressed window means it is shown a payload whose
+	// prev_digest doesn't match -> chain break, must fail.
+	resGap := VerifyBundle(b2, Options{
+		ExpectedNonce:      mustHex("aabb"),
+		PinPubX:            px,
+		PinPubY:            py,
+		LastCounter:        1,
+		ExpectedPrevDigest: res2.NextDigest, // expecting the link AFTER window2
+	})
+	if resGap.OK {
+		t.Error("chain gap (suppressed window) accepted; must fail")
+	}
+}
+
 // FuzzDecodePayload asserts the CBOR reader never panics and never returns a
 // (nil, nil) result on arbitrary input — it must always fail closed with an
 // error rather than crash or half-decode. The seed corpus runs under plain
@@ -289,11 +359,12 @@ func FuzzDecodePayload(f *testing.F) {
 	f.Add(mustHex("a90001"))                      // truncated map
 	f.Add(mustHex("a1" + "001b0000000000000001")) // 1-entry map, 8-byte uint
 	f.Add(mustHex("0101"))                        // not a map at all
-	f.Add(mustHex("a90142ffff")) // bstr len overruns buffer
-	// Format-change (key 9 input_hash) + canonicality surface:
+	f.Add(mustHex("a90142ffff"))                  // bstr len overruns buffer
+	// Format-change (key 9 input_hash, key 10 prev_digest) + canonicality surface:
 	f.Add(mustHex("a9" + "0001" + "0142aabb" + "0202" + "03f4" + "0401" +
-		"050a" + "0618a0" + "0707" + "085820" +
-		"1111111111111111111111111111111111111111111111111111111111111111")) // old 9-key (missing input_hash) -> reject
+		"050a" + "0618a0" + "0707" + "085820" + cfg32)) // old 9-key (missing input+prev) -> reject
+	f.Add(mustHex("aa" + "0001" + "0142aabb" + "0202" + "03f4" + "0401" +
+		"050a" + "0618a0" + "0707" + "085820" + cfg32 + "095820" + inp32)) // old 10-key (missing prev_digest) -> reject
 	f.Add(mustHex("a2" + "0202" + "0001")) // out-of-order keys -> reject (non-canonical)
 	f.Add(mustHex("a2" + "0001" + "0001")) // duplicate key -> reject
 	f.Add(mustHex("a1" + "00" + "1800"))   // non-minimal uint (0 as 1-byte) -> reject

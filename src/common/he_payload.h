@@ -27,6 +27,11 @@
  *                              bytes the detector ran on), so an independent
  *                              prover (e.g. the zk leg) can be cryptographically
  *                              bound to the SAME observation, not just the verdict
+ *    10: prev_digest(bstr32) -- SHA-256 of the PREVIOUS bound-output payload (32
+ *                              zero bytes for the first), so the per-device stream
+ *                              is an append-only hash chain: a suppressed window
+ *                              breaks the chain (the verifier can't be silently
+ *                              shown a gap), not just a replayed one
  *   }
  *
  * NOTE: this is deliberately NOT COSE_Sign1. It is a minimal, fully specified,
@@ -44,6 +49,7 @@
 #define HE_NONCE_MAX       64u
 #define HE_CONFIG_HASH_LEN 32u
 #define HE_INPUT_HASH_LEN  32u
+#define HE_PREV_DIGEST_LEN 32u
 
 /* Map keys (stable wire contract — never renumber). */
 enum he_payload_key {
@@ -57,6 +63,7 @@ enum he_payload_key {
     HE_K_COUNTER = 7,
     HE_K_CONFIG_HASH = 8,
     HE_K_INPUT_HASH = 9,
+    HE_K_PREV_DIGEST = 10,
 };
 
 typedef struct {
@@ -71,6 +78,7 @@ typedef struct {
     uint64_t counter;                       /* monotonic, anti-replay */
     uint8_t config_hash[HE_CONFIG_HASH_LEN];
     uint8_t input_hash[HE_INPUT_HASH_LEN];  /* SHA-256 of the sensor input */
+    uint8_t prev_digest[HE_PREV_DIGEST_LEN]; /* SHA-256 of the previous payload */
 } he_predicate_t;
 
 /* Return codes. */
@@ -87,6 +95,6 @@ int he_payload_encode(const he_predicate_t *p, uint8_t *out, size_t out_cap,
                       size_t *out_len);
 
 /* Maximum encoded size for a v1 payload (for static buffer sizing). */
-#define HE_PAYLOAD_MAX_LEN 200u
+#define HE_PAYLOAD_MAX_LEN 240u
 
 #endif /* HE_PAYLOAD_H */

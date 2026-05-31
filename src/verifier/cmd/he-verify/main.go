@@ -2,7 +2,7 @@
 //
 // Single prover:
 //
-//	he-verify --nonce <hex> [--pin-x <hex> --pin-y <hex>] [--last-counter N] [bundle.json]
+//	he-verify --nonce <hex> [--pin-x <hex> --pin-y <hex>] [--last-counter N] [--expect-prev <hex>] [bundle.json]
 //
 // Quorum (k-of-n independent provers):
 //
@@ -41,7 +41,7 @@ func main() {
 	flag.Usage = func() {
 		fmt.Fprint(flag.CommandLine.Output(), `he-verify — verify Honest Ear bound-output bundles.
 
-  single: he-verify --nonce <hex> [--pin-x <hex> --pin-y <hex>] [--last-counter N] [bundle.json]
+  single: he-verify --nonce <hex> [--pin-x <hex> --pin-y <hex>] [--last-counter N] [--expect-prev <hex>] [bundle.json]
   quorum: he-verify --nonce <hex> --quorum K --root name:<pubXhex>:<pubYhex> [--root ...] a.json b.json ...
 
 Single mode reads one bundle from the file arg or stdin; quorum reads one per file arg.
@@ -55,6 +55,7 @@ flags:
 	pinX := flag.String("pin-x", "", "pinned endorsement pub X (hex); use with --pin-y")
 	pinY := flag.String("pin-y", "", "pinned endorsement pub Y (hex); use with --pin-x")
 	lastCounter := flag.Uint64("last-counter", 0, "highest counter already accepted for this device")
+	expectPrev := flag.String("expect-prev", "", "expected prev_digest (hex) — the digest this window must chain from (stream gap detection); use 64 zeros for the genesis window")
 	quorum := flag.Int("quorum", 0, "require k-of-n independent provers (quorum mode)")
 	var roots rootList
 	flag.Var(&roots, "root", "enrolled prover as name:pubXhex:pubYhex (repeatable, quorum mode)")
@@ -88,6 +89,11 @@ flags:
 	}
 
 	opt := verifier.Options{ExpectedNonce: nonce, LastCounter: *lastCounter}
+	if *expectPrev != "" {
+		if opt.ExpectedPrevDigest, err = hex.DecodeString(*expectPrev); err != nil {
+			cli.Die("bad --expect-prev hex: %v", err)
+		}
+	}
 	if (*pinX == "") != (*pinY == "") {
 		cli.Die("--pin-x and --pin-y must be provided together")
 	}
@@ -110,6 +116,10 @@ flags:
 	}
 	fmt.Printf("%s  bound output verified (signature + freshness + anti-replay)\n", cli.Pass())
 	printPredicate(res.Predicate)
+	// Emit the digest the NEXT window in this device's stream must carry as its
+	// prev_digest. A monitor feeds this back via --expect-prev to detect a
+	// suppressed window (the chain would break).
+	fmt.Printf("  next_digest  : %x\n", res.NextDigest)
 }
 
 func runQuorum(nonce []byte, k int, rootSpecs rootList, lastCounter uint64) {
@@ -172,4 +182,6 @@ func printPredicate(p *verifier.Predicate) {
 	fmt.Printf("  counter      : %d\n", p.Counter)
 	fmt.Printf("  nonce        : %x\n", p.Nonce)
 	fmt.Printf("  config_hash  : %x\n", p.ConfigHash)
+	fmt.Printf("  input_hash   : %x\n", p.InputHash)
+	fmt.Printf("  prev_digest  : %x\n", p.PrevDigest)
 }

@@ -60,6 +60,16 @@ From this PoC to a defensible product, in order of trust-impact.
   `empty`/`occupied` + a region count, never the frame, and rides the *same*
   bound-output envelope verified by the *same* `he-verify` (`make vision-e2e`).
   Proves the attestation/binding/verification machinery is sensor-agnostic.
+- **Streaming hash-chain (suppression detection).** Each payload carries
+  `prev_digest = SHA-256(previous payload)` (key 10), making a device's stream
+  append-only. Where the monotonic counter defeats *replay*, the chain defeats
+  *suppression*: a verifier that records one window's digest rejects the next
+  window unless it chains from exactly that digest, so a silently dropped window
+  is a detectable gap. Device-payload-only (Gate 4 in the Go verifier, under the
+  P-256 signature), so the ZK leg is unchanged. `make chain-e2e` shows a genuine
+  stream verifying and a spliced (window-dropped) stream rejected. The TA stores
+  genesis (zeros) until per-window chain-state lands in Trusted Storage alongside
+  the counter (the rig TODO).
 
 ## Cryptographic / protocol
 - **Promote the bound-output envelope to COSE_Sign1** (RFC 9052/9053). The

@@ -73,8 +73,8 @@ the signer and verifier with no ambiguity and no third-party library inside the
 TA. `he_payload.c` emits a single RFC 8949 deterministic CBOR map (definite
 length, ascending integer keys, smallest-int encodings); the Go verifier has a
 matching minimal reader. Fields: version, nonce, event, voice_active, presence,
-frames, window_ms, counter, config_hash. See `he_payload.h` for the exact
-schema (a stable wire contract).
+frames, window_ms, counter, config_hash, input_hash, prev_digest. See
+`he_payload.h` for the exact schema (a stable wire contract).
 
 **Policy hash in the payload.** `config_hash = SHA-256(detector config blob)`
 binds *which detection policy* (sample rate, frame size, tone target,
@@ -85,6 +85,17 @@ attested and auditable, not a hidden knob.
 otherwise-valid bundle. Rollback-resistant where the platform provides
 anti-rollback (RPMB on i.MX); best-effort on QEMU (still defeats in-session
 replay). See THREAT_MODEL.
+
+**Streaming hash-chain (`prev_digest`).** Each bound-output payload carries
+`prev_digest = SHA-256(previous payload)` (key 10; 32 zero bytes for the genesis
+window), so a device's stream is an append-only chain. The counter defeats
+*replay* of an old bundle; the chain additionally defeats *suppression* — a
+verifier that records one window's digest will reject the next window unless it
+chains from exactly that digest, so a silently dropped window is detectable as a
+gap, not just a stale counter. It is device-payload-only (verified by the Go
+verifier's Gate 4 and carried under the device P-256 signature), so it adds no
+work to the ZK leg. `make chain-e2e` demonstrates a genuine stream verifying and
+a spliced (window-dropped) stream being rejected.
 
 **Tamper response destroys the key.** `src/tamper/he_tamper.c` watches a GPIO
 loop around the clear enclosure; on breach it erases the device key material

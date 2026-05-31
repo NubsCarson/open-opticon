@@ -94,8 +94,8 @@ int he_payload_encode(const he_predicate_t *p, uint8_t *out, size_t out_cap,
     if (p->nonce_len > HE_NONCE_MAX)
         return HE_PAYLOAD_E_PARAM;
 
-    /* map(10) — keys are emitted in ascending order: deterministic. */
-    if ((rc = put_head(out, out_cap, &pos, 5 /* map */, 10)))
+    /* map(11) — keys are emitted in ascending order: deterministic. */
+    if ((rc = put_head(out, out_cap, &pos, 5 /* map */, 11)))
         return rc;
 
     if ((rc = put_uint(out, out_cap, &pos, HE_K_VERSION)) ||
@@ -136,6 +136,10 @@ int he_payload_encode(const he_predicate_t *p, uint8_t *out, size_t out_cap,
 
     if ((rc = put_uint(out, out_cap, &pos, HE_K_INPUT_HASH)) ||
         (rc = put_bstr(out, out_cap, &pos, p->input_hash, HE_INPUT_HASH_LEN)))
+        return rc;
+
+    if ((rc = put_uint(out, out_cap, &pos, HE_K_PREV_DIGEST)) ||
+        (rc = put_bstr(out, out_cap, &pos, p->prev_digest, HE_PREV_DIGEST_LEN)))
         return rc;
 
     *out_len = pos;
