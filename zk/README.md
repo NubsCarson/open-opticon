@@ -20,9 +20,11 @@ zk/
   oo-detect/     a tiny CLI over oo-detector used by that differential test.
   methods/guest/ the zkVM guest: read samples (private) + a verifier nonce ->
                  oo_detector::detect -> commit ONLY (event, presence,
-                 voice_active, frames, active_frames, n_samples) + sha256(nonce),
-                 which binds the proof to the challenge (used by the on-chain
-                 quorum to require the ZK leg and the device share a nonce).
+                 voice_active, frames, active_frames, n_samples) + sha256(nonce)
+                 + sha256(audio). The two hashes bind the proof to the same
+                 challenge AND the same input as the device signature (the latter
+                 equals the device payload's input_hash); the on-chain quorum
+                 requires both to match. The audio itself is never committed.
   host/          he-zk-prove:  prove + verify a STARK receipt, print the verdict.
                  he-zk-export: produce a Groth16 receipt + Ethereum seal fixture
                                for on-chain verification (see ../onchain).
@@ -41,7 +43,8 @@ cargo run --release -- ../path/to.pcm [nonce]   # prove + verify in zero knowled
 
 Expected (a real STARK proof captured on a 12-frame alarm clip, ~6 min on a
 laptop CPU — the `image_id` is the published guest measurement anyone can
-recompute from source; `nonce_sha256` binds the proof to the verifier challenge):
+recompute from source; `nonce_sha256`/`audio_sha256` bind the proof to the
+verifier challenge and to the exact input):
 
 ```
 ZK-VERIFIED  detector(audio) proven in zero knowledge
@@ -51,7 +54,8 @@ ZK-VERIFIED  detector(audio) proven in zero knowledge
   frames       : 12  (active 12)
   samples      : 3072  (audio itself never revealed)
   nonce_sha256 : 8d70d691c822d55638b6e7fd54cd94170c87d19eb1f628b757506ede5688d297
-  image_id     : fa87e532ae2e7ce5631bee1f478614a00ba0122c235166e314113fafd0f63f41
+  audio_sha256 : 76fce813fbb5a4c577d78eb957bcb37962a16a89d3c1151b801acdb96b9b0e2a
+  image_id     : 7b3b6516a727718282f79230824c557da58b0edc9b4641f44d9aa240424996aa
 ```
 
 (`image_id` is the canonical risc0 `Digest` hex — the same bytes `he-zk-export`

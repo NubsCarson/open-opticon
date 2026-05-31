@@ -11,8 +11,9 @@ import (
 // instead of "alarm_tone" (2): byte pair 0202 -> 0200. Used to test that
 // provers reporting different events do not form a quorum.
 var goldenNone = mustHex(
-	"a9" + "0001" + "0142aabb" + "0200" + "03f4" + "0401" +
-		"050a" + "0618a0" + "0707" + "085820" + cfg32)
+	"aa" + "0001" + "0142aabb" + "0200" + "03f4" + "0401" +
+		"050a" + "0618a0" + "0707" + "085820" + cfg32 +
+		"095820" + "2222222222222222222222222222222222222222222222222222222222222222")
 
 func newProver(t *testing.T, name string) (Prover, *ecdsa.PrivateKey) {
 	t.Helper()

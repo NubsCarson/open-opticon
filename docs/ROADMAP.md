@@ -13,9 +13,12 @@ From this PoC to a defensible product, in order of trust-impact.
   (`he-log`, [`transparency.go`](../src/verifier/transparency.go)); the verifier
   can require an endorsement to be logged. Independent **witnesses cosign**
   checkpoints (`he-log cosign`, `CosignCheckpoint`/`VerifyCheckpointWitnesses`,
-  C2SP/Sigstore model) and the verifier requires a threshold of them, so a single
-  operator cannot equivocate — the off-chain analogue of the on-chain
-  `CheckpointAnchor`. (On-chain anchoring is the chain-backed alternative.)
+  C2SP/Sigstore model) and the verifier requires a threshold of cosignatures from
+  **enrolled, pinned-key** witnesses (a cosig only counts if its name + key match
+  an enrolled witness, like the prover quorum), so a single operator can't mint
+  keys to equivocate — the off-chain analogue of the on-chain `CheckpointAnchor`.
+  Remaining: wiring the threshold check into a CLI verify path + running real
+  gossiping/consistency-checking witnesses.
 - **Reproducible host builds.** `make repro` proves the host artifacts are
   byte-identical across independent build trees; the TA-measurement recipe is in
   [`REPRODUCIBLE.md`](REPRODUCIBLE.md). CI gates every push on this and publishes
@@ -43,11 +46,12 @@ From this PoC to a defensible product, in order of trust-impact.
   on-chain anti-replay via the device counter. Proven on a local EVM with a real
   receipt + a real device bundle, and **deployed live on Ethereum Sepolia** (full
   stack via `DeployLocal.s.sol`; addresses in onchain/README). The two roots are
-  **cryptographically bound to the same verifier nonce**: the guest commits
-  sha256(nonce) and the contract requires it equals sha256(the device payload's
-  nonce), so a proof and a signature from different sessions can't be combined.
-  One realisable leg of the broader 2-of-3 vision; a sha256(audio) commitment in
-  both legs (airtight even against a misbehaving device) is the further step. The transparency-log checkpoints also have an on-chain
+  **cryptographically bound to the same observation** — the same verifier nonce
+  AND the same audio: the guest commits sha256(nonce) and sha256(audio), and the
+  contract requires both to equal the device payload's nonce hash and its
+  input_hash, so a proof and a signature from a different session OR different
+  audio can't be combined, even against a misbehaving device. One realisable leg
+  of the broader 2-of-3 vision. The transparency-log checkpoints also have an on-chain
   anchor (`onchain/src/CheckpointAnchor.sol`): it verifies an RFC 9162 consistency
   proof on-chain (SHA-256 precompile) so a fork/rewrite is rejected — proven by a
   real `he-log consistency` proof in `forge test`; only the live deploy is deferred.

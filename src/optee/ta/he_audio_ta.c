@@ -202,13 +202,16 @@ TEE_Result he_attest_audio(uint32_t param_types, TEE_Param params[4])
     he_detector_config_t cfg;
     he_detector_default_config(&cfg);
     he_detect_result_t r;
-    he_detector_run(&cfg, pcm, pcm_bytes / sizeof(int16_t), &r);
+    size_t n_samples = pcm_bytes / sizeof(int16_t);
+    he_detector_run(&cfg, pcm, n_samples, &r);
 
-    /* 1b. bind the output to the exact input: SHA-256 over the raw audio bytes,
-     * computed before zeroization, so an independent prover (the zk leg) can be
-     * tied to the SAME observation. The hash is not the audio. */
+    /* 1b. bind the output to the exact input: SHA-256 over the audio bytes the
+     * detector consumed (n_samples*2 — a trailing odd byte is dropped, matching
+     * the host signer and the zk guest), computed before zeroization, so an
+     * independent prover can be tied to the SAME observation. The hash is not
+     * the audio. */
     uint8_t input_hash[32];
-    TEE_Result hres = he_sha256(pcm, pcm_bytes, input_hash);
+    TEE_Result hres = he_sha256(pcm, n_samples * sizeof(int16_t), input_hash);
     if (hres != TEE_SUCCESS)
         return hres;
 

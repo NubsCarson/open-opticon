@@ -157,42 +157,54 @@ func TestWitnessCosigning(t *testing.T) {
 	root := l.Root()
 	cpBody := CheckpointBody("honest-ear.log/v1", l.Size(), root)
 
-	// Three independent witnesses cosign the exact checkpoint body.
+	// Three independent witnesses, ENROLLED (their keys are pinned by the verifier).
 	var cosigs []Cosignature
+	var enrolled []Prover
 	for _, name := range []string{"witness-a", "witness-b", "witness-c"} {
 		wk, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 		sig, err := CosignCheckpoint(cpBody, wk)
 		if err != nil {
 			t.Fatal(err)
 		}
-		cosigs = append(cosigs, Cosignature{
-			Witness: name,
-			PubX:    leftPad(wk.PublicKey.X.Bytes(), 32),
-			PubY:    leftPad(wk.PublicKey.Y.Bytes(), 32),
-			Sig:     sig,
-		})
+		px := leftPad(wk.PublicKey.X.Bytes(), 32)
+		py := leftPad(wk.PublicKey.Y.Bytes(), 32)
+		cosigs = append(cosigs, Cosignature{Witness: name, PubX: px, PubY: py, Sig: sig})
+		enrolled = append(enrolled, Prover{Name: name, PubX: px, PubY: py})
 	}
 
-	if got := VerifyCheckpointWitnesses(cpBody, cosigs); len(got) != 3 {
+	if got := VerifyCheckpointWitnesses(cpBody, cosigs, enrolled); len(got) != 3 {
 		t.Fatalf("expected 3 valid witnesses, got %v", got)
 	}
 
 	// Anti-equivocation: those cosignatures do NOT validate a different checkpoint
 	// (the operator can't reuse witness cosigs to back a forked history).
 	forked := CheckpointBody("honest-ear.log/v1", l.Size(), [32]byte{0xff})
-	if got := VerifyCheckpointWitnesses(forked, cosigs); len(got) != 0 {
+	if got := VerifyCheckpointWitnesses(forked, cosigs, enrolled); len(got) != 0 {
 		t.Errorf("witnesses validated a checkpoint they never signed: %v", got)
 	}
 
 	// Duplicate witness names are deduped — one key can't pad the threshold.
 	dup := []Cosignature{cosigs[0], cosigs[0], cosigs[0]}
-	if got := VerifyCheckpointWitnesses(cpBody, dup); len(got) != 1 {
+	if got := VerifyCheckpointWitnesses(cpBody, dup, enrolled); len(got) != 1 {
 		t.Errorf("duplicate witness counted more than once: %v", got)
 	}
 
-	// A forged cosignature (a name with someone else's signature) is rejected.
-	forged := Cosignature{Witness: "witness-d", PubX: cosigs[0].PubX, PubY: cosigs[0].PubY, Sig: cosigs[1].Sig}
-	if got := VerifyCheckpointWitnesses(cpBody, []Cosignature{forged}); len(got) != 0 {
-		t.Errorf("forged cosignature accepted: %v", got)
+	// The core anti-equivocation property: a malicious operator mints a fresh key
+	// under a novel name (a valid signature, but NOT enrolled) — it must NOT count.
+	rogue, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	rsig, _ := CosignCheckpoint(cpBody, rogue)
+	mint := Cosignature{
+		Witness: "witness-x",
+		PubX:    leftPad(rogue.PublicKey.X.Bytes(), 32),
+		PubY:    leftPad(rogue.PublicKey.Y.Bytes(), 32),
+		Sig:     rsig,
+	}
+	if got := VerifyCheckpointWitnesses(cpBody, []Cosignature{mint}, enrolled); len(got) != 0 {
+		t.Errorf("unenrolled minted key counted as a witness: %v", got)
+	}
+	// An enrolled name paired with a different (rogue) key must also not count.
+	imposter := Cosignature{Witness: "witness-a", PubX: mint.PubX, PubY: mint.PubY, Sig: rsig}
+	if got := VerifyCheckpointWitnesses(cpBody, []Cosignature{imposter}, enrolled); len(got) != 0 {
+		t.Errorf("enrolled name with wrong key counted: %v", got)
 	}
 }

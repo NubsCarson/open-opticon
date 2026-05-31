@@ -22,6 +22,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -289,21 +290,40 @@ func CosignCheckpoint(cpBody []byte, key *ecdsa.PrivateKey) ([]byte, error) {
 	return signNote(cpBody, key)
 }
 
-// VerifyCheckpointWitnesses returns the names of distinct enrolled witnesses
-// whose cosignature over cpBody is valid (deduped by name). The verifier requires
-// at least a threshold of these in addition to the operator's signature, so no
-// single operator can equivocate. Reuses verifySig (one ECDSA path).
-func VerifyCheckpointWitnesses(cpBody []byte, cosigs []Cosignature) []string {
+// VerifyCheckpointWitnesses returns the names of distinct ENROLLED witnesses
+// whose cosignature over cpBody is valid (deduped by name). A cosignature only
+// counts if its (name, public key) matches an enrolled witness — otherwise a
+// malicious operator could mint fresh names/keys to clear the threshold, which
+// would defeat the whole point. The verifier requires at least a threshold of
+// these in addition to the operator's signature, so no single operator can
+// equivocate. Reuses verifySig (one ECDSA path) and the Prover enrolment shape.
+func VerifyCheckpointWitnesses(cpBody []byte, cosigs []Cosignature, enrolled []Prover) []string {
 	seen := map[string]bool{}
 	var ok []string
 	for _, c := range cosigs {
-		if c.Witness == "" || seen[c.Witness] {
+		name := matchWitness(c, enrolled)
+		if name == "" || seen[name] {
 			continue
 		}
 		if verifySig(cpBody, c.Sig, c.PubX, c.PubY) == nil {
-			seen[c.Witness] = true
-			ok = append(ok, c.Witness)
+			seen[name] = true
+			ok = append(ok, name)
 		}
 	}
 	return ok
+}
+
+// matchWitness returns the enrolled witness name iff the cosignature's name AND
+// pinned public key both match an enrolled witness (constant-time key compare,
+// mirroring matchProver) — so an unenrolled key, or an enrolled name paired with
+// a different key, does not count.
+func matchWitness(c Cosignature, enrolled []Prover) string {
+	for _, w := range enrolled {
+		if w.Name == c.Witness &&
+			subtle.ConstantTimeCompare(c.PubX, w.PubX) == 1 &&
+			subtle.ConstantTimeCompare(c.PubY, w.PubY) == 1 {
+			return w.Name
+		}
+	}
+	return ""
 }

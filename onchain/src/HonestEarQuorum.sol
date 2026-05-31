@@ -185,6 +185,9 @@ contract HonestEarQuorum {
     /// Read a CBOR 32-byte byte string (0x58 0x20 || 32 bytes) as a bytes32.
     function _bstr32(bytes calldata p, uint256 i) private pure returns (bytes32 h) {
         require(uint8(p[i]) == 0x58 && uint8(p[i + 1]) == 0x20, "input_hash not bstr32");
+        // The 32 data bytes must lie inside the (signed) payload, so calldataload
+        // can't pull adjacent, unsigned calldata: header 2 bytes + 32 data = 34.
+        require(i + 34 <= p.length, "input_hash truncated");
         assembly {
             h := calldataload(add(p.offset, add(i, 2)))
         }

@@ -151,7 +151,8 @@ This is a clean overlay on `optee-ra`; it does not modify the upstream tree
   *and* the device's secp256r1 signature must both verify and agree — one
   realisable leg of the broader 2-of-3 vision) and an **append-only log anchor**
   (RFC 9162 consistency verified on-chain, so a fork/rewrite reverts). The two
-  roots are cryptographically bound to the same verifier nonce. The full stack is
+  roots are cryptographically bound to the same observation — the same verifier
+  nonce and the same audio (sha256(nonce) and sha256(audio)). The full stack is
   **deployed live on Ethereum Sepolia** (addresses + Etherscan links in
   [`onchain/README.md`](onchain/README.md)) — a real `eth_call` to the deployed
   quorum returns the agreed verdict — and also runs locally on anvil.
