@@ -53,6 +53,12 @@ int main(int argc, char **argv)
     he_detect_result_t res;
     he_detector_run(&cfg, pcm, n_samples, &res);
 
+    /* Bind the output to the exact input: SHA-256 over the s16le sample bytes
+     * (computed before zeroization), so an independent prover (the zk leg) can be
+     * tied to the SAME audio. On the LE target the int16 buffer is s16le. */
+    uint8_t input_hash[32];
+    SHA256((const uint8_t *)pcm, n_samples * sizeof(int16_t), input_hash);
+
     /* The device zeroizes the audio the moment the detector is done. */
     if (n_samples)
         memset(pcm, 0, n_samples * sizeof(int16_t));
@@ -85,6 +91,7 @@ int main(int argc, char **argv)
     pred.window_ms = he_window_ms(&cfg, res.frames);
     pred.counter = counter;
     memcpy(pred.config_hash, cfg_hash, 32);
+    memcpy(pred.input_hash, input_hash, 32);
 
     if (he_bundle_emit_open(&pred) != HE_PAYLOAD_OK) {
         fprintf(stderr, "error: payload encode/sign\n");

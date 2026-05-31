@@ -118,6 +118,11 @@ int main(int argc, char **argv)
     he_vision_result_t res;
     he_vision_run(&cfg, frame, (size_t)width * height, &res);
 
+    /* Bind the output to the exact input: SHA-256 over the frame bytes (before
+     * zeroization), so an independent prover can be tied to the SAME frame. */
+    uint8_t input_hash[32];
+    SHA256(frame, (size_t)width * height, input_hash);
+
     /* The device zeroizes the image the moment the detector is done. */
     memset(frame, 0, (size_t)width * height);
     free(frame);
@@ -145,6 +150,7 @@ int main(int argc, char **argv)
     pred.frames = res.tiles;
     pred.counter = counter;
     memcpy(pred.config_hash, cfg_hash, 32);
+    memcpy(pred.input_hash, input_hash, 32);
 
     if (he_bundle_emit_open(&pred) != HE_PAYLOAD_OK) {
         fprintf(stderr, "error: payload encode/sign\n");

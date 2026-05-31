@@ -204,6 +204,14 @@ TEE_Result he_attest_audio(uint32_t param_types, TEE_Param params[4])
     he_detect_result_t r;
     he_detector_run(&cfg, pcm, pcm_bytes / sizeof(int16_t), &r);
 
+    /* 1b. bind the output to the exact input: SHA-256 over the raw audio bytes,
+     * computed before zeroization, so an independent prover (the zk leg) can be
+     * tied to the SAME observation. The hash is not the audio. */
+    uint8_t input_hash[32];
+    TEE_Result hres = he_sha256(pcm, pcm_bytes, input_hash);
+    if (hres != TEE_SUCCESS)
+        return hres;
+
     /* 2. zeroize the raw audio immediately — nothing to leak afterwards. */
     TEE_MemFill(params[0].memref.buffer, 0, pcm_bytes);
 
@@ -227,6 +235,7 @@ TEE_Result he_attest_audio(uint32_t param_types, TEE_Param params[4])
     TEE_Result res = he_sha256(blob, blob_len, pred.config_hash);
     if (res != TEE_SUCCESS)
         return res;
+    memcpy(pred.input_hash, input_hash, sizeof(input_hash));
     res = he_counter_next(&pred.counter);
     if (res != TEE_SUCCESS)
         return res;

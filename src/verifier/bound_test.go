@@ -15,7 +15,7 @@ import (
 //
 //	window_ms:160, counter:7, config_hash:0x11*32}
 var golden = mustHex(
-	"a9" +
+	"aa" +
 		"0001" +
 		"0142aabb" +
 		"0202" +
@@ -25,7 +25,9 @@ var golden = mustHex(
 		"0618a0" +
 		"0707" +
 		"085820" +
-		"1111111111111111111111111111111111111111111111111111111111111111")
+		"1111111111111111111111111111111111111111111111111111111111111111" +
+		"095820" +
+		"2222222222222222222222222222222222222222222222222222222222222222")
 
 func mustHex(s string) []byte {
 	b, err := hex.DecodeString(s)
@@ -195,9 +197,11 @@ func TestVerifyRejectsStaleNonce(t *testing.T) {
 func TestVerifyRejectsEmptyNonceFailOpen(t *testing.T) {
 	// Same golden payload but with an EMPTY nonce bstr (0140, not 0142aabb).
 	emptyNonce := mustHex(
-		"a9" + "0001" + "0140" + "0202" + "03f4" + "0401" + "050a" + "0618a0" +
+		"aa" + "0001" + "0140" + "0202" + "03f4" + "0401" + "050a" + "0618a0" +
 			"0707" + "085820" +
-			"1111111111111111111111111111111111111111111111111111111111111111")
+			"1111111111111111111111111111111111111111111111111111111111111111" +
+			"095820" +
+			"2222222222222222222222222222222222222222222222222222222222222222")
 	b, _, _ := signGolden(t, emptyNonce) // valid signature, so only freshness is on trial
 	for name, opt := range map[string]Options{
 		"empty expected nonce": {ExpectedNonce: []byte{}},

@@ -42,6 +42,7 @@ const (
 	keyWindowMs   = 6
 	keyCounter    = 7
 	keyConfigHash = 8
+	keyInputHash  = 9
 )
 
 // Event classes (mirror he_detector.h).
@@ -62,6 +63,7 @@ type Predicate struct {
 	WindowMs    uint64
 	Counter     uint64
 	ConfigHash  []byte
+	InputHash   []byte
 }
 
 // EventName returns a human label for the predicate's event class.
@@ -336,7 +338,7 @@ func DecodePayload(b []byte) (*Predicate, error) {
 		return nil, fmt.Errorf("payload is not a CBOR map (major %d)", major)
 	}
 	p := &Predicate{}
-	const allKeys = (1 << 9) - 1 // keys 0..8 required
+	const allKeys = (1 << 10) - 1 // keys 0..9 required
 	var seen uint
 	haveLast := false
 	var lastKey uint64
@@ -352,7 +354,7 @@ func DecodePayload(b []byte) (*Predicate, error) {
 		}
 		lastKey = key
 		haveLast = true
-		if key < 9 {
+		if key < 10 {
 			if seen&(1<<key) != 0 {
 				return nil, fmt.Errorf("duplicate key %d", key)
 			}
@@ -377,6 +379,8 @@ func DecodePayload(b []byte) (*Predicate, error) {
 			p.Counter, err = r.readUint()
 		case keyConfigHash:
 			p.ConfigHash, err = r.readBstr()
+		case keyInputHash:
+			p.InputHash, err = r.readBstr()
 		default:
 			return nil, fmt.Errorf("unknown payload key %d", key)
 		}
