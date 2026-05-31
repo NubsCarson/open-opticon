@@ -76,12 +76,5 @@ assumptions) onto sensing:
 
 FHE is named only to dismiss.
 
-## The line that lands
-
-> *"We agree the TEE shouldn't be the root of trust — so we made it the root of
-> **capture**, made its claims publicly **recomputable** and **falsifiable**,
-> **minimized** the output so a break leaks a number not a life, and committed to
-> a migration toward your own 2-of-3."*
-
 See [`THREAT_MODEL.md`](THREAT_MODEL.md) for the precise scope and
 [`ROADMAP.md`](ROADMAP.md) for the migration path.

@@ -19,7 +19,6 @@ system {pkill -9 qemu-system 2>/dev/null; pkill -9 -f [s]oc_term.py 2>/dev/null;
 
 # secure-world console (kept connected so QEMU's SW serial attaches)
 spawn $B/soc_term.py 54321
-set sw $spawn_id
 # normal-world console — the one we drive
 spawn $B/soc_term.py 54320
 set nw $spawn_id

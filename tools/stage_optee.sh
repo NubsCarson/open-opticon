@@ -28,12 +28,12 @@ cp -v "$HE/src/optee/ta/he_audio_ta.c" "$HE/src/optee/ta/he_audio_ta.h" "$TA_DIR
 # exports PTA headers from lib/libutee/include, NOT core/include, so the TA (and
 # he_audio_ta.c) cannot see core/include/pta_remote_attestation.h. The TA already
 # does `global-incdirs-y += include`, so drop it there. (Verified necessary by a
-# real on-rig build; see ta/INTEGRATION.md.)
+# real on-rig build; see src/optee/ta/INTEGRATION.md.)
 cp -v "$OPTEE/attester/pta_remote_attestation/pta_remote_attestation.h" "$TA_DIR/include/"
 
 echo "== copying host client =="
 # he_host.c is a normal-world libteec client: it needs only he_testkey.h plus
-# the TA command ids from remote_attestation_ta.h (added per ta/INTEGRATION.md).
+# the TA command ids from remote_attestation_ta.h (added per src/optee/ta/INTEGRATION.md).
 cp -v "$HE/src/optee/host/he_host.c" "$COMMON/he_testkey.h" "$HOST_DIR/"
 
 # The PTA cmd_sign_data() body is applied by hand into remote_attestation.c per

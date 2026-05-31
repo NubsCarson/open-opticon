@@ -71,12 +71,14 @@ echo "== negative: verifier must REJECT =="
 nz="$(nonce)"
 attest "$FIX/alarm.pcm" "$nz" 100 >/dev/null
 
-# 1) Tampered payload: flip the event byte (index 8 -> the '02' after 0x02 key).
+# 1) Tampered payload: flip a byte inside the signed nonce region (index 8 is a
+#    nonce byte here, since this e2e uses a 32-byte nonce). Any mutation of the
+#    signed bytes must break the ECDSA signature.
 python3 - "$TMP/bundle.json" "$TMP/tampered.json" <<'PY'
 import json,sys
 b=json.load(open(sys.argv[1]))
 p=bytearray.fromhex(b["payload"])
-p[8]^=0xff          # corrupt a payload byte after signing
+p[8]^=0xff          # corrupt a signed payload byte
 b["payload"]=p.hex()
 json.dump(b,open(sys.argv[2],"w"))
 PY
@@ -100,7 +102,9 @@ else
     ok "replayed counter rejected"
 fi
 
-# 4) Substituted key: rewrite pub_x to a different value.
+# 4) Invalid key: perturb pub_x. Flipping one coordinate bit yields an off-curve
+#    point, which the verifier rejects before ECDSA. (A substituted *valid* key is
+#    covered by the Go unit test TestVerifyRejectsWrongKey.)
 python3 - "$TMP/bundle.json" "$TMP/wrongkey.json" <<'PY'
 import json,sys
 b=json.load(open(sys.argv[1]))
@@ -108,9 +112,9 @@ x=bytearray.fromhex(b["pub_x"]); x[0]^=0x01; b["pub_x"]=x.hex()
 json.dump(b,open(sys.argv[2],"w"))
 PY
 if "$VERIFY" --nonce "$nz" "$TMP/wrongkey.json" >/dev/null 2>&1; then
-    bad "substituted key was ACCEPTED"
+    bad "invalid (off-curve) key was ACCEPTED"
 else
-    ok "substituted key rejected"
+    ok "invalid (off-curve) key rejected"
 fi
 
 # 5) Endorsement pin mismatch (wrong device).

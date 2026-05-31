@@ -24,7 +24,8 @@ change is "tested" if you've only built the host side; say which.
 - **C:** integer-only, allocation-free in the shared `src/common/` code (it
   compiles into the TA); match the surrounding style; no warnings under
   `-Wall -Wextra -Wpedantic`.
-- **Shell:** `shellcheck`-clean, `set -euo pipefail`.
+- **Shell:** `shellcheck`-clean; `set -euo pipefail` where it fits
+  (`test/run_e2e.sh` deliberately omits `-e` because it tallies its own pass/fail).
 - Keep the wire formats (`he_payload.h`) and the byte-identical
   signer/verifier contract intact — add a test if you touch them.
 

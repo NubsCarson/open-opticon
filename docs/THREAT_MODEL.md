@@ -1,7 +1,7 @@
 # Threat model & honest scope
 
-The fastest way to lose this room is to overclaim. This document states exactly
-what Honest Ear proves, what it does not, and how we answer the hard questions.
+Overclaiming is the main risk. This document states exactly what Honest Ear
+proves, what it does not, and how the hard questions are answered.
 
 ## What remote attestation buys (and what it does not)
 
@@ -25,7 +25,7 @@ side-channel adversary. Attestation does not make a TEE side-channel-proof.
 | Device substitution ("skimmer") | Swaps in attacker's own genuine TEE | **Defended on i.MX** by the endorsement pin (verifier checks the key against the enrolled device key). On QEMU/RPi the key is shared, so this proves "genuine published code", not device identity — stated openly. |
 | Firmware modification | Patches the detector to exfiltrate | **Defended.** Measurement changes → Veraison reference-value mismatch → attestation FAIL. |
 | Replay of an old valid bundle | Re-presents a captured PASS | **Defended** within a session by the monotonic counter; across sessions by the per-challenge fresh nonce. |
-| Enclosure tamper | Opens/drills the case | **Detected (theatre-grade).** Tamper loop → key erased + TA flag latched → attestation FAIL. Production: hardware zeroization in a secure element / CAAM. |
+| Enclosure tamper | Opens/drills the case | **Detected (best-effort, software-only).** Tamper loop → key erased + TA flag latched → attestation FAIL. Production: hardware zeroization in a secure element / CAAM. |
 | Side-channel on the TEE | Cache/power/EM/fault to extract secrets | **Out of scope / mitigated by minimization** (below). |
 | Analog domain | A second mic in the room, TEMPEST, accelerometer audio recovery | **Out of scope by physics** — bypasses the TEE entirely. |
 
@@ -50,7 +50,7 @@ confidentiality claim modest, treat the TEE as **one leg of defense-in-depth**
 (reproducible firmware hash is the real anchor), and migrate sensitive paths
 toward PIR/FHE as performance allows.
 
-## Known limitations (say these first)
+## Known limitations
 
 - **Device identity only on i.MX.** QEMU/RPi use a shared embedded test key.
 - **Self-provisioned endorsement.** Anti-swap holds relative to *our* enrolment

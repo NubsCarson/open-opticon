@@ -12,10 +12,12 @@
  * so the next live challenge FAILS even though the firmware is unmodified —
  * "an opened device is cryptographically dead."
  *
- * SCOPE: this is the hackathon, theatre-grade mechanism. On a production build
- * the tamper line is wired directly to a secure element (ATECC608 / Zymkey) or
- * the i.MX CAAM so the *private key inside the chip* is zeroized in hardware,
- * with battery-backed detection that works while powered off. See THREAT_MODEL.
+ * SCOPE: this is a best-effort, software-only mechanism — a normal-world daemon
+ * overwriting and unlinking key material on disk; it cannot guarantee erasure on
+ * copy-on-write / journaled / flash filesystems. On a production build the tamper
+ * line is wired directly to a secure element (ATECC608 / Zymkey) or the i.MX CAAM
+ * so the *private key inside the chip* is zeroized in hardware, with
+ * battery-backed detection that works while powered off. See THREAT_MODEL.
  *
  * Uses the Linux GPIO character-device v2 ABI (<linux/gpio.h>); no libgpiod
  * dependency. `--simulate` exercises the breach action without hardware.

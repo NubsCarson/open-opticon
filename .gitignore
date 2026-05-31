@@ -9,3 +9,5 @@ he-tamper
 bundle.json
 dist/
 he-log.json
+__pycache__/
+*.pyc

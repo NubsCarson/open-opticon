@@ -176,7 +176,7 @@
         enclave is a ~95-byte verdict. There is no code path that exports samples — and the attestation
         proves it's that code path.</p></div>
       <div class="card"><h3>Root of capture, not root of trust</h3><p>You're not asked to trust the
-        operator, the vendor, or me. You verify a proof. The TEE is the root of <em>capture</em>;
+        operator or the vendor. You verify a proof. The TEE is the root of <em>capture</em>;
         the math is the root of trust.</p></div>
       <div class="card"><h3>Fresh every time</h3><p>A replayed or pre-recorded "all clear" is rejected:
         each verdict is bound to a verifier-chosen nonce and a counter that must strictly advance.</p></div>
@@ -188,7 +188,7 @@
 <section id="evidence">
   <div class="wrap">
     <h2><span class="num">02</span>Live evidence (real, from this laptop)</h2>
-    <p class="lead">Not slideware. These are verbatim artifacts from a real OP-TEE run on QEMU
+    <p class="lead">These are verbatim artifacts from a real OP-TEE run on QEMU
        (Arm TrustZone) and the host verifier.</p>
 
     <div class="grid c2">
@@ -233,13 +233,13 @@ $ <span class="prompt">he_host /usr/bin/clip.pcm $NONCE</span>
 <span class="c-g">PASS</span>  bound output verified (signature + freshness + anti-replay)
   event : alarm_tone   presence : 1   voice_active : false   frames : 62 (~992 ms)
 
-$ <span class="prompt">he-verify --nonce DEADBEEF…  bundle.json</span>          <span class="c-d"># stale / replayed nonce</span>
+$ <span class="prompt">he-verify --nonce DEADBEEF… bundle.json</span>                       <span class="c-d"># stale / replayed nonce</span>
 <span class="c-r">FAIL</span>  nonce mismatch (stale/replayed evidence)
 
-$ <span class="prompt">he-verify --pin-x &lt;other-device&gt; bundle.json</span>    <span class="c-d"># cloned to a different box</span>
+$ <span class="prompt">he-verify --nonce $NONCE --pin-x &lt;x&gt; --pin-y &lt;y&gt; bundle.json</span>   <span class="c-d"># cloned to a different box</span>
 <span class="c-r">FAIL</span>  public key does not match pinned endorsement
 
-$ <span class="prompt">he-verify --last-counter 1   bundle.json</span>         <span class="c-d"># replay an old verdict</span>
+$ <span class="prompt">he-verify --nonce $NONCE --last-counter 1 bundle.json</span>          <span class="c-d"># replay an old verdict</span>
 <span class="c-r">FAIL</span>  counter 1 not greater than last seen 1</pre>
     </figure>
     <p class="small" style="margin-top:12px">Full appraisal, token bytes, and the exact reproduction steps:
@@ -300,7 +300,7 @@ $ <span class="prompt">he-verify --last-counter 1   bundle.json</span>         <
        composes with the others later.</p>
     <table class="cmp">
       <tr><th>approach</th><th>real-time on a $5–60 board</th><th>hides the raw audio</th><th>proves <em>which</em> code ran</th><th>verdict</th></tr>
-      <tr><td><span class="mono">TEE + attestation</span></td><td>yes, integer detector in-enclave</td><td>yes, zeroized in the TA</td><td>yes, that's literally attestation</td><td><span class="pill ok">chosen</span></td></tr>
+      <tr><td><span class="mono">TEE + attestation</span></td><td>yes, integer detector in-enclave</td><td>yes, zeroized in the TA</td><td>yes — that is what attestation proves</td><td><span class="pill ok">chosen</span></td></tr>
       <tr><td><span class="mono">ZK proof of inference</span></td><td>not for live audio yet (orders of magnitude too slow)</td><td>yes</td><td>yes, of the computation</td><td><span class="pill warn">future: prove the TEE's claim</span></td></tr>
       <tr><td><span class="mono">FHE</span></td><td>no, far too slow for streaming</td><td>yes</td><td>no, not by itself</td><td><span class="pill warn">not viable now</span></td></tr>
     </table>
