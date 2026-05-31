@@ -1,284 +1,299 @@
 #!/usr/bin/env python3
-"""Render the open-opticon terminal walkthrough to an mp4 + gif (+ an asciinema cast).
+"""Render the open-opticon walkthrough — a guided, 16:9 explainer.
 
-No screen recorder, no TTY, no network: the scene outputs are the *real* captured
-stdout of the host tools and the QEMU drivers; this just paints them into a
-terminal canvas with a typing effect so the flow is legible. Tokyo Night Storm
-palette. Needs only Pillow + ffmpeg.
+Each step shows the same chrome, a plain-English caption, a terminal card with
+the real command + curated real output, and a one-line takeaway. The values are
+the actual outputs of the tools (Veraison affirming, alarm_tone / ~992 ms, the
+FAIL reasons, TEE_ERROR_SECURITY 0xffff000f); this just composes them into a
+legible video. Matches the site's palette. Needs only Pillow + ffmpeg.
 
     python3 tools/render_video.py --nonce <hex> --out docs/assets
 
-Frames are written to a temp dir and muxed by ffmpeg; the .cast is emitted too so
-it can be replayed with `asciinema play`.
+Frames stream to a temp dir (held frames are hard-linked, not re-encoded) and are
+muxed by ffmpeg into walkthrough.mp4 + .gif; a poster and an asciinema .cast of
+the raw commands/outputs are emitted too.
 """
 import argparse
 import json
 import os
-import re
 import shutil
 import subprocess
-import sys
 import tempfile
 
 from PIL import Image, ImageDraw, ImageFont
 
-# --- Tokyo Night Storm palette (matches the rest of the rice) --------------
-BG       = (36, 40, 59)      # #24283b
-BG_BAR   = (26, 29, 43)      # title bar
-FG       = (192, 202, 245)   # #c0caf5
-DIM      = (86, 95, 137)     # #565f89  comments
-PROMPT   = (125, 207, 255)   # #7dcfff
-ANSI = {                     # SGR fg code -> rgb
-    30: (54, 58, 79),   31: (247, 118, 142), 32: (158, 206, 106),
-    33: (224, 175, 104), 34: (122, 162, 247), 35: (187, 154, 247),
-    36: (125, 207, 255), 37: (192, 202, 245),
-    90: (86, 95, 137),  91: (247, 118, 142), 92: (158, 206, 106),
-    93: (224, 175, 104), 94: (122, 162, 247), 95: (187, 154, 247),
-    96: (125, 207, 255), 97: (255, 255, 255),
+S = 2                       # supersample; output is downscaled to 1280x720
+W, H = 1280 * S, 720 * S
+M = 64 * S                  # page margin
+FPS = 30
+
+C = {                       # palette (matches docs/index.html)
+    "bg": (9, 9, 11), "card": (16, 16, 20), "border": (38, 38, 43),
+    "fg": (250, 250, 250), "muted": (161, 161, 170), "muted2": (113, 113, 122),
+    "green": (74, 222, 128), "red": (248, 113, 113), "blue": (96, 165, 250),
+    "amber": (251, 191, 36), "violet": (167, 139, 250),
 }
-DOTS = [(247, 118, 142), (224, 175, 104), (158, 206, 106)]  # traffic lights
-
-FONT_R = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf"
-FONT_B = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf"
-
-SGR = re.compile(r"\x1b\[([0-9;]*)m")
+DEJ = "/usr/share/fonts/truetype/dejavu"
 
 
-def parse_ansi(line):
-    """Split a line into (text, color, bold) runs, honouring a subset of SGR."""
-    runs, pos, color, bold = [], 0, FG, False
-    for m in SGR.finditer(line):
-        if m.start() > pos:
-            runs.append((line[pos:m.start()], color, bold))
-        for code in (int(c) if c else 0 for c in m.group(1).split(";")):
-            if code == 0:
-                color, bold = FG, False
-            elif code == 1:
-                bold = True
-            elif code in ANSI:
-                color = ANSI[code]
-        pos = m.end()
-    if pos < len(line):
-        runs.append((line[pos:], color, bold))
-    return runs or [("", FG, False)]
+def font(name, px):
+    return ImageFont.truetype(f"{DEJ}/{name}.ttf", px * S)
 
 
-class Term:
-    def __init__(self, cols=98, rows=32, fs=20, scale=2):
-        self.cols, self.rows, self.scale = cols, rows, scale
-        self.fr = ImageFont.truetype(FONT_R, fs * scale)
-        self.fb = ImageFont.truetype(FONT_B, fs * scale)
-        self.cw = round(self.fr.getlength("M"))
-        asc, desc = self.fr.getmetrics()
-        self.ch = asc + desc + 6 * scale
-        self.pad = 18 * scale
-        self.bar = 34 * scale
-        self.W = self.pad * 2 + self.cw * cols
-        self.H = self.bar + self.pad * 2 + self.ch * rows
-        self.lines = []          # list of raw strings (may carry ANSI)
-        self.frames = []
-        self.cast = []           # asciinema v2 events
-        self.t = 0.0
-
-    # -- frame capture -------------------------------------------------------
-    def _emit_cast(self, text):
-        self.cast.append([round(self.t, 3), "o", text])
-
-    def snap(self, hold=1, cursor=True):
-        img = Image.new("RGB", (self.W, self.H), BG)
-        d = ImageDraw.Draw(img)
-        d.rectangle([0, 0, self.W, self.bar], fill=BG_BAR)
-        for i, c in enumerate(DOTS):
-            cx = self.pad + i * 22 * self.scale + 8 * self.scale
-            r = 6 * self.scale
-            cy = self.bar // 2
-            d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=c)
-        title = "open-opticon walkthrough"
-        tw = self.fb.getlength(title)
-        d.text(((self.W - tw) / 2, (self.bar - self.ch) / 2 + 2 * self.scale),
-               title, font=self.fb, fill=DIM)
-        y = self.bar + self.pad
-        view = self.lines[-self.rows:]
-        for li, raw in enumerate(view):
-            x = self.pad
-            for text, color, bold in parse_ansi(raw):
-                d.text((x, y), text, font=self.fb if bold else self.fr, fill=color)
-                x += self.cw * len(text)
-            if cursor and li == len(view) - 1:
-                d.rectangle([x + 2, y + 2 * self.scale, x + self.cw,
-                             y + self.ch - 2 * self.scale], fill=PROMPT)
-            y += self.ch
-        for _ in range(max(1, hold)):
-            self.frames.append(img)
-        self.t += max(1, hold) / FPS
-
-    # -- authoring primitives ------------------------------------------------
-    def type(self, cmd, prompt="honest-ear $ "):
-        """Type a command char-by-char on a fresh prompt line."""
-        self.lines.append(prompt)
-        self._emit_cast(prompt)
-        for ch in cmd:
-            self.lines[-1] += ch
-            self._emit_cast(ch)
-            self.snap(hold=2, cursor=True)
-        self.snap(hold=8)
-
-    def out(self, text, per_line=2):
-        for ln in text.rstrip("\n").split("\n"):
-            self.lines.append(ln)
-            self._emit_cast(ln + "\r\n")
-            self.snap(hold=per_line, cursor=False)
-
-    def blank(self, n=1):
-        for _ in range(n):
-            self.lines.append("")
-        self.snap(hold=2, cursor=False)
-
-    def comment(self, text):
-        self.lines.append(f"\x1b[90m{text}\x1b[0m")
-        self._emit_cast(text + "\r\n")
-        self.snap(hold=10, cursor=False)
-
-    def card(self, big, small_lines, hold=42):
-        """A centred title card (used for open/close)."""
-        img = Image.new("RGB", (self.W, self.H), BG)
-        d = ImageDraw.Draw(img)
-        fbig = ImageFont.truetype(FONT_B, 46 * self.scale)
-        bw = fbig.getlength(big)
-        cy = self.H // 2 - 70 * self.scale
-        d.text(((self.W - bw) / 2, cy), big, font=fbig, fill=PROMPT)
-        yy = cy + 70 * self.scale
-        for txt, col in small_lines:
-            f = self.fr
-            w = f.getlength(txt)
-            d.text(((self.W - w) / 2, yy), txt, font=f, fill=col)
-            yy += self.ch + 4 * self.scale
-        for _ in range(hold):
-            self.frames.append(img)
-        self.t += hold / FPS
-
-    def hold(self, n):
-        self.snap(hold=n, cursor=False)
+F = {
+    "eyebrow": font("DejaVuSans-Bold", 12), "caption": font("DejaVuSans", 25),
+    "title": font("DejaVuSans-Bold", 60), "subtitle": font("DejaVuSans", 21),
+    "mono": font("DejaVuSansMono", 17), "monob": font("DejaVuSansMono-Bold", 17),
+    "take": font("DejaVuSans", 17), "brand": font("DejaVuSansMono-Bold", 14),
+    "chap": font("DejaVuSansMono", 13),
+}
+MONO_W = round(F["mono"].getlength("M"))
+MONO_LH = 27 * S
 
 
-FPS = 24
+def canvas():
+    img = Image.new("RGB", (W, H), C["bg"])
+    return img, ImageDraw.Draw(img)
 
 
-def read(p):
-    with open(p) as f:
-        return f.read()
+def tracked(d, xy, s, fnt, fill, extra):
+    """Draw text with letter spacing (PIL has no native tracking)."""
+    x, y = xy
+    for ch in s:
+        d.text((x, y), ch, font=fnt, fill=fill)
+        x += d.textlength(ch, font=fnt) + extra
 
 
-def trim(text, keep_head=None, keep_tail=None, drop_re=None):
-    lines = text.rstrip("\n").split("\n")
-    if drop_re:
-        lines = [l for l in lines if not re.search(drop_re, l)]
-    if keep_head is not None and keep_tail is not None and len(lines) > keep_head + keep_tail + 1:
-        lines = lines[:keep_head] + ["\x1b[90m    ...\x1b[0m"] + lines[-keep_tail:]
-    return "\n".join(lines)
+def wrap(s, fnt, max_w):
+    words, lines, cur = s.split(), [], ""
+    for w in words:
+        t = (cur + " " + w).strip()
+        if F["caption"].getlength(t) <= max_w or not cur:
+            cur = t
+        else:
+            lines.append(cur)
+            cur = w
+    if cur:
+        lines.append(cur)
+    return lines
 
 
-def build(caps, nonce):
-    t = Term()
-    short_nonce = nonce[:12] + "…" + nonce[-6:]
+def chrome(d, chapter, step):
+    d.text((M, 26 * S), "open-opticon", font=F["brand"], fill=C["fg"])
+    bw = d.textlength("open-opticon", font=F["brand"])
+    d.text((M + bw, 26 * S), "/", font=F["brand"], fill=C["muted2"])
+    if chapter:
+        label = f"{chapter}   {step}/5"
+        d.text((W - M - d.textlength(label, font=F["chap"]), 28 * S),
+               label, font=F["chap"], fill=C["muted2"])
+    d.line([(0, 60 * S), (W, 60 * S)], fill=C["border"], width=1)
 
-    t.card("open-opticon",
-           [("a surveillance device that proves its own restraint", FG),
-            ("", FG),
-            ("verifiable · non-panopticon · OP-TEE remote attestation", DIM)])
 
-    t.comment("# 1) the whole host pipeline: detector, in-enclave signing, verifier, tamper")
-    t.type("make test")
-    t.out(trim(read(f"{caps}/01_make_test.txt"), keep_head=6, keep_tail=4))
-    t.blank()
+def seglen(segs):
+    return sum(len(t) for t, _ in segs)
 
-    t.comment("# 2) a REAL OP-TEE attestation on Arm TrustZone (QEMU) — Veraison's verdict")
-    t.out(read(f"{caps}/ear.txt"))
-    t.blank()
 
-    t.comment("# 3) bound audio output, signed INSIDE the enclave (raw PCM never leaves the TA)")
-    t.type(f"he_host /usr/bin/clip.pcm {short_nonce}      # run in the guest TEE")
-    t.out(read(f"{caps}/02_bundle_display.txt"))
-    t.out("\x1b[90m# pub_x/pub_y == the key Veraison just attested\x1b[0m")
-    t.blank()
+def draw_mono(d, x, y, segs, bold=False):
+    fnt = F["monob"] if bold else F["mono"]
+    for t, col in segs:
+        d.text((x, y), t, font=fnt, fill=C[col])
+        x += MONO_W * len(t)
 
-    t.comment("# 4) verify the bound output on the host")
-    t.type(f"he-verify --nonce {short_nonce} bundle.json")
-    t.out(read(f"{caps}/03_verify_pass.txt"))
-    t.blank()
 
-    t.comment("# 5) it rejects tampered / replayed / cloned evidence")
-    t.type(f"he-verify --nonce DEADBEEF… bundle.json        # stale nonce")
-    t.out(read(f"{caps}/04_wrong_nonce.txt"))
-    t.type(f"he-verify --pin-x <other-device> bundle.json   # cloned to another box")
-    t.out(read(f"{caps}/06_clone_fail.txt"))
-    t.type(f"he-verify --last-counter 1 bundle.json          # replay")
-    t.out(trim(read(f"{caps}/07_replay_fail.txt"), keep_head=1, keep_tail=0))
-    t.blank()
+def compose_step(sc, typed, shown, take):
+    """One step frame at a given reveal state."""
+    img, d = canvas()
+    chrome(d, sc["chapter"], sc["step"])
+    tracked(d, (M, 84 * S), sc["eyebrow"], F["eyebrow"], C["muted2"], 2 * S)
+    cy = 112 * S
+    for ln in wrap(sc["caption"], F["caption"], W - 2 * M):
+        d.text((M, cy), ln, font=F["caption"], fill=C["fg"])
+        cy += 34 * S
 
-    t.comment("# 6) Tier 3 — open the enclosure lid: the enclave refuses to attest")
-    t.out(read(f"{caps}/tamper.txt"))
-    t.blank()
-    t.hold(20)
+    # terminal card
+    tx0, ty0, tx1, ty1 = M, 226 * S, W - M, 588 * S
+    d.rounded_rectangle([tx0, ty0, tx1, ty1], radius=10 * S,
+                        fill=C["card"], outline=C["border"], width=1)
+    d.text((tx0 + 18 * S, ty0 + 14 * S), sc["header"], font=F["chap"], fill=C["muted2"])
+    d.line([(tx0, ty0 + 42 * S), (tx1, ty0 + 42 * S)], fill=C["border"], width=1)
 
-    t.card("proven on a laptop",
-           [("attest the firmware → bind a minimal predicate → verify", FG),
-            ("", FG),
-            ("github.com/NubsCarson/open-opticon", PROMPT)])
-    return t
+    x, y = tx0 + 18 * S, ty0 + 60 * S
+    if sc.get("command") is not None:
+        cmd = sc["command"][:typed]
+        d.text((x, y), "$ ", font=F["monob"], fill=C["muted2"])
+        d.text((x + MONO_W * 2, y), cmd, font=F["mono"], fill=C["fg"])
+        if typed < len(sc["command"]):  # block cursor while typing
+            cx = x + MONO_W * (2 + len(cmd))
+            d.rectangle([cx, y + 3 * S, cx + MONO_W, y + MONO_LH - 4 * S], fill=C["blue"])
+        y += int(MONO_LH * 1.4)
+    for seg in sc["out"][:shown]:
+        if seg == []:
+            y += MONO_LH // 2
+            continue
+        draw_mono(d, x, y, seg)
+        y += MONO_LH
+
+    if take and sc.get("take"):
+        col, txt = sc["take"]
+        ty = ty1 + 26 * S
+        d.ellipse([M, ty + 8 * S, M + 8 * S, ty + 16 * S], fill=C[col])
+        d.text((M + 18 * S, ty), txt, font=F["take"], fill=C["muted"])
+    return img
+
+
+def compose_card(title, subs):
+    img, d = canvas()
+    tw = d.textlength(title, font=F["title"])
+    d.text(((W - tw) / 2, H / 2 - 96 * S), title, font=F["title"], fill=C["fg"])
+    y = H / 2 + 16 * S
+    for i, s in enumerate(subs):
+        col = C["muted"] if i == 0 else C["muted2"]
+        fnt = F["subtitle"]
+        d.text(((W - d.textlength(s, font=fnt)) / 2, y), s, font=fnt, fill=col)
+        y += 36 * S
+    return img
+
+
+class Frames:
+    def __init__(self, d):
+        self.d, self.i = d, 0
+
+    def add(self, img, seconds):
+        n = max(1, round(seconds * FPS))
+        p0 = f"{self.d}/f{self.i:06d}.png"
+        img.save(p0)
+        self.i += 1
+        for _ in range(n - 1):
+            p = f"{self.d}/f{self.i:06d}.png"
+            try:
+                os.link(p0, p)
+            except OSError:
+                img.save(p)
+            self.i += 1
+
+
+def render_step(fr, sc):
+    cmd = sc.get("command")
+    if cmd is not None:
+        for k in range(len(cmd) + 1):       # typing
+            fr.add(compose_step(sc, k, 0, False), 0.9 / max(1, len(cmd)))
+        fr.add(compose_step(sc, len(cmd), 0, False), 0.4)
+    full = seglen  # noqa: F841 (kept for clarity below)
+    for n in range(1, len(sc["out"]) + 1):  # reveal output line by line
+        fr.add(compose_step(sc, len(cmd) if cmd else 0, n, False), 0.45)
+    last = len(sc["out"])
+    fr.add(compose_step(sc, len(cmd) if cmd else 0, last, True), 2.6)
+
+
+def steps(nonce):
+    n = nonce[:10] + "…"
+    return [
+        {"chapter": "ATTEST", "step": 1, "eyebrow": "STEP 1 — ATTEST",
+         "caption": "First, prove the firmware is the exact published code.",
+         "header": "veraison · firmware attestation",
+         "command": "optee_remote_attestation",
+         "out": [[("# PSA/COSE token  →  Veraison", "muted2")], [],
+                 [("ear.status            ", "muted"), ("affirming", "green")],
+                 [("executables=", "muted"), ("2", "green"), ("  instance-identity=", "muted"),
+                  ("2", "green"), ("  hardware=", "muted"), ("2", "green")]],
+         "take": ("green", "Veraison confirms genuine, unmodified firmware.")},
+        {"chapter": "DETECT & BIND", "step": 2, "eyebrow": "STEP 2 — DETECT & BIND",
+         "caption": "The detector runs inside the enclave. The raw audio is processed and discarded there.",
+         "header": "he_host · in-enclave bound output",
+         "command": f"he_host /usr/bin/clip.pcm {n}",
+         "out": [[("{", "muted")],
+                 [('  "schema"', "blue"), (": ", "muted"), ('"honest-ear/bound-output/v1"', "amber")],
+                 [('  "payload"', "blue"), (": ", "muted"), ('"a9000101…ab73f9d0"', "amber")],
+                 [('  "sig"', "blue"), (":     ", "muted"), ('"a4a30c41…7fe799af"', "amber")],
+                 [('  "pub_x"', "blue"), (":   ", "muted"), ('"30a0424c…0aafec3e"', "amber")],
+                 [("}", "muted")]],
+         "take": ("blue", "Only a ~95-byte signed verdict leaves. The audio never does.")},
+        {"chapter": "VERIFY", "step": 3, "eyebrow": "STEP 3 — VERIFY",
+         "caption": "Anyone can check the verdict: signature, firmware identity, freshness, anti-replay.",
+         "header": "he-verify",
+         "command": f"he-verify --nonce {n} bundle.json",
+         "out": [[("PASS", "green"), ("  bound output verified", "fg")],
+                 [("  event ", "muted"), ("alarm_tone", "fg"),
+                  ("   ~992 ms   voice: false", "muted2")]],
+         "take": ("green", "PASS = genuine firmware, fresh challenge, not replayed.")},
+        {"chapter": "REJECTS FORGERY", "step": 4, "eyebrow": "STEP 4 — REJECTS FORGERY",
+         "caption": "Tampered, stale, cloned, or replayed evidence is refused.",
+         "header": "he-verify · negative cases", "command": None,
+         "out": [[("FAIL", "red"), ("  nonce mismatch (stale / replayed)", "muted")],
+                 [("FAIL", "red"), ("  public key ≠ pinned device (cloned)", "muted")],
+                 [("FAIL", "red"), ("  counter not greater than last seen (replay)", "muted")]],
+         "take": ("red", "Every forgery path turns the verdict red.")},
+        {"chapter": "TAMPER = DEAD", "step": 5, "eyebrow": "STEP 5 — TAMPER = DEAD",
+         "caption": "Open the enclosure and the enclave refuses to attest — even with correct firmware.",
+         "header": "he_host · after the lid opens",
+         "command": "he_host --trip   &&   he_host clip.pcm $NONCE",
+         "out": [[("tamper flag latched", "amber")],
+                 [("FAIL", "red"), ("  attest_audio: ", "muted"), ("0xffff000f", "red"),
+                  ("  TEE_ERROR_SECURITY", "muted")]],
+         "take": ("red", "An opened device is cryptographically dead.")},
+    ]
+
+
+def write_cast(path, scs):
+    with open(path, "w") as f:
+        f.write(json.dumps({"version": 2, "width": 96, "height": 28,
+                            "title": "open-opticon walkthrough"}) + "\n")
+        t = 0.0
+        for sc in scs:
+            if sc.get("command"):
+                t += 0.4
+                f.write(json.dumps([round(t, 2), "o", "$ " + sc["command"] + "\r\n"]) + "\n")
+            for seg in sc["out"]:
+                t += 0.3
+                line = "".join(txt for txt, _ in seg)
+                f.write(json.dumps([round(t, 2), "o", line + "\r\n"]) + "\n")
+            t += 0.6
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--caps", default="/tmp/demo_caps")
     ap.add_argument("--nonce", required=True)
     ap.add_argument("--out", default="docs/assets")
     args = ap.parse_args()
     os.makedirs(args.out, exist_ok=True)
+    scs = steps(args.nonce)
 
-    t = build(args.caps, args.nonce)
-    print(f"rendered {len(t.frames)} frames @ {FPS}fps "
-          f"= {len(t.frames)/FPS:.1f}s  ({t.W}x{t.H})")
+    tmp = tempfile.mkdtemp(prefix="oo_wt_")
+    fr = Frames(tmp)
+    intro = compose_card("open-opticon",
+                         ["A sensor that proves what it isn't doing.",
+                          "verifiable · non-panopticon · OP-TEE remote attestation"])
+    fr.add(intro, 3.2)
+    for sc in scs:
+        render_step(fr, sc)
+    fr.add(compose_card("attest → bind → verify",
+                        ["Proven on a laptop. No special hardware.",
+                         "github.com/NubsCarson/open-opticon"]), 4.0)
 
-    tmp = tempfile.mkdtemp(prefix="oo_frames_")
+    print(f"{fr.i} frames @ {FPS}fps = {fr.i / FPS:.1f}s  (render {W}x{H} → 1280x720)")
+    poster = os.path.join(args.out, "walkthrough_poster.png")
+    intro.resize((W // S, H // S)).save(poster)
+    mp4 = os.path.join(args.out, "walkthrough.mp4")
+    gif = os.path.join(args.out, "walkthrough.gif")
+    pal = f"{tmp}/pal.png"
+    src = ["-framerate", str(FPS), "-i", f"{tmp}/f%06d.png"]
     try:
-        for i, fr in enumerate(t.frames):
-            fr.save(f"{tmp}/f{i:05d}.png")
-        # poster = the opening title card, scaled like the video
-        poster = os.path.join(args.out, "walkthrough_poster.png")
-        t.frames[0].resize((t.W // 2, t.H // 2)).save(poster)
-        mp4 = os.path.join(args.out, "walkthrough.mp4")
-        gif = os.path.join(args.out, "walkthrough.gif")
-        pal = f"{tmp}/pal.png"
-        subprocess.run(
-            ["ffmpeg", "-y", "-framerate", str(FPS), "-i", f"{tmp}/f%05d.png",
-             "-vf", "scale=iw/2:ih/2:flags=lanczos", "-c:v", "libx264",
-             "-pix_fmt", "yuv420p", "-movflags", "+faststart", mp4],
-            check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        # Compact GIF fallback (mp4 is the primary): drop to 7fps + 600px + a
-        # small palette so a 40s clip stays ~2 MB, not tens.
-        gif_vf = "fps=7,scale=600:-1:flags=lanczos"
-        subprocess.run(
-            ["ffmpeg", "-y", "-framerate", str(FPS), "-i", f"{tmp}/f%05d.png",
-             "-vf", f"{gif_vf},palettegen=max_colors=80", pal],
-            check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        subprocess.run(
-            ["ffmpeg", "-y", "-framerate", str(FPS), "-i", f"{tmp}/f%05d.png",
-             "-i", pal, "-lavfi",
-             f"{gif_vf}[x];[x][1:v]paletteuse=dither=none", gif],
-            check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(["ffmpeg", "-y", *src, "-vf", "scale=1280:720:flags=lanczos",
+                        "-c:v", "libx264", "-pix_fmt", "yuv420p", "-movflags", "+faststart", mp4],
+                       check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        gif_vf = "fps=8,scale=720:-1:flags=lanczos"
+        subprocess.run(["ffmpeg", "-y", *src, "-vf", f"{gif_vf},palettegen=max_colors=96", pal],
+                       check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(["ffmpeg", "-y", *src, "-i", pal, "-lavfi",
+                        f"{gif_vf}[x];[x][1:v]paletteuse=dither=bayer", gif],
+                       check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
     cast = os.path.join(args.out, "walkthrough.cast")
-    with open(cast, "w") as f:
-        f.write(json.dumps({"version": 2, "width": t.cols, "height": t.rows,
-                            "title": "open-opticon walkthrough"}) + "\n")
-        for ev in t.cast:
-            f.write(json.dumps(ev) + "\n")
-
+    write_cast(cast, scs)
     for p in (poster, mp4, gif, cast):
-        print(f"  wrote {p}  ({os.path.getsize(p)//1024} KB)")
+        print(f"  wrote {p}  ({os.path.getsize(p) // 1024} KB)")
 
 
 if __name__ == "__main__":
