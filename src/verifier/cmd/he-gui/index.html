@@ -6,15 +6,15 @@
 <title>open-opticon — the mic that proves what it heard</title>
 <style>
   :root{
-    --bg:#0a0e14; --bg2:#0f1620; --card:#131c28; --line:#1f2b3a;
-    --txt:#e7eef7; --dim:#8aa0b6; --accent:#2dd4bf; --good:#34d399; --warn:#fbbf24; --bad:#f87171;
+    --bg:#09090b; --bg2:#101014; --card:#0b0b0e; --line:#26262b;
+    --txt:#fafafa; --dim:#a1a1aa; --accent:#60a5fa; --good:#4ade80; --warn:#fbbf24; --bad:#f87171;
   }
   *{box-sizing:border-box}
   html,body{height:100%}
   body{
-    margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
-    color:var(--txt);
-    background:radial-gradient(1200px 800px at 50% -10%, #14202e 0%, var(--bg) 60%);
+    margin:0; font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    color:var(--txt); letter-spacing:-.011em;
+    background:var(--bg);
     display:flex; flex-direction:column; align-items:center; min-height:100%;
     -webkit-font-smoothing:antialiased;
   }
@@ -31,14 +31,13 @@
   .pulse{position:absolute; border-radius:50%; border:2px solid var(--accent); opacity:0; }
   .orb{
     width:120px; height:120px; border-radius:50%;
-    background:linear-gradient(160deg,#1b2734,#0e1620);
+    background:var(--card);
     border:1px solid var(--line); display:grid; place-items:center;
-    box-shadow:0 10px 40px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.04);
-    transition:transform .15s ease, box-shadow .3s ease;
+    transition:transform .15s ease, box-shadow .3s ease, border-color .3s ease;
   }
   .orb svg{width:46px; height:46px; fill:none; stroke:var(--dim); stroke-width:2; transition:stroke .3s}
-  .orb-wrap:hover .orb{transform:translateY(-2px)}
-  body.live .orb{box-shadow:0 0 0 1px var(--accent), 0 0 60px rgba(45,212,191,.25)}
+  .orb-wrap:hover .orb{transform:translateY(-2px); border-color:#3a3a40}
+  body.live .orb{border-color:var(--accent); box-shadow:0 0 0 1px var(--accent)}
   body.live .orb svg{stroke:var(--accent)}
   body.live .pulse{animation:pulse 2.2s ease-out infinite}
   @keyframes pulse{0%{inset:40px;opacity:.5}100%{inset:-6px;opacity:0}}
@@ -57,8 +56,7 @@
     opacity:0; transform:translateY(8px); transition:opacity .35s ease, transform .35s ease;
   }
   .card.show{opacity:1; transform:none}
-  .emoji{font-size:40px; line-height:1}
-  .verdict{font-size:21px; font-weight:650; margin-top:8px}
+  .verdict{font-size:21px; font-weight:650; margin-top:2px}
   .pill{display:inline-flex; align-items:center; gap:7px; margin-top:12px; padding:6px 12px; border-radius:999px;
     font-size:13px; font-weight:600; background:rgba(52,211,153,.12); color:var(--good); border:1px solid rgba(52,211,153,.25)}
   .pill.bad{background:rgba(248,113,113,.12); color:var(--bad); border-color:rgba(248,113,113,.25)}
@@ -109,7 +107,6 @@
     <div class="meter" id="meter"></div>
 
     <section class="card" id="card">
-      <div class="emoji" id="emoji">🎧</div>
       <div class="verdict" id="verdict">Ready</div>
       <div class="pill" id="pill"><span class="dot"></span><span id="pilltext">verified</span></div>
       <div class="leak">Audio captured → analyzed → <b>discarded</b>. Only the result above left the device.</div>
@@ -121,8 +118,8 @@
       <div class="tamper" id="tamperRow" style="display:none">
         <div class="tnote">Don’t trust it — try to break it. These run the real verifier on the signed claim:</div>
         <div class="tbtns">
-          <button class="tbtn" id="tamperBtn">🔬 Tamper one byte</button>
-          <button class="tbtn" id="replayBtn">♻️ Replay (stale challenge)</button>
+          <button class="tbtn" id="tamperBtn">Tamper one byte</button>
+          <button class="tbtn" id="replayBtn">Replay (stale challenge)</button>
         </div>
         <div class="tverdict" id="tverdict"></div>
       </div>
@@ -138,7 +135,7 @@
 
 <script>
 const orb=document.getElementById('orb'), hint=document.getElementById('hint'),
-      card=document.getElementById('card'), emoji=document.getElementById('emoji'),
+      card=document.getElementById('card'),
       verdict=document.getElementById('verdict'), pill=document.getElementById('pill'),
       pilltext=document.getElementById('pilltext'), proof=document.getElementById('proof'),
       meter=document.getElementById('meter'), err=document.getElementById('err'),
@@ -152,9 +149,9 @@ const TARGET_RATE=16000, WINDOW_SEC=1.5;
 let listening=false, ctx, stream, source, processor, analyser, acc=[], accLen=0, raf;
 
 const MAP={
-  alarm_tone:{e:'🔔',t:'Alarm tone detected'},
-  voice:{e:'🗣️',t:'Voice present'},
-  none:{e:'🤫',t:'Quiet — nothing flagged'},
+  alarm_tone:'Alarm tone detected',
+  voice:'Voice present',
+  none:'Quiet — nothing flagged',
 };
 
 function setState(live){
@@ -228,8 +225,7 @@ function randNonceHex(){const a=new Uint8Array(32); crypto.getRandomValues(a);
 
 function render(j){
   err.textContent='';
-  const m=MAP[j.event]||{e:'❔',t:j.event||'—'};
-  emoji.textContent=m.e; verdict.textContent=m.t;
+  verdict.textContent = MAP[j.event] || j.event || '—';
   if(j.verified){
     pill.className='pill'; pilltext.textContent='Verified · fresh challenge · signature valid';
   }else{

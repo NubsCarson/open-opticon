@@ -230,8 +230,8 @@ func (s *server) handleVerifyPage(w http.ResponseWriter, r *http.Request) {
 const verifyPage = `<!DOCTYPE html><html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>open-opticon — verify</title><style>
-:root{--bg:#1a1b26;--fg:#c0caf5;--dim:#787c99;--g:#9ece6a;--r:#f7768e;--b:#7dcfff}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);
+:root{--bg:#09090b;--fg:#fafafa;--dim:#a1a1aa;--g:#4ade80;--r:#f87171;--b:#60a5fa}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);letter-spacing:-.011em;
 font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
 min-height:100vh;display:flex;flex-direction:column;align-items:center;
 justify-content:center;text-align:center;padding:28px}
@@ -239,7 +239,7 @@ h1{font-size:1.1rem;color:var(--dim);font-weight:600;letter-spacing:.02em;margin
 #card{font-size:4.6rem;font-weight:800;line-height:1;margin:6px 0}
 #sub{font-size:1.05rem;color:var(--fg);margin-top:6px;min-height:1.4em}
 #why{color:var(--dim);font-size:.9rem;margin-top:18px;max-width:30ch}
-.spin{width:46px;height:46px;border-radius:50%;border:4px solid #2a2e44;
+.spin{width:46px;height:46px;border-radius:50%;border:4px solid #26262b;
 border-top-color:var(--b);animation:s 1s linear infinite}@keyframes s{to{transform:rotate(360deg)}}
 .foot{position:fixed;bottom:16px;color:var(--dim);font-size:.75rem}
 .mono{font-family:ui-monospace,Menlo,Consolas,monospace}</style></head><body>
