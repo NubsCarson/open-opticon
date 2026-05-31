@@ -440,9 +440,21 @@ signer-id         : rLsRx+TaIXIFUjzkzhokWuGi…</pre>
 <span class="cg">  ALL HOST TESTS PASSED</span>
 <span class="cp">$</span> make repro    <span class="cd"># build twice in two trees, assert byte-identical artifacts</span>
 <span class="cg">  REPRODUCIBLE</span>  all host artifacts are byte-identical
-<span class="cp">$</span> make cross    <span class="cd"># cross-compile the verifier for Raspberry Pi (arm64 / armv7)</span></pre>
+<span class="cp">$</span> make cross    <span class="cd"># cross-compile the verifier for Raspberry Pi (arm64 / armv7)</span>
+<span class="cp">$</span> make sites    <span class="cd"># launch the interactive apps + print their URLs</span></pre>
     </figure>
-    <p class="small" style="margin-top:12px">The OP-TEE/QEMU attestation (Docker, ~40 GB) is the full
+    <p class="sub" style="margin:26px 0 16px">The interactive apps are dynamic servers (they need the Go
+       backend, so they run locally rather than on this static site). <span class="mono">make sites</span>
+       starts all three and prints the links:</p>
+    <div class="grid c3">
+      <div class="card"><div class="idx">localhost:8095</div><h3>Click-to-listen</h3><p>Tap the mic;
+         it shows the verified verdict and lets you try to forge it in the browser.</p></div>
+      <div class="card"><div class="idx">localhost:8090</div><h3>Verification server</h3><p>Mint a fresh
+         challenge, then sign it on the device and watch it verify.</p></div>
+      <div class="card"><div class="idx">localhost:8090/v</div><h3>Phone verifier</h3><p>Scan the QR; the
+         phone shows the live PASS/FAIL verdict for that challenge.</p></div>
+    </div>
+    <p class="small" style="margin-top:14px">The OP-TEE/QEMU attestation (Docker, ~40 GB) is the full
        reference in <a class="lnk" href="https://github.com/NubsCarson/open-opticon/blob/main/docs/RUNBOOK.md">RUNBOOK.md</a>; reproducibility details in
        <a class="lnk" href="https://github.com/NubsCarson/open-opticon/blob/main/docs/REPRODUCIBLE.md">REPRODUCIBLE.md</a>.</p>
   </div>
