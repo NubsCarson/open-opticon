@@ -4,6 +4,7 @@
 #   make sim        - build the host simulators + CLIs
 #   make e2e        - audio end-to-end pipeline;  make vision-e2e - vision pipeline
 #   make port-diff  - C detector == Rust zk port, differential test (needs cargo)
+#   make demo       - whole thesis on one clip: TEE + ZK + on-chain 2-of-2 agree
 #   make gui/sites/fuzz/repro/cross - GUI, static site, fuzzing, reproducible-build,
 #                     Raspberry Pi cross-compile
 #   make clean      - remove build artifacts
@@ -14,7 +15,7 @@
 
 VERIFIER = src/verifier
 
-.PHONY: test units sim verifier-test e2e vision-e2e port-diff tamper-test gui sites fuzz repro cross clean
+.PHONY: test units sim verifier-test e2e vision-e2e port-diff demo tamper-test gui sites fuzz repro cross clean
 
 test: units verifier-test e2e vision-e2e tamper-test
 	@echo ""
@@ -44,6 +45,11 @@ vision-e2e:
 # C detector == Rust zk port: differential test over the shared fixtures (needs cargo).
 port-diff:
 	bash test/run_port_diff.sh
+
+# The whole thesis on one clip: TEE attestation + ZK proof + on-chain 2-of-2 all
+# agree on the same observation, bound to the same audio (forge leg if available).
+demo:
+	bash test/run_demo.sh
 
 # Tamper watcher breach action (key-shred + flag-latch), no hardware.
 tamper-test:

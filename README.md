@@ -172,7 +172,13 @@ and `PTA_SIGN_DATA` is a thin wrapper over `optee-ra`'s already-tested
 
 ```sh
 make test        # C unit tests, Go unit tests (+ fuzz seeds), e2e pipeline, tamper self-test
+make demo        # the whole thesis on one clip: TEE + ZK + on-chain 2-of-2 all agree
 ```
+
+`make demo` runs the restraint story three independent ways on one alarm clip —
+TEE attestation, an independent ZK proof, and the on-chain 2-of-2 quorum — and
+shows they all agree on the verdict and are bound to the same audio (`sha256`),
+which never leaves the enclave.
 
 **Browser GUI (click-to-listen, for non-devs):**
 
