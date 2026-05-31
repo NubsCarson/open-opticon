@@ -114,6 +114,23 @@ int main(void)
     he_detector_run(&cfg, buf, 256 + 100, &res);
     check(res.frames == 1, "356 samples => 1 frame (tail dropped)");
 
+    /* 10) Config blob is byte-stable (locks the policy bound into config_hash;
+     *     also guards the shared big-endian serializer against regressions). */
+    static const uint8_t cfg_golden[HE_CONFIG_BLOB_LEN] = {
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x3E, 0x80, /* sample_rate=16000 */
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, /* frame_samples=256 */
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0C, 0x1C, /* tone_freq_hz=3100 */
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x06, /* input_shift=6 */
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x0D, 0x40, /* energy_floor=200000 */
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08, /* min_active_frames=8 */
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x28, /* tone_ratio_min=40 */
+    };
+    uint8_t cfg_blob[HE_CONFIG_BLOB_LEN];
+    size_t cfg_blob_len = he_detector_config_blob(&cfg, cfg_blob, sizeof(cfg_blob));
+    check(cfg_blob_len == HE_CONFIG_BLOB_LEN &&
+              memcmp(cfg_blob, cfg_golden, HE_CONFIG_BLOB_LEN) == 0,
+          "default config blob matches golden (be64 + field order)");
+
     free(buf);
     if (fails) {
         printf("test_detector: %d FAILURE(S)\n", fails);

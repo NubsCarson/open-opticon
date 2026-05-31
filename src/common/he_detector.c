@@ -4,6 +4,8 @@
  */
 #include "he_detector.h"
 
+#include "he_serialize.h"
+
 #include <string.h>
 
 /* ---- fixed-point cosine (Q28 angle/result), so we need no libm/float ---- */
@@ -57,27 +59,18 @@ void he_detector_default_config(he_detector_config_t *cfg)
     cfg->tone_ratio_min = 40;        /* tone if goertzel_power >= energy*40 */
 }
 
-/* Big-endian uint64 store. */
-static void be64(uint8_t *p, uint64_t v)
-{
-    for (int i = 7; i >= 0; i--) {
-        p[i] = (uint8_t)(v & 0xff);
-        v >>= 8;
-    }
-}
-
 size_t he_detector_config_blob(const he_detector_config_t *cfg, uint8_t *out,
                                size_t cap)
 {
     if (!cfg || !out || cap < HE_CONFIG_BLOB_LEN)
         return 0;
-    be64(out + 0, cfg->sample_rate);
-    be64(out + 8, cfg->frame_samples);
-    be64(out + 16, cfg->tone_freq_hz);
-    be64(out + 24, cfg->input_shift);
-    be64(out + 32, (uint64_t)cfg->energy_floor);
-    be64(out + 40, cfg->min_active_frames);
-    be64(out + 48, cfg->tone_ratio_min);
+    he_be64(out + 0, cfg->sample_rate);
+    he_be64(out + 8, cfg->frame_samples);
+    he_be64(out + 16, cfg->tone_freq_hz);
+    he_be64(out + 24, cfg->input_shift);
+    he_be64(out + 32, (uint64_t)cfg->energy_floor);
+    he_be64(out + 40, cfg->min_active_frames);
+    he_be64(out + 48, cfg->tone_ratio_min);
     return HE_CONFIG_BLOB_LEN;
 }
 
