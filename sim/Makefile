@@ -10,16 +10,16 @@ COMMON_SRC = $(COMMON)/he_detector.c $(COMMON)/he_payload.c
 BINDIR = bin
 
 .PHONY: all clean
-all: $(BINDIR)/he-attest-sim $(BINDIR)/he-attest-vision $(BINDIR)/he-detect $(BINDIR)/test_detector $(BINDIR)/test_payload $(BINDIR)/test_vision
+all: $(BINDIR)/he-attest-sim $(BINDIR)/he-attest-vision $(BINDIR)/he-detect $(BINDIR)/test_detector $(BINDIR)/test_payload $(BINDIR)/test_vision $(BINDIR)/test_cose
 
 $(BINDIR):
 	mkdir -p $(BINDIR)
 
-$(BINDIR)/he-attest-sim: he_sim_sign.c he_bundle.c he_pcm.c $(COMMON_SRC) | $(BINDIR)
+$(BINDIR)/he-attest-sim: he_sim_sign.c he_bundle.c he_pcm.c $(COMMON)/he_cose.c $(COMMON_SRC) | $(BINDIR)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $^ $(LDLIBS)
 
 # Vision sibling: same bundle/sign/verify path, a camera occupancy detector.
-$(BINDIR)/he-attest-vision: he_vision_sign.c he_bundle.c $(COMMON)/he_vision.c $(COMMON)/he_payload.c | $(BINDIR)
+$(BINDIR)/he-attest-vision: he_vision_sign.c he_bundle.c $(COMMON)/he_cose.c $(COMMON)/he_vision.c $(COMMON)/he_payload.c | $(BINDIR)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $^ $(LDLIBS)
 
 $(BINDIR)/he-detect: he_detect_cli.c he_pcm.c $(COMMON_SRC) | $(BINDIR)
@@ -34,11 +34,15 @@ $(BINDIR)/test_payload: ../test/test_payload.c $(COMMON_SRC) | $(BINDIR)
 $(BINDIR)/test_vision: ../test/test_vision.c $(COMMON)/he_vision.c | $(BINDIR)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $^
 
+$(BINDIR)/test_cose: ../test/test_cose.c $(COMMON)/he_cose.c $(COMMON)/he_payload.c | $(BINDIR)
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $^
+
 .PHONY: test
 test: all
 	./$(BINDIR)/test_payload
 	./$(BINDIR)/test_detector
 	./$(BINDIR)/test_vision
+	./$(BINDIR)/test_cose
 
 clean:
 	rm -rf $(BINDIR)

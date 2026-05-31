@@ -38,6 +38,22 @@ int he_hex2bin(const char *hex, uint8_t *out, size_t out_cap, size_t *out_len);
  */
 int he_bundle_emit_open(const he_predicate_t *pred);
 
+/*
+ * Same predicate + same ECDSA-P256 test key, but emit the OPENING of a COSE_Sign1
+ * (RFC 9052) bundle instead of the raw envelope:
+ *
+ *   {
+ *     "schema": "honest-ear/cose-sign1/v1",
+ *     "cose":  <hex>,     // the full COSE_Sign1 (alg ES256), payload inside
+ *     "pub_x": <hex>,
+ *     "pub_y": <hex>,
+ *
+ * The signature is over the COSE Sig_structure, not the bare payload — the same
+ * primitive, the standards-aligned structure. Caller then prints its verdict
+ * fields and calls he_bundle_emit_close. Returns HE_PAYLOAD_OK on success.
+ */
+int he_bundle_emit_cose(const he_predicate_t *pred);
+
 /* Print the closing common field and brace: `  "counter": <counter>\n}`. */
 void he_bundle_emit_close(uint64_t counter);
 

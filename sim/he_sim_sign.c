@@ -104,7 +104,11 @@ int main(int argc, char **argv)
         }
     } /* else: pred.prev_digest stays zero (genesis) */
 
-    if (he_bundle_emit_open(&pred) != HE_PAYLOAD_OK) {
+    /* HE_COSE=1 emits the RFC 9052 COSE_Sign1 envelope instead of the raw one
+     * (same key/primitive; standards-aligned structure). */
+    int use_cose = (getenv("HE_COSE") != NULL);
+    int erc = use_cose ? he_bundle_emit_cose(&pred) : he_bundle_emit_open(&pred);
+    if (erc != HE_PAYLOAD_OK) {
         fprintf(stderr, "error: payload encode/sign\n");
         return 1;
     }

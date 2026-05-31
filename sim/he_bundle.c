@@ -19,6 +19,7 @@
 #include <string.h>
 
 #include "he_bundle.h"
+#include "he_cose.h"
 #include "he_payload.h"
 #include "he_testkey.h"
 
@@ -110,6 +111,43 @@ int he_bundle_emit_open(const he_predicate_t *pred)
     printf("  \"schema\": \"honest-ear/bound-output/v1\",\n");
     print_hex("payload", payload, payload_len, 1);
     print_hex("sig", sig, 64, 1);
+    print_hex("pub_x", px, 32, 1);
+    print_hex("pub_y", py, 32, 1);
+    return HE_PAYLOAD_OK;
+}
+
+int he_bundle_emit_cose(const he_predicate_t *pred)
+{
+    uint8_t payload[HE_PAYLOAD_MAX_LEN];
+    size_t payload_len = 0;
+    int rc = he_payload_encode(pred, payload, sizeof(payload), &payload_len);
+    if (rc != HE_PAYLOAD_OK)
+        return rc;
+
+    /* Sign the COSE Sig_structure (not the bare payload) with the same key. */
+    uint8_t sigstruct[HE_COSE_MAX_LEN];
+    size_t sigstruct_len = 0;
+    if (he_cose_sig_structure(payload, payload_len, sigstruct, sizeof(sigstruct),
+                              &sigstruct_len) != HE_COSE_OK)
+        return -1;
+
+    uint8_t sig[64];
+    if (sign_rs(sigstruct, sigstruct_len, sig))
+        return -1;
+
+    uint8_t cose[HE_COSE_MAX_LEN];
+    size_t cose_len = 0;
+    if (he_cose_sign1(payload, payload_len, sig, cose, sizeof(cose), &cose_len) != HE_COSE_OK)
+        return -1;
+
+    uint8_t px[32], py[32];
+    size_t pxl = 0, pyl = 0;
+    he_hex2bin(HE_TESTKEY_PUB_X_HEX, px, sizeof(px), &pxl);
+    he_hex2bin(HE_TESTKEY_PUB_Y_HEX, py, sizeof(py), &pyl);
+
+    printf("{\n");
+    printf("  \"schema\": \"honest-ear/cose-sign1/v1\",\n");
+    print_hex("cose", cose, cose_len, 1);
     print_hex("pub_x", px, 32, 1);
     print_hex("pub_y", py, 32, 1);
     return HE_PAYLOAD_OK;

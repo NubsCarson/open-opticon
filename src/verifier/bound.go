@@ -155,11 +155,8 @@ func VerifyBundle(b Bundle, opt Options) VerifyResult {
 	}
 
 	// Gate 0: optional endorsement pin (device-identity check).
-	if opt.PinPubX != nil || opt.PinPubY != nil {
-		if subtle.ConstantTimeCompare(px, opt.PinPubX) != 1 ||
-			subtle.ConstantTimeCompare(py, opt.PinPubY) != 1 {
-			return VerifyResult{Reason: "public key does not match pinned endorsement"}
-		}
+	if !pinOK(px, py, opt) {
+		return VerifyResult{Reason: "public key does not match pinned endorsement"}
 	}
 
 	// Gate 1: signature over SHA-256(payload) under the attested key.
@@ -167,6 +164,25 @@ func VerifyBundle(b Bundle, opt Options) VerifyResult {
 		return VerifyResult{Reason: "signature: " + err.Error()}
 	}
 
+	// Gates 2-4 (+ version/decode) are identical for the raw and COSE envelopes.
+	return gatesAfterSig(payload, opt)
+}
+
+// pinOK reports whether the bundle's key matches the optional pinned endorsement
+// (constant-time). No pin set => always OK.
+func pinOK(px, py []byte, opt Options) bool {
+	if opt.PinPubX == nil && opt.PinPubY == nil {
+		return true
+	}
+	return subtle.ConstantTimeCompare(px, opt.PinPubX) == 1 &&
+		subtle.ConstantTimeCompare(py, opt.PinPubY) == 1
+}
+
+// gatesAfterSig runs the envelope-independent checks once the signature over the
+// payload has been verified: decode, version, freshness (gate 2), anti-replay
+// (gate 3), and the optional stream chain (gate 4). Shared by the raw and
+// COSE_Sign1 verification paths so there is exactly one copy of the gate logic.
+func gatesAfterSig(payload []byte, opt Options) VerifyResult {
 	pred, err := DecodePayload(payload)
 	if err != nil {
 		return VerifyResult{Reason: "decode: " + err.Error()}

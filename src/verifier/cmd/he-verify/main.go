@@ -56,6 +56,7 @@ flags:
 	pinY := flag.String("pin-y", "", "pinned endorsement pub Y (hex); use with --pin-x")
 	lastCounter := flag.Uint64("last-counter", 0, "highest counter already accepted for this device")
 	expectPrev := flag.String("expect-prev", "", "expected prev_digest (hex) — the digest this window must chain from (stream gap detection); use 64 zeros for the genesis window")
+	cose := flag.Bool("cose", false, "verify a COSE_Sign1 (RFC 9052) bundle ({schema,cose,pub_x,pub_y}) instead of the raw envelope")
 	quorum := flag.Int("quorum", 0, "require k-of-n independent provers (quorum mode)")
 	var roots rootList
 	flag.Var(&roots, "root", "enrolled prover as name:pubXhex:pubYhex (repeatable, quorum mode)")
@@ -83,11 +84,6 @@ flags:
 	if err != nil {
 		cli.Die("reading bundle: %v", err)
 	}
-	b, err := parseBundle(raw)
-	if err != nil {
-		cli.Die("%v", err)
-	}
-
 	opt := verifier.Options{ExpectedNonce: nonce, LastCounter: *lastCounter}
 	if *expectPrev != "" {
 		if opt.ExpectedPrevDigest, err = hex.DecodeString(*expectPrev); err != nil {
@@ -106,7 +102,21 @@ flags:
 		}
 	}
 
-	res := verifier.VerifyBundle(b, opt)
+	// COSE_Sign1 mode verifies the standards-aligned envelope; same gates apply.
+	var res verifier.VerifyResult
+	if *cose {
+		var cb verifier.COSEBundle
+		if jerr := json.Unmarshal(raw, &cb); jerr != nil {
+			cli.Die("parsing COSE bundle JSON: %v", jerr)
+		}
+		res = verifier.VerifyCOSEBundle(cb, opt)
+	} else {
+		b, perr := parseBundle(raw)
+		if perr != nil {
+			cli.Die("%v", perr)
+		}
+		res = verifier.VerifyBundle(b, opt)
+	}
 	if !res.OK {
 		fmt.Printf("%s  %s\n", cli.Fail(), res.Reason)
 		if res.Predicate != nil {

@@ -72,12 +72,15 @@ From this PoC to a defensible product, in order of trust-impact.
   the counter (the rig TODO).
 
 ## Cryptographic / protocol
-- **Promote the bound-output envelope to COSE_Sign1** (RFC 9052/9053). The
-  signing primitive is identical (`sign_ecdsa_sha256`); wrap the canonical
-  payload in a tagged COSE_Sign1 with `alg=ES256` in the protected header so the
-  algorithm is bound and any RATS/EAT tooling consumes it. Deferred here only
-  because it changes the in-enclave wire format already proven on QEMU — it is a
-  TA-side change requiring a re-measure + re-attest, not a host-only edit.
+- **COSE_Sign1 envelope (RFC 9052/9053).** ✅ Implemented host-side: the shared,
+  TA-portable encoder (`src/common/he_cose.[ch]`) wraps the SAME canonical payload
+  in a tagged COSE_Sign1 with `alg=ES256` in the protected header — same
+  ECDSA-P256 primitive, signing the COSE Sig_structure instead of the bare
+  payload, so any RATS/EAT tooling can consume it. The host signer emits it
+  (`HE_COSE=1`), the stdlib-only Go verifier checks it (`he-verify --cose`,
+  `cose.go`), and `make cose-e2e` proves C→Go end-to-end. Remaining: the TA emits
+  it on the next rig build (a re-measure + re-attest, since it changes the
+  in-enclave wire format already proven on QEMU).
 - **Fold the bound output into the EAT itself** as a custom claim, so there is a
   single attestation token rather than two signatures. (Two signatures is fine
   for the PoC and keeps Veraison freshness untouched.)

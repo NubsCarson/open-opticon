@@ -34,10 +34,11 @@
  *                              shown a gap), not just a replayed one
  *   }
  *
- * NOTE: this is deliberately NOT COSE_Sign1. It is a minimal, fully specified,
- * deterministic envelope so that the binding can be implemented and audited
- * with no CBOR/COSE library inside the TA. Promoting it to COSE_Sign1 is a
- * clean follow-up (the signing primitive is identical) — see docs/ROADMAP.
+ * NOTE: this is the minimal, fully specified, deterministic envelope — chosen so
+ * the binding can be implemented and audited with no CBOR/COSE library inside the
+ * TA. A standards-aligned COSE_Sign1 (RFC 9052) envelope wrapping THIS SAME
+ * payload now also exists (he_cose.[ch], same ECDSA-P256 primitive; verified by
+ * he-verify --cose); the TA emits it on the next rig build. See docs/ROADMAP.
  */
 #ifndef HE_PAYLOAD_H
 #define HE_PAYLOAD_H

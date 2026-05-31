@@ -76,6 +76,15 @@ matching minimal reader. Fields: version, nonce, event, voice_active, presence,
 frames, window_ms, counter, config_hash, input_hash, prev_digest. See
 `he_payload.h` for the exact schema (a stable wire contract).
 
+**Standards-aligned COSE_Sign1 option.** The same payload can also be carried in
+a tagged RFC 9052 COSE_Sign1 envelope (`alg=ES256`) via the shared, TA-portable
+encoder `he_cose.[ch]` — identical ECDSA-P256 primitive, signing the COSE
+Sig_structure rather than the bare payload, so standard RATS/EAT tooling can
+consume it. The host signer emits it under `HE_COSE=1` and the Go verifier checks
+it with `he-verify --cose` (`make cose-e2e`); the raw minimal envelope remains the
+default. This is also the COSE machinery the host-side attestation-token verifier
+reuses.
+
 **Policy hash in the payload.** `config_hash = SHA-256(detector config blob)`
 binds *which detection policy* (sample rate, frame size, tone target,
 thresholds) produced the result, so "what counts as an event" is itself
