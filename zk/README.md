@@ -13,10 +13,11 @@ are two of the "2-of-3 multi-prover" legs — neither load-bearing alone.
 ```
 zk/
   oo-detector/   the detector as a no_std Rust lib — a FAITHFUL port of the
-                 published C detector (src/common/he_detector.c). `cargo test -p
-                 oo_detector` asserts a 3.1 kHz tone -> alarm_tone and silence ->
-                 none (the same classes he-detect emits); a byte-level
-                 differential test against he-detect is not yet automated.
+                 published C detector (src/common/he_detector.c), proven by a
+                 differential test: `test/run_port_diff.sh` runs both the C
+                 `he-detect` and the Rust port over the same fixtures and asserts
+                 byte-identical verdicts (also `make port-diff`).
+  oo-detect/     a tiny CLI over oo-detector used by that differential test.
   methods/guest/ the zkVM guest: read samples (private) -> oo_detector::detect ->
                  commit ONLY (event, presence, voice_active, frames,
                  active_frames, n_samples).
@@ -66,9 +67,10 @@ writes and the on-chain verifier pins, so the local and EVM measurements match.)
 - **Faithful-port caveat (rule 2):** the guest is necessarily a Rust
   reimplementation of the C detector (different language/trust domain — C runs
   in the TEE, Rust in the zkVM), so they are two implementations of one
-  algorithm by necessity. Equivalence is held by the `oo_detector` test
-  asserting the same event classes `he-detect` emits; a byte-level differential
-  harness against `he-detect` is not yet automated.
+  algorithm by necessity. Equivalence is proven by a differential test
+  (`test/run_port_diff.sh` / `make port-diff`, run in CI) that asserts the C
+  `he-detect` and the Rust `oo-detect` emit byte-identical verdicts on the
+  shared fixtures.
 - **Reproducibility:** the toolchain + crate versions are pinned via the
   committed `Cargo.lock`; rebuild when crates.io is reachable.
 

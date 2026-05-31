@@ -13,7 +13,7 @@
 
 VERIFIER = src/verifier
 
-.PHONY: test units sim verifier-test e2e vision-e2e tamper-test gui sites fuzz repro cross clean
+.PHONY: test units sim verifier-test e2e vision-e2e port-diff tamper-test gui sites fuzz repro cross clean
 
 test: units verifier-test e2e vision-e2e tamper-test
 	@echo ""
@@ -39,6 +39,10 @@ e2e:
 # Same machinery, a camera: vision detect -> bind -> verify with the same he-verify.
 vision-e2e:
 	bash test/run_vision_e2e.sh
+
+# C detector == Rust zk port: differential test over the shared fixtures (needs cargo).
+port-diff:
+	bash test/run_port_diff.sh
 
 # Tamper watcher breach action (key-shred + flag-latch), no hardware.
 tamper-test:

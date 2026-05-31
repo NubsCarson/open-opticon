@@ -1,0 +1,15 @@
+# Standalone (own [workspace]) so it builds with plain stable Rust in seconds —
+# it depends only on oo_detector (no risc0), for the C-vs-Rust differential test.
+[package]
+name = "oo-detect"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+
+[[bin]]
+name = "oo-detect"
+path = "src/main.rs"
+
+[dependencies]
+oo_detector = { path = "../oo-detector" }
