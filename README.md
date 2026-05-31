@@ -77,6 +77,9 @@ src/verifier/    Go (stdlib only) verifier:
                    cmd/he-challenge - live nonce server + mobile verifier page (/v)
                    cmd/he-gui      - browser click-to-listen web UI
                    + unit tests, exhaustive log tests, and FuzzDecodePayload
+zk/              RISC Zero zkVM proof of the detector (Rust): a faithful no_std
+                 port of he_detector.c proven over private audio, committing only
+                 the verdict — a non-TEE prover leg for the quorum (see zk/README.md)
 src/tamper/      Linux GPIO tamper-loop watcher (key-destroy on enclosure breach)
 sim/             Host simulator (he-attest-sim) mirroring the TEE crypto path,
                  the detector CLI, and the C unit tests

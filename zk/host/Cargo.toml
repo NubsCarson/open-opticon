@@ -1,0 +1,15 @@
+[package]
+name = "host"
+version = "0.1.0"
+edition = "2021"
+
+# Matches the project's he-* CLI naming (he-verify, he-log, he-detect).
+[[bin]]
+name = "he-zk-prove"
+path = "src/main.rs"
+
+[dependencies]
+methods = { path = "../methods" }
+risc0-zkvm = { version = "^3.0.5" }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+serde = "1.0"
