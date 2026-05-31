@@ -55,28 +55,32 @@ check lives here: `HonestEarQuorum` requires an independent **ZK proof of the
 computation** AND the **device's hardware-bound P-256 signature**, and returns a
 verdict only if both verify and agree. A single broken enclave, or a forged
 signature, is not enough. The two roots are **cryptographically bound to the same
-verifier nonce** (the guest commits sha256(nonce); the contract checks it equals
-sha256(the device payload's nonce)), so a proof and a signature from different
-sessions cannot be combined. `recordVerdict` adds on-chain anti-replay (the
-device counter must advance). This is one realisable leg of the broader 2-of-3
-vision ({TEE, ZK, phone}); a sha256(audio) commitment in both legs (airtight even
-against a misbehaving device) is the further step.
+observation** — the same verifier nonce AND the same input bytes: the guest
+commits sha256(nonce) and sha256(audio), and the contract requires both to equal
+the device payload's nonce hash and its `input_hash`. So a proof and a signature
+from different sessions OR different audio cannot be combined, even against a
+misbehaving device. `recordVerdict` adds on-chain anti-replay (the device counter
+must advance). This is one realisable leg of the broader 2-of-3 vision ({TEE, ZK,
+phone}).
 
 ## Live on Sepolia (public testnet)
 
-The full stack is deployed and verified on Ethereum Sepolia — anyone can call it
-permissionlessly (no trust in this repo or its operator):
+A full stack is deployed live on Ethereum Sepolia — anyone can call it
+permissionlessly (no trust in this repo or its operator). The deployed contracts
+below are the **nonce-bound (v1)** version; the **audio+nonce-bound version in
+this repo** is verified locally (`forge test`, 12/12) and a live re-deploy is
+pending a small testnet top-up (the addresses will be updated when it lands).
 
-| Contract | Address |
+| Contract (v1, nonce-bound — live) | Address |
 |---|---|
-| HonestEarQuorum (ZK + device P-256, nonce-bound 2-of-2) | [`0x5d91D5C07048A3e9a8f57A9198f031F7021707f6`](https://sepolia.etherscan.io/address/0x5d91D5C07048A3e9a8f57A9198f031F7021707f6) |
+| HonestEarQuorum (ZK + device P-256, 2-of-2) | [`0x5d91D5C07048A3e9a8f57A9198f031F7021707f6`](https://sepolia.etherscan.io/address/0x5d91D5C07048A3e9a8f57A9198f031F7021707f6) |
 | HonestEarVerifier (zk receipt) | [`0xA14D86C47B9D7702b81EF1789b5152f81a2c4817`](https://sepolia.etherscan.io/address/0xA14D86C47B9D7702b81EF1789b5152f81a2c4817) |
 | CheckpointAnchor (log anchor) | [`0x9B50374B32E88123c36ca6227a59ce8fb76D9240`](https://sepolia.etherscan.io/address/0x9B50374B32E88123c36ca6227a59ce8fb76D9240) |
 | RiscZeroGroth16Verifier | [`0xe0ABbE2DA2D8aA05C41bF11F7E335663637f17E7`](https://sepolia.etherscan.io/address/0xe0ABbE2DA2D8aA05C41bF11F7E335663637f17E7) |
 
 The two `CheckpointAnchor.anchor()` transactions (a consistency-proven 3→5
-extension) executed on-chain, and a live `eth_call` to `HonestEarQuorum.verdict`
-with the committed fixtures returns `(2, 1)` — alarm_tone, presence — i.e. the ZK
+extension) executed on-chain, and a live `eth_call` to that v1
+`HonestEarQuorum.verdict` returned `(2, 1)` — alarm_tone, presence — i.e. the ZK
 proof and the device signature agree, on a public chain. (Deployed from a
 disposable testnet key; in production you'd reuse RISC Zero's canonical verifier
 router rather than deploy your own.)
