@@ -232,6 +232,14 @@ func SignCheckpoint(origin string, size int, root [32]byte, key *ecdsa.PrivateKe
 	return signNote(CheckpointBody(origin, size, root), key)
 }
 
+// VerifyCheckpointSig reports whether sig (64-byte r||s) is a valid signature by
+// the key (pubX,pubY) over the checkpoint body — i.e. the log operator (or any
+// note signer) genuinely signed these exact bytes. Reuses the single ECDSA path.
+// A witness calls this to pin the log's key before trusting a checkpoint.
+func VerifyCheckpointSig(cpBody, sig, pubX, pubY []byte) bool {
+	return verifySig(cpBody, sig, pubX, pubY) == nil
+}
+
 // ParseCheckpoint extracts (origin, size, root) from a checkpoint body.
 func ParseCheckpoint(body []byte) (origin string, size int, root [32]byte, err error) {
 	lines := bytes.Split(bytes.TrimRight(body, "\n"), []byte("\n"))

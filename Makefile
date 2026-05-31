@@ -5,6 +5,7 @@
 #   make e2e        - audio end-to-end pipeline;  make vision-e2e - vision pipeline
 #   make chain-e2e  - streaming hash-chain: append-only stream + gap detection
 #   make cose-e2e   - COSE_Sign1 (RFC 9052) envelope: emit (C) -> verify (Go)
+#   make witness-e2e- operating log witnesses: cosign quorum + fork refusal
 #   make port-diff  - C detector == Rust zk port, differential test (needs cargo)
 #   make demo       - whole thesis on one clip: TEE + ZK + on-chain 2-of-2 agree
 #   make gui/sites/fuzz/repro/cross - GUI, static site, fuzzing, reproducible-build,
@@ -17,9 +18,9 @@
 
 VERIFIER = src/verifier
 
-.PHONY: test units sim verifier-test e2e vision-e2e chain-e2e cose-e2e port-diff demo tamper-test gui sites wasm fuzz repro cross clean
+.PHONY: test units sim verifier-test e2e vision-e2e chain-e2e cose-e2e witness-e2e port-diff demo tamper-test gui sites wasm fuzz repro cross clean
 
-test: units verifier-test e2e vision-e2e chain-e2e cose-e2e tamper-test
+test: units verifier-test e2e vision-e2e chain-e2e cose-e2e witness-e2e tamper-test
 	@echo ""
 	@echo "==================================================="
 	@echo " ALL HOST TESTS PASSED"
@@ -53,6 +54,11 @@ chain-e2e:
 # standards-aligned signed structure; binding holds; raw envelope unaffected.
 cose-e2e:
 	bash test/run_cose_e2e.sh
+
+# Operating witnesses: he-logd serves checkpoints; he-witness daemons consistency-
+# check + cosign; a 2-of-3 quorum verifies; a forked/rewound log is refused.
+witness-e2e:
+	bash test/run_witness_e2e.sh
 
 # C detector == Rust zk port: differential test over the shared fixtures (needs cargo).
 port-diff:

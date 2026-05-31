@@ -78,6 +78,8 @@ src/verifier/    Go (stdlib only) verifier:
                    cmd/he-verify   - verify a bundle, or a --quorum of provers
                    cmd/he-dump     - decode a bundle to readable fields (no verify) — audit aid
                    cmd/he-log      - operate/prove/verify the transparency log
+                   cmd/he-logd     - HTTP log server (checkpoints + consistency proofs)
+                   cmd/he-witness  - witness daemon: consistency-check + cosign, refuse forks
                    cmd/he-challenge - live nonce server + mobile verifier page (/v)
                    cmd/he-gui      - browser click-to-listen web UI
                    cmd/he-verify-wasm - the verifier compiled to WASM for docs/verify.html

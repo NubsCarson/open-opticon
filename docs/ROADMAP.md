@@ -90,11 +90,15 @@ From this PoC to a defensible product, in order of trust-impact.
   (a measured-boot TPM quote, a second-vendor TEE) as roots in `he-verify
   --quorum`. The ZK leg can't be auto-wired into the stdlib-only Go verifier
   (it can't verify a STARK) — which is exactly why that leg's quorum is on-chain.
-- **Witness cosigning for the transparency log.** ✅ Done (see "Done in this
-  PoC"): `he-log cosign` + `VerifyCheckpointWitnesses` let independent witnesses
-  countersign checkpoints (C2SP/Sigstore model). Remaining operational work is
-  running real, independent witnesses that gossip + consistency-check before
-  cosigning, not just the protocol.
+- **Witness cosigning for the transparency log.** ✅ Done, now including the
+  OPERATIONAL layer: `he-logd` serves the log's signed checkpoints + RFC 9162
+  consistency proofs over HTTP, and `he-witness` is a real witness daemon that
+  polls it, verifies each checkpoint is a consistent append-only extension of the
+  one it last cosigned, and **refuses to cosign a forked or rewound history**
+  (pinning the log key). A 2-of-3 witness quorum verifies and a fork is refused
+  end-to-end in `make witness-e2e` (plus deterministic httptest unit tests).
+  Remaining: running these witnesses as genuinely separate, gossiping operators
+  across the network (deployment, not protocol).
 - **Sign endorsements as CoRIM.** Provision Veraison with a COSE-signed CoRIM and
   log the signed CoRIM as the transparency-log entry, so endorser authenticity
   is covered end-to-end.
