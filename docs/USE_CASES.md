@@ -19,7 +19,7 @@ It inverts surveillance: not a spying device with a privacy promise bolted on,
 but a device that is **structurally incapable** of feeding a panopticon — and
 can prove it.
 
-## Audio — shippable now
+## Audio — the runnable MVP
 
 Each scenario lists the **safety/coordination value**, the **exact predicate
 emitted**, and **why non-panopticon matters there**.
@@ -53,9 +53,10 @@ safety event** — least ML risk, cleanest privacy story.
   authenticity *without publishing* footage full of bystanders.
 
 Audio is the right MVP precisely because video ML in a TEE is heavy; the audio
-detector is light enough to run the real thing today.
+detector is light enough to run the whole pipeline today as a PoC (the detector
+itself is still a threshold stub — see [`ROADMAP.md`](ROADMAP.md)).
 
-## The deep version (why d/acc cares)
+## Generalization: verifiable claims about reality
 
 Generalized, this is **verifiable claims about reality with minimal disclosure** —
 the missing oracle layer for the physical world:

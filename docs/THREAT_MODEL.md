@@ -55,7 +55,8 @@ toward PIR/FHE as performance allows.
 - **Device identity only on i.MX.** QEMU/RPi use a shared embedded test key.
 - **Self-provisioned endorsement.** Anti-swap holds relative to *our* enrolment
   record, not a public manufacturer root (no StrongBox/TPM-EKCert equivalent
-  yet). Single verifier today; a 2-of-3 multi-prover is roadmap, not built.
+  yet). The k-of-n quorum verifier is built and tested (`he-verify --quorum`); wiring
+genuinely heterogeneous provers (a second-vendor TEE, a TPM quote) is roadmap.
 - **Counter rollback.** Trusted-Storage anti-rollback depends on RPMB; on QEMU
   it is best-effort. A hardware monotonic counter is the production answer.
 - **The detector is a stub.** A keyword/VAD threshold, not a hardened model;

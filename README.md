@@ -17,7 +17,7 @@ instant someone opens it.**
 > — real captured output: the host pipeline, an OP-TEE attestation on QEMU, the
 > in-enclave bound output, and the tamper fail-closed path.
 
-> ⚠️ **Status: proof-of-concept / d-acc art project.** The host pipeline is fully
+> ⚠️ **Status: proof-of-concept / d/acc art project.** The host pipeline is fully
 > tested (`make test`). The OP-TEE path has been **run end-to-end on QEMU to a
 > green, `affirming` Veraison attestation** — real TA + `PTA_SIGN_DATA` → signed
 > PSA token → verified ([proof](docs/SAMPLE_ATTESTATION.md); reproduce via
@@ -74,7 +74,7 @@ src/verifier/    Go (stdlib only) verifier:
                    transparency.go - RFC 6962 endorsement log (inclusion/consistency)
                    cmd/he-verify   - verify a bundle, or a --quorum of provers
                    cmd/he-log      - operate/prove/verify the transparency log
-                   cmd/he-challenge- live nonce server + mobile verifier page (/v)
+                   cmd/he-challenge - live nonce server + mobile verifier page (/v)
                    cmd/he-gui      - browser click-to-listen web UI
                    + unit tests, exhaustive log tests, and FuzzDecodePayload
 src/tamper/      Linux GPIO tamper-loop watcher (key-destroy on enclosure breach)

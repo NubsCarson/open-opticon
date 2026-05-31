@@ -34,15 +34,20 @@ make -C "$ROOT/sim" all >/dev/null || { echo "C build failed"; exit 1; }
 ( cd "$VERIFIER" && GOPROXY=off go build -o "$TMP/he-verify" ./cmd/he-verify ) \
     || { echo "go build failed"; exit 1; }
 VERIFY="$TMP/he-verify"
-echo "  built he-attest-sim, he-detect, he-verify"
+echo "  built he-attest-sim, he-verify"
 
 echo "== fixtures =="
 python3 "$ROOT/test/gen_frames.py" "$FIX" >/dev/null || { echo "fixture gen failed"; exit 1; }
 echo "  generated silence/alarm/voice/quiet"
 
-# attest <pcm> <nonce> <counter> -> writes $TMP/bundle.json, echoes event
+# attest <pcm> <nonce> <counter> -> writes $TMP/bundle.json, echoes event.
+# Fail loudly (bad + non-zero) if the sim itself errors, rather than letting an
+# empty bundle.json surface as an opaque JSON error or a false negative-case pass.
 attest() {
-    "$SIMBIN/he-attest-sim" "$1" "$2" "$3" > "$TMP/bundle.json" 2>/dev/null
+    if ! "$SIMBIN/he-attest-sim" "$1" "$2" "$3" > "$TMP/bundle.json"; then
+        bad "he-attest-sim failed for $1"
+        return 1
+    fi
     python3 -c "import json,sys;print(json.load(open('$TMP/bundle.json'))['event'])"
 }
 

@@ -1,8 +1,8 @@
 # Why a TEE? (and not ZK / FHE / MPC / C2PA)
 
-The first question a cryptography-literate audience asks is *"why a trusted
-enclave instead of ZK proofs or FHE — isn't a TEE a single root of trust with a
-manufacturer backdoor?"* This is the honest answer.
+The obvious question is *"why a trusted enclave instead of ZK proofs or FHE —
+isn't a TEE a single root of trust with a manufacturer backdoor?"* This is the
+honest answer.
 
 ## TL;DR
 

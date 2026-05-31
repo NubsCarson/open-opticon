@@ -54,5 +54,6 @@ cross:
 
 clean:
 	$(MAKE) -C sim clean
-	rm -rf test/fixtures/*.pcm
+	$(MAKE) -C src/tamper clean
+	rm -rf test/fixtures/*.pcm dist
 	cd $(VERIFIER) && go clean ./... 2>/dev/null || true

@@ -15,8 +15,9 @@ make test          # C unit tests + Go unit tests + end-to-end pipeline + tamper
 ```
 
 Expected: detector unit tests pass, payload golden vector matches, Go verifier
-tests pass, and the e2e prints `13 passed, 0 failed` (4 positive detect+verify
-cases + 5 rejection cases). This validates everything except OP-TEE itself.
+tests pass, and the e2e prints `13 passed, 0 failed` (4 positive fixtures, each
+asserting event-class + verify-PASS = 8, plus 5 rejection cases = 13). This
+validates everything except OP-TEE itself.
 
 Manual single run + live challenge flow: see the project README quickstart.
 
@@ -97,6 +98,11 @@ curl -s -X POST "http://<host>:8090/attest?session=$SID" --data @bundle.json
 A clip is just raw int16 mono PCM (`python3 test/gen_frames.py` makes samples;
 `sox in.wav -r 16000 -c 1 -e signed -b 16 out.pcm` converts real audio).
 
+Steps 3–4 are automated headlessly by
+[`../tools/qemu_bound_output.expect`](../tools/qemu_bound_output.expect) (boots,
+logs in, runs `he_host` with `$HE_NONCE`, prints the signed bundle) — the same
+pattern as `qemu_attest.expect` in B3a.
+
 ### B3a. Verified working on QEMU — the real gotchas
 
 This path has actually produced a green `affirming` Veraison attestation (see
@@ -149,7 +155,9 @@ sudo ./bin/he-tamper --chip /dev/gpiochip0 --line 17 --active-low \
 ```
 
 Open the lid → key erased + TA flag latched → re-run B3 → attestation FAIL even
-with correct firmware.
+with correct firmware. The fail-closed behaviour is demonstrated headlessly in
+QEMU by [`../tools/qemu_tamper.expect`](../tools/qemu_tamper.expect) (healthy
+run → `he_host --trip` → re-attest returns `TEE_ERROR_SECURITY`).
 
 ---
 

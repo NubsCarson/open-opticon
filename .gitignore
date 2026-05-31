@@ -4,8 +4,6 @@ src/tamper/bin/
 test/fixtures/*.pcm
 *.o
 *.out
-he_tamper
-he-tamper
 bundle.json
 dist/
 he-log.json

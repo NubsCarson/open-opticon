@@ -91,6 +91,7 @@
   .term pre{margin:0;padding:16px 18px;overflow-x:auto;font-size:12.6px;line-height:1.65;color:#d4d4d8}
   .g{color:var(--green)} .r{color:var(--red)} .b{color:var(--blue)} .y{color:var(--amber)}
   .d{color:var(--muted2)} .v{color:var(--violet)} .key{color:var(--blue)}
+  a.lnk{color:var(--blue)}
   .p{color:var(--muted)} /* prompt $ */
 
   video{width:100%;border-radius:var(--radius);border:1px solid var(--border);display:block;background:#000}
@@ -141,7 +142,7 @@
     </div>
     <div class="status">
       <span><span class="dot"></span> Veraison: affirming on QEMU</span>
-      <span><span class="dot"></span> make test: 13/13</span>
+      <span><span class="dot"></span> e2e: 13/13</span>
       <span><span class="dot"></span> reproducible host build</span>
     </div>
   </div>
@@ -158,7 +159,7 @@
       <img src="assets/walkthrough.gif" alt="open-opticon terminal walkthrough">
     </video>
     <p class="small" style="margin-top:12px">Rendered from the captured stdout of the real runs — no
-       screen recorder. <a class="mono" style="color:var(--blue)" href="assets/walkthrough.cast">walkthrough.cast</a>
+       screen recorder. <a class="mono lnk" href="assets/walkthrough.cast">walkthrough.cast</a>
        replays in <span class="mono">asciinema</span>.</p>
   </div>
 </section>
@@ -181,7 +182,7 @@
     </div>
     <div class="grid c3" style="margin-top:16px">
       <div class="card"><h3>Non-panopticon by construction</h3><p>The only thing that can leave the
-         enclave is a ~95-byte verdict. There is no code path that exports samples — and the
+         enclave is a tiny, fixed-shape verdict (an ~88-byte signed predicate). There is no code path that exports samples — and the
          attestation proves it is that code path.</p></div>
       <div class="card"><h3>Root of capture, not root of trust</h3><p>You verify a proof rather than
          trusting an operator or vendor. The TEE is the root of capture; the math is the root of
@@ -246,8 +247,8 @@ signer-id         : rLsRx+TaIXIFUjzkzhokWuGi…</pre>
 <span class="r">FAIL</span>  counter 1 not greater than last seen 1</pre>
     </figure>
     <p class="small" style="margin-top:12px">Full appraisal and reproduction steps:
-       <a style="color:var(--blue)" href="SAMPLE_ATTESTATION.md">SAMPLE_ATTESTATION.md</a> ·
-       <a style="color:var(--blue)" href="RUNBOOK.md">RUNBOOK.md</a></p>
+       <a class="lnk" href="SAMPLE_ATTESTATION.md">SAMPLE_ATTESTATION.md</a> ·
+       <a class="lnk" href="RUNBOOK.md">RUNBOOK.md</a></p>
   </div>
 </section>
 
@@ -304,8 +305,8 @@ signer-id         : rLsRx+TaIXIFUjzkzhokWuGi…</pre>
     <div class="note" style="margin-top:22px">A TEE is a hardware trust assumption, not a math proof.
        The roadmap hardens it: reproducible builds (anyone recomputes the measurement), a 2-of-3
        multi-prover so no single TEE vendor is load-bearing, and eventually a ZK proof of the
-       attestation. See <a style="color:var(--blue)" href="WHY_TEE.md">WHY_TEE.md</a> and
-       <a style="color:var(--blue)" href="THREAT_MODEL.md">THREAT_MODEL.md</a>.</div>
+       attestation. See <a class="lnk" href="WHY_TEE.md">WHY_TEE.md</a> and
+       <a class="lnk" href="THREAT_MODEL.md">THREAT_MODEL.md</a>.</div>
   </div>
 </section>
 
@@ -331,9 +332,9 @@ signer-id         : rLsRx+TaIXIFUjzkzhokWuGi…</pre>
                                                 <span class="b">└──────────────┘</span></pre>
     </figure>
     <p class="small" style="margin-top:12px">Deep dive:
-       <a style="color:var(--blue)" href="ARCHITECTURE.md">ARCHITECTURE.md</a> ·
-       <a style="color:var(--blue)" href="USE_CASES.md">USE_CASES.md</a> ·
-       <a style="color:var(--blue)" href="REPRODUCIBLE.md">REPRODUCIBLE.md</a></p>
+       <a class="lnk" href="ARCHITECTURE.md">ARCHITECTURE.md</a> ·
+       <a class="lnk" href="USE_CASES.md">USE_CASES.md</a> ·
+       <a class="lnk" href="REPRODUCIBLE.md">REPRODUCIBLE.md</a></p>
   </div>
 </section>
 
@@ -362,9 +363,10 @@ signer-id         : rLsRx+TaIXIFUjzkzhokWuGi…</pre>
       <a href="ROADMAP.md">Roadmap</a>
       <a href="REPRODUCIBLE.md">Reproducible builds</a>
     </div>
-    <p>open-opticon — open-source, non-panopticon. A working proof-of-concept, not a certified product.
-       The QEMU build uses a published test key, so it proves genuine code in a TEE; device identity
-       needs the i.MX CAAM hardware key. Built on
+    <p>open-opticon — open-source, non-panopticon (internal codename <span class="mono">honest-ear</span>,
+       which is why the schema string and on-device paths use it). A working proof-of-concept, not a
+       certified product. The QEMU build uses a published test key, so it proves genuine code in a TEE;
+       device identity needs the i.MX CAAM hardware key. Built on
        <a href="https://github.com/iisec-suzaki/optee-ra">optee-ra</a>, OP-TEE, and
        <a href="https://github.com/veraison/services">Veraison</a>. MIT licensed.</p>
   </div>
