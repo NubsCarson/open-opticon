@@ -8,6 +8,7 @@
 #include <stdlib.h>
 
 #include "he_detector.h"
+#include "he_pcm.h"
 
 int main(int argc, char **argv)
 {
@@ -15,32 +16,17 @@ int main(int argc, char **argv)
         fprintf(stderr, "usage: %s <pcm_s16le_mono>\n", argv[0]);
         return 2;
     }
-    FILE *f = fopen(argv[1], "rb");
-    if (!f) {
-        fprintf(stderr, "cannot open %s\n", argv[1]);
+    int16_t *pcm = NULL;
+    size_t n_samples = 0;
+    if (he_read_pcm(argv[1], &pcm, &n_samples)) {
+        fprintf(stderr, "cannot read PCM file %s (need a readable, even byte count)\n", argv[1]);
         return 1;
     }
-    fseek(f, 0, SEEK_END);
-    long sz = ftell(f);
-    fseek(f, 0, SEEK_SET);
-    if (sz < 0 || (sz % 2) != 0) {
-        fprintf(stderr, "bad PCM (need a positive, even byte count)\n");
-        fclose(f);
-        return 1;
-    }
-    int16_t *pcm = malloc((size_t)sz ? (size_t)sz : 1);
-    if (!pcm || fread(pcm, 1, (size_t)sz, f) != (size_t)sz) {
-        fprintf(stderr, "read error\n");
-        fclose(f);
-        free(pcm);
-        return 1;
-    }
-    fclose(f);
 
     he_detector_config_t cfg;
     he_detector_default_config(&cfg);
     he_detect_result_t res;
-    he_detector_run(&cfg, pcm, (size_t)sz / 2, &res);
+    he_detector_run(&cfg, pcm, n_samples, &res);
 
     const char *evname = he_event_name(res.event);
     printf("event=%s presence=%u voice_active=%u frames=%u active=%u tone=%u voice=%u\n",

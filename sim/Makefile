@@ -15,10 +15,10 @@ all: $(BINDIR)/he-attest-sim $(BINDIR)/he-detect $(BINDIR)/test_detector $(BINDI
 $(BINDIR):
 	mkdir -p $(BINDIR)
 
-$(BINDIR)/he-attest-sim: he_sim_sign.c $(COMMON_SRC) | $(BINDIR)
+$(BINDIR)/he-attest-sim: he_sim_sign.c he_pcm.c $(COMMON_SRC) | $(BINDIR)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $^ $(LDLIBS)
 
-$(BINDIR)/he-detect: he_detect_cli.c $(COMMON_SRC) | $(BINDIR)
+$(BINDIR)/he-detect: he_detect_cli.c he_pcm.c $(COMMON_SRC) | $(BINDIR)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $^
 
 $(BINDIR)/test_detector: ../test/test_detector.c $(COMMON_SRC) | $(BINDIR)
