@@ -39,8 +39,8 @@ func TestQuorumReached(t *testing.T) {
 	if !res.OK {
 		t.Fatalf("expected quorum, got: %s", res.Reason)
 	}
-	if res.Agreed == nil || res.Agreed.EventName() != "alarm_tone" {
-		t.Errorf("agreed predicate wrong: %+v", res.Agreed)
+	if res.Event != "alarm_tone" {
+		t.Errorf("agreed event = %q, want alarm_tone", res.Event)
 	}
 	if len(res.PassedRoots) != 2 {
 		t.Errorf("passed roots = %v, want 2", res.PassedRoots)

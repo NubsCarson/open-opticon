@@ -34,9 +34,11 @@ type QuorumOptions struct {
 
 // QuorumResult is the outcome of quorum verification.
 type QuorumResult struct {
-	OK          bool
-	Reason      string
-	Agreed      *Predicate // the agreed-upon predicate (event class all provers share)
+	OK     bool
+	Reason string
+	// Event is the only field the quorum guarantees the provers agree on; other
+	// predicate fields (counter, presence, frames) are legitimately per-device.
+	Event       string
 	PassedRoots []string
 }
 
@@ -90,16 +92,16 @@ func VerifyQuorum(bundles []Bundle, qopt QuorumOptions) QuorumResult {
 			"only %d of the required %d independent provers verified",
 			len(passed), qopt.Threshold)}
 	}
-	var agreed *Predicate
 	names := make([]string, 0, len(passed))
-	for name, p := range passed {
+	for name := range passed {
 		names = append(names, name)
-		if agreed == nil {
-			agreed = p
-		} else if p.EventID != agreed.EventID {
+	}
+	sort.Strings(names) // deterministic order, independent of map iteration
+	event := passed[names[0]].EventName()
+	for _, name := range names {
+		if passed[name].EventName() != event {
 			return QuorumResult{Reason: "independent provers disagree on the event class"}
 		}
 	}
-	sort.Strings(names)
-	return QuorumResult{OK: true, Reason: "quorum reached", Agreed: agreed, PassedRoots: names}
+	return QuorumResult{OK: true, Reason: "quorum reached", Event: event, PassedRoots: names}
 }

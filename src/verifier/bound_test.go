@@ -221,6 +221,25 @@ func TestVerifyRejectsOffCurveKey(t *testing.T) {
 	}
 }
 
+func TestVerifyRejectsWrongVersion(t *testing.T) {
+	// golden with the version value re-encoded as 2 (key 0 -> 2): "0001" -> "0002".
+	v2 := mustHex("a9" + "0002" + "0142aabb" + "0202" + "03f4" + "0401" +
+		"050a" + "0618a0" + "0707" + "085820" + cfg32)
+	b, _, _ := signGolden(t, v2)
+	res := VerifyBundle(b, Options{ExpectedNonce: mustHex("aabb")})
+	if res.OK {
+		t.Error("payload with unsupported version verified; must fail")
+	}
+}
+
+func TestVerifyRejectsNilExpectedNonce(t *testing.T) {
+	b, _, _ := signGolden(t, golden)
+	res := VerifyBundle(b, Options{}) // ExpectedNonce nil
+	if res.OK {
+		t.Error("verify with no expected nonce passed; must fail")
+	}
+}
+
 func TestVerifyRejectsPinMismatch(t *testing.T) {
 	b, px, _ := signGolden(t, golden)
 	res := VerifyBundle(b, Options{

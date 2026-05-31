@@ -143,7 +143,8 @@ func runQuorum(nonce []byte, k int, rootSpecs rootList, lastCounter uint64) {
 	}
 	fmt.Printf("\033[1;32mPASS\033[0m  %d-of-%d quorum reached by independent provers: %s\n",
 		k, len(roots), strings.Join(res.PassedRoots, ", "))
-	printPredicate(res.Agreed)
+	fmt.Printf("  agreed event : %s\n", res.Event)
+	fmt.Printf("  (only the event class is quorum-agreed; counters/presence are per-prover)\n")
 }
 
 func parseBundle(raw []byte) (verifier.Bundle, error) {

@@ -153,29 +153,41 @@ func (s *server) handleAttest(w http.ResponseWriter, r *http.Request) {
 		LastCounter:   sess.lastCounter,
 	})
 
-	out := map[string]any{"verdict": "FAIL", "reason": res.Reason}
-	event := ""
-	if res.OK {
-		event = res.Predicate.EventName()
-		out["verdict"] = "PASS"
+	// Decide the verdict and advance the anti-replay counter atomically under the
+	// lock. VerifyBundle ran against a snapshot of lastCounter, so two concurrent
+	// attests could both clear Gate 3 against the same snapshot; re-checking and
+	// advancing here makes the per-session compare-and-advance atomic. The same
+	// critical section guards against the session being GC'd mid-verification.
+	ok, reason := res.OK, res.Reason
+	s.mu.Lock()
+	_, live := s.sessions[sid]
+	switch {
+	case !live:
+		// session expired during verification: report the verdict, don't store it
+	case ok && res.Predicate.Counter <= sess.lastCounter:
+		ok = false
+		reason = fmt.Sprintf("counter %d not greater than last seen %d (concurrent replay)",
+			res.Predicate.Counter, sess.lastCounter)
+	case ok:
+		sess.lastCounter = res.Predicate.Counter
+	}
+	verdict, event := "FAIL", ""
+	if ok {
+		verdict, event = "PASS", res.Predicate.EventName()
+	}
+	if live {
+		sess.verdict, sess.event, sess.reason = verdict, event, reason
+	}
+	s.mu.Unlock()
+
+	out := map[string]any{"verdict": verdict, "reason": reason}
+	if ok {
 		out["event"] = event
 		out["presence"] = res.Predicate.Presence
 		out["voice_active"] = res.Predicate.VoiceActive
 		out["counter"] = res.Predicate.Counter
 	}
-	// Record the verdict so the mobile verifier page (/status) can show it live.
-	// Re-check the session is still in the map: a concurrent /challenge could
-	// have GC'd it during verification, in which case the write would be lost.
-	s.mu.Lock()
-	if _, live := s.sessions[sid]; live {
-		if res.OK {
-			sess.lastCounter = res.Predicate.Counter
-		}
-		sess.verdict, _ = out["verdict"].(string)
-		sess.event, sess.reason = event, res.Reason
-	}
-	s.mu.Unlock()
-	log.Printf("attest session=%s verdict=%v reason=%s", sid, out["verdict"], res.Reason)
+	log.Printf("attest session=%s verdict=%s reason=%s", sid, verdict, reason)
 	writeJSON(w, 200, out)
 }
 
