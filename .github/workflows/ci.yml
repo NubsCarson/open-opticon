@@ -26,3 +26,33 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y build-essential libssl-dev openssl python3
       - name: Run all host tests
         run: make test
+
+  # Continuous reproducibility: rebuild the host artifacts in two separate trees
+  # and fail if they are not byte-identical, then publish the SHA-256 measurement
+  # manifest so anyone can confirm a released build is exactly this source.
+  reproducible-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+      - name: Install C toolchain + OpenSSL
+        run: sudo apt-get update && sudo apt-get install -y build-essential libssl-dev openssl python3
+      - name: Reproducible-build check (byte-identical across two trees)
+        run: bash tools/repro.sh | tee repro-manifest.txt
+      - name: Publish the measurement manifest to the run summary
+        if: always()
+        run: |
+          {
+            echo '### open-opticon — reproducible host-build measurements'
+            echo "commit: \`${GITHUB_SHA}\`"
+            echo '```'
+            cat repro-manifest.txt 2>/dev/null || echo '(build did not complete)'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: repro-manifest
+          path: repro-manifest.txt
