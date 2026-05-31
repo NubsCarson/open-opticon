@@ -363,8 +363,9 @@ signer-id         : rLsRx+TaIXIFUjzkzhokWuGi…</pre>
       <div class="card">
         <h3>Tier 2 — device identity <span class="badge hw">needs i.MX CAAM</span></h3>
         <ul class="tight">
-          <li><span class="badge ok"><span class="dot"></span>proven</span> verifier-side pinning:
-              wrong key → <span class="cr mono">FAIL</span>, genuine → <span class="cg mono">PASS</span></li>
+          <li><span class="badge ok"><span class="dot"></span>proven</span> the verifier-side pinning
+              <em>check</em>: wrong key → <span class="cr mono">FAIL</span>, genuine →
+              <span class="cg mono">PASS</span> (device <em>identity</em> still needs the CAAM key)</li>
           <li><span class="mono">he_host --key-hex</span> path wired end-to-end</li>
           <li>Hardware adds only non-extractability (CAAM black key)</li>
         </ul>

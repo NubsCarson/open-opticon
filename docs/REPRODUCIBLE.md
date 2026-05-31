@@ -42,6 +42,8 @@ someone's laptop. Verify it with the GitHub CLI:
 ```sh
 # download the manifest from the CI run (or recompute it with `make repro`), then:
 gh attestation verify repro-manifest.txt --repo NubsCarson/open-opticon
+# (on a fork, substitute your own owner/repo — the attestation is bound to the
+#  repo whose CI produced it; the run summary prints the exact command for you.)
 ```
 
 A successful verification prints the source repo, the workflow that built it, and

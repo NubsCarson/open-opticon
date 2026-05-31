@@ -63,7 +63,14 @@ jobs:
             echo '```'
             cat repro-manifest.txt 2>/dev/null || echo '(build did not complete)'
             echo '```'
-            echo "Provenance: \`gh attestation verify repro-manifest.txt --repo ${GITHUB_REPOSITORY}\`"
+            # The attestation is only created on push (above), so only advertise the
+            # verify command on push — otherwise a PR/dispatch summary would suggest
+            # a command that fails (no provenance was produced for this run).
+            if [ "${GITHUB_EVENT_NAME}" = "push" ]; then
+              echo "Provenance: \`gh attestation verify repro-manifest.txt --repo ${GITHUB_REPOSITORY}\`"
+            else
+              echo "_(SLSA provenance is attached on push to the repo, not on this ${GITHUB_EVENT_NAME} run.)_"
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         if: always()
