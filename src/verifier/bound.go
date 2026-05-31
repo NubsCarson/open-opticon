@@ -154,8 +154,14 @@ func VerifyBundle(b Bundle, opt Options) VerifyResult {
 	}
 
 	// Gate 2: freshness — signed nonce must equal the issued challenge.
-	if opt.ExpectedNonce == nil {
+	// An empty (zero-length) expected nonce is treated exactly like a missing
+	// one: otherwise it would "match" an empty payload nonce and silently
+	// disable freshness (a fail-open). The system never issues an empty nonce.
+	if len(opt.ExpectedNonce) == 0 {
 		return VerifyResult{Predicate: pred, Reason: "no expected nonce supplied"}
+	}
+	if len(pred.Nonce) == 0 {
+		return VerifyResult{Predicate: pred, Reason: "bundle has no nonce"}
 	}
 	if subtle.ConstantTimeCompare(pred.Nonce, opt.ExpectedNonce) != 1 {
 		return VerifyResult{Predicate: pred,

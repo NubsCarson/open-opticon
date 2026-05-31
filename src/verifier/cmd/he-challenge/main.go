@@ -64,6 +64,12 @@ type server struct {
 }
 
 func main() {
+	flag.Usage = func() {
+		fmt.Fprint(flag.CommandLine.Output(),
+			"he-challenge — live nonce/challenge server + mobile verifier page (/v).\n\n"+
+				"usage: he-challenge [flags]   then open http://<addr>/ (operator) or /v (phone)\n\nflags:\n")
+		flag.PrintDefaults()
+	}
 	addr := flag.String("addr", ":8090", "listen address")
 	base := flag.String("base-url", "", "externally reachable base URL (for the QR); defaults to http://<addr>")
 	pinX := flag.String("pin-x", "", "pinned endorsement pub X (hex), optional")

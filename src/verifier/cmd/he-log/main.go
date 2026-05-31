@@ -98,12 +98,30 @@ func pad32(n *big.Int) []byte {
 	return b
 }
 
+const usage = `he-log — operate the Honest Ear endorsement transparency log (append-only RFC 6962).
+
+usage: he-log <command> [flags]
+
+commands:
+  genkey                                       P-256 log key: prints priv/pub
+  --log L add <entryHex>                        append an entry, prints its index
+  --log L root                                  current log size + Merkle root
+  --log L checkpoint --key <privHex> [--origin O]   sign a (size, root) checkpoint
+  --log L prove --index N --key <privHex>       signed inclusion-proof bundle
+  verify --proof <proof.json>                   check an inclusion-proof bundle
+
+State is a JSON file (--log, default he-log.json). Stdlib only.`
+
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: he-log <genkey|add|root|checkpoint|prove|verify> [flags] (see -h)")
+		fmt.Fprintln(os.Stderr, usage)
 		os.Exit(2)
 	}
 	cmd := os.Args[1]
+	if cmd == "-h" || cmd == "--help" || cmd == "help" {
+		fmt.Println(usage)
+		return
+	}
 	logPath := flag.String("log", "he-log.json", "log state file")
 	keyHex := flag.String("key", "", "log P-256 private key (hex), for checkpoint")
 	origin := flag.String("origin", "honest-ear.log/v1", "checkpoint origin line")
@@ -203,13 +221,13 @@ func main() {
 			[]byte(pb.Checkpoint), mustHex(pb.CheckSig, "sig"),
 			mustHex(pb.LogPubX, "log_pub_x"), mustHex(pb.LogPubY, "log_pub_y"))
 		if err != nil {
-			fmt.Printf("\033[1;31mFAIL\033[0m  %v\n", err)
+			fmt.Printf("%s  %v\n", cli.Fail(), err)
 			os.Exit(1)
 		}
-		fmt.Printf("\033[1;32mPASS\033[0m  endorsement is in the signed, append-only log (index %d)\n", pb.Index)
+		fmt.Printf("%s  endorsement is in the signed, append-only log (index %d)\n", cli.Pass(), pb.Index)
 
 	default:
-		fmt.Fprintln(os.Stderr, "usage: he-log [genkey|add|root|checkpoint|prove|verify] (see -h)")
+		fmt.Fprintf(os.Stderr, "unknown command %q\n\n%s\n", cmd, usage)
 		os.Exit(2)
 	}
 }

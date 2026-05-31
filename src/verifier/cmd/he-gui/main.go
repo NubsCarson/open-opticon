@@ -56,6 +56,12 @@ type verifyReq struct {
 }
 
 func main() {
+	flag.Usage = func() {
+		fmt.Fprint(flag.CommandLine.Output(),
+			"he-gui — browser click-to-listen demo; shows only the verifier's bound verdict.\n\n"+
+				"usage: he-gui [flags]   then open http://<addr>/\n\nflags:\n")
+		flag.PrintDefaults()
+	}
 	addr := flag.String("addr", ":8095", "listen address")
 	sim := flag.String("sim", "sim/bin/he-attest-sim", "path to he-attest-sim binary")
 	flag.Parse()

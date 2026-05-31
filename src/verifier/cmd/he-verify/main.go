@@ -38,6 +38,19 @@ func (r *rootList) Set(v string) error {
 }
 
 func main() {
+	flag.Usage = func() {
+		fmt.Fprint(flag.CommandLine.Output(), `he-verify — verify Honest Ear bound-output bundles.
+
+  single: he-verify --nonce <hex> [--pin-x <hex> --pin-y <hex>] [--last-counter N] [bundle.json]
+  quorum: he-verify --nonce <hex> --quorum K --root name:<pubXhex>:<pubYhex> [--root ...] a.json b.json ...
+
+Single mode reads one bundle from the file arg or stdin; quorum reads one per file arg.
+Exits 0 on PASS, 1 on FAIL, 2 on usage error.
+
+flags:
+`)
+		flag.PrintDefaults()
+	}
 	nonceHex := flag.String("nonce", "", "expected fresh nonce (hex) — required")
 	pinX := flag.String("pin-x", "", "pinned endorsement pub X (hex); use with --pin-y")
 	pinY := flag.String("pin-y", "", "pinned endorsement pub Y (hex); use with --pin-x")
@@ -89,13 +102,13 @@ func main() {
 
 	res := verifier.VerifyBundle(b, opt)
 	if !res.OK {
-		fmt.Printf("\033[1;31mFAIL\033[0m  %s\n", res.Reason)
+		fmt.Printf("%s  %s\n", cli.Fail(), res.Reason)
 		if res.Predicate != nil {
 			printPredicate(res.Predicate)
 		}
 		os.Exit(1)
 	}
-	fmt.Printf("\033[1;32mPASS\033[0m  bound output verified (signature + freshness + anti-replay)\n")
+	fmt.Printf("%s  bound output verified (signature + freshness + anti-replay)\n", cli.Pass())
 	printPredicate(res.Predicate)
 }
 
@@ -134,10 +147,10 @@ func runQuorum(nonce []byte, k int, rootSpecs rootList, lastCounter uint64) {
 		ExpectedNonce: nonce, Roots: roots, Threshold: k, LastCounter: lastCounter,
 	})
 	if !res.OK {
-		fmt.Printf("\033[1;31mFAIL\033[0m  quorum not reached: %s\n", res.Reason)
+		fmt.Printf("%s  quorum not reached: %s\n", cli.Fail(), res.Reason)
 		os.Exit(1)
 	}
-	fmt.Printf("\033[1;32mPASS\033[0m  %d-of-%d quorum reached by independent provers: %s\n",
+	fmt.Printf("%s  %d-of-%d quorum reached by independent provers: %s\n", cli.Pass(),
 		k, len(roots), strings.Join(res.PassedRoots, ", "))
 	fmt.Printf("  agreed event : %s\n", res.Event)
 	fmt.Printf("  (only the event class is quorum-agreed; counters/presence are per-prover)\n")

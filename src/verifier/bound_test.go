@@ -188,6 +188,28 @@ func TestVerifyRejectsStaleNonce(t *testing.T) {
 	}
 }
 
+// An empty (zero-length) nonce must NOT silently disable the freshness gate.
+// Before the len()==0 guard, an empty expected nonce "matched" an empty payload
+// nonce (ConstantTimeCompare([]byte{},[]byte{})==1), a fail-open reachable via
+// he-gui's client-controlled nonce="" + a payload signed by the published key.
+func TestVerifyRejectsEmptyNonceFailOpen(t *testing.T) {
+	// Same golden payload but with an EMPTY nonce bstr (0140, not 0142aabb).
+	emptyNonce := mustHex(
+		"a9" + "0001" + "0140" + "0202" + "03f4" + "0401" + "050a" + "0618a0" +
+			"0707" + "085820" +
+			"1111111111111111111111111111111111111111111111111111111111111111")
+	b, _, _ := signGolden(t, emptyNonce) // valid signature, so only freshness is on trial
+	for name, opt := range map[string]Options{
+		"empty expected nonce": {ExpectedNonce: []byte{}},
+		"nil expected nonce":   {ExpectedNonce: nil},
+		"real vs empty nonce":  {ExpectedNonce: mustHex("aabb")},
+	} {
+		if VerifyBundle(b, opt).OK {
+			t.Errorf("FAIL-OPEN: accepted with %s; freshness gate bypassed", name)
+		}
+	}
+}
+
 func TestVerifyRejectsReplayCounter(t *testing.T) {
 	b, _, _ := signGolden(t, golden)
 	res := VerifyBundle(b, Options{

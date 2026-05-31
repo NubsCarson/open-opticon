@@ -179,8 +179,8 @@ Run a single attestation by hand:
 
 ```sh
 make sim
-sim/bin/he-detect test/fixtures/alarm.pcm        # crypto-free detector smoke test
-python3 test/gen_frames.py test/fixtures
+python3 test/gen_frames.py test/fixtures             # generate the PCM fixtures (gitignored)
+sim/bin/he-detect test/fixtures/alarm.pcm            # crypto-free detector smoke test
 N=$(openssl rand -hex 32)
 sim/bin/he-attest-sim test/fixtures/alarm.pcm "$N" 1 > bundle.json
 (cd src/verifier && go run ./cmd/he-verify --nonce "$N" ../../bundle.json)
