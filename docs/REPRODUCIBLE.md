@@ -27,6 +27,29 @@ Deterministic flags used:
 
 Expected result: `REPRODUCIBLE  all host artifacts are byte-identical`.
 
+### CI publishes + attests the manifest (SLSA provenance)
+
+On every push, the `reproducible-build` CI job runs the same check, writes the
+SHA-256 manifest (`<sha256>  <binary>`, one line per artifact) to the run summary,
+uploads it as the `repro-manifest` artifact, and attaches a **SLSA build
+provenance attestation** to it via
+[`actions/attest-build-provenance`](https://github.com/actions/attest-build-provenance).
+The attestation is a Sigstore-signed, in-toto statement binding the manifest's
+digest to *which workflow, commit, and runner produced it* — so a third party can
+confirm a given manifest came from this repo's CI on this source, not from
+someone's laptop. Verify it with the GitHub CLI:
+
+```sh
+# download the manifest from the CI run (or recompute it with `make repro`), then:
+gh attestation verify repro-manifest.txt --repo NubsCarson/open-opticon
+```
+
+A successful verification prints the source repo, the workflow that built it, and
+the commit — closing the loop from "these bytes are this source" (the two-tree
+rebuild) to "and this measurement was produced by this public CI from that source"
+(the provenance). The two compose: recompute the manifest locally, confirm it
+matches the attested one.
+
 ## The OP-TEE TA measurement — the one that matters
 
 The TA's measurement is what Veraison checks (the `measurement-value` in

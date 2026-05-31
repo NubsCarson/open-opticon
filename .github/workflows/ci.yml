@@ -32,6 +32,12 @@ jobs:
   # manifest so anyone can confirm a released build is exactly this source.
   reproducible-build:
     runs-on: ubuntu-latest
+    # id-token + attestations let us attach a SLSA build-provenance attestation to
+    # the measurement manifest (below); contents:read is the least privilege for checkout.
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -41,6 +47,13 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y build-essential libssl-dev openssl python3
       - name: Reproducible-build check (byte-identical across two trees)
         run: bash tools/repro.sh | tee repro-manifest.txt
+      - name: Attest SLSA build provenance for the manifest
+        # Only on push to this repo (fork PRs lack the OIDC token); skip if the
+        # repro step failed, so we never attest a partial/bad manifest.
+        if: success() && github.event_name == 'push'
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: repro-manifest.txt
       - name: Publish the measurement manifest to the run summary
         if: always()
         run: |
@@ -50,6 +63,7 @@ jobs:
             echo '```'
             cat repro-manifest.txt 2>/dev/null || echo '(build did not complete)'
             echo '```'
+            echo "Provenance: \`gh attestation verify repro-manifest.txt --repo ${GITHUB_REPOSITORY}\`"
           } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         if: always()
