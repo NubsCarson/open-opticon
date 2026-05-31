@@ -2,10 +2,12 @@
 #
 # Generate onchain/test/quorum_fixture.json — real device bound-output bundles
 # (he-attest-sim, the published test key) for the SAME clips the zk proofs use,
-# so the on-chain 2-of-3 quorum can check the ZK leg and the device-signature
+# so the on-chain dual-root check can confirm the ZK leg and the device-signature
 # leg agree. The P-256 signature is normalized to low-s (OZ P256 requires it).
 # 0x-prefixed for Foundry; commit the output so forge test needs no C toolchain.
-set -u
+# Note: ECDSA signing uses a random nonce, so re-running yields a different but
+# equally-valid signature — the committed fixture need not be byte-reproduced.
+set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SIM="$ROOT/sim/bin"
@@ -32,7 +34,10 @@ PY
 alarm_json="$("$SIM/he-attest-sim" "$FIX/alarm_short.pcm" aabbccdd 1)"
 silence_json="$("$SIM/he-attest-sim" "$FIX/silence_short.pcm" aabbccdd 1)"
 
-ALARM="$alarm_json" SILENCE="$silence_json" python3 - <<'PY' > "$ROOT/onchain/test/quorum_fixture.json"
+OUT="$ROOT/onchain/test/quorum_fixture.json"
+TMP_OUT="$(mktemp)"
+trap 'rm -f "$TMP_OUT"' EXIT
+ALARM="$alarm_json" SILENCE="$silence_json" python3 - <<'PY' > "$TMP_OUT"
 import json, os
 
 N = 0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551
@@ -59,5 +64,6 @@ print(json.dumps({"alarm": leg(os.environ["ALARM"]),
                   "silence": leg(os.environ["SILENCE"])}, indent=2))
 PY
 
+mv "$TMP_OUT" "$OUT" # only overwrite the committed fixture on full success
 echo "wrote onchain/test/quorum_fixture.json"
-python3 -c "import json;d=json.load(open('$ROOT/onchain/test/quorum_fixture.json'));print('alarm event/presence:',d['alarm']['event'],d['alarm']['presence']);print('silence event/presence:',d['silence']['event'],d['silence']['presence'])"
+python3 -c "import json;d=json.load(open('$OUT'));print('alarm event/presence:',d['alarm']['event'],d['alarm']['presence']);print('silence event/presence:',d['silence']['event'],d['silence']['presence'])"

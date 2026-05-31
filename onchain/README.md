@@ -33,11 +33,13 @@ src/CheckpointAnchor.sol    anchors the transparency-log signed checkpoints to a
 test/CheckpointAnchor.t.sol + test/checkpoint_fixture.json  a REAL consistency proof
                             (tree size 3 -> 5 from `he-log consistency`) anchors;
                             a forked root and a rollback both revert.
-src/HonestEarQuorum.sol     heterogeneous 2-of-3, on-chain: returns a verdict only
-                            if a ZK proof (Groth16) AND the device's secp256r1
-                            signature over its bound-output payload (OpenZeppelin
-                            P256) AGREE on (event, presence). Decodes the device
-                            verdict from the deterministic-CBOR payload directly.
+src/HonestEarQuorum.sol     heterogeneous dual-root check (both-required 2-of-2),
+                            on-chain: returns a verdict only if a ZK proof (Groth16)
+                            AND the device's secp256r1 signature over its
+                            bound-output payload (OpenZeppelin P256) AGREE on the
+                            predicate (event, presence, voice_active, frames).
+                            Decodes the device verdict from the deterministic-CBOR
+                            payload; recordVerdict enforces counter anti-replay.
 test/HonestEarQuorum.t.sol + test/quorum_fixture.json  a real proof + a real device
                             bundle for the same clip agree; a disagreeing bundle, a
                             tampered receipt, and a tampered signature all revert.
@@ -45,14 +47,17 @@ script/Deploy.s.sol         deploy the wrapper against a canonical RISC Zero ver
 script/DeployLocal.s.sol    deploy the FULL stack + run live txs on a local EVM.
 ```
 
-## The 2-of-3, on-chain
+## The dual-root check, on-chain (a both-required 2-of-2)
 
 The off-chain Go verifier is stdlib-only and cannot verify a STARK; the EVM can
 verify both a Groth16 receipt and a secp256r1 signature, so the heterogeneous
-2-of-3 lives here: `HonestEarQuorum` checks an independent **ZK proof of the
-computation** and the **device's hardware-bound P-256 signature** and returns a
-verdict only if they agree. A single broken enclave, or a forged signature, is
-not enough.
+check lives here: `HonestEarQuorum` requires an independent **ZK proof of the
+computation** AND the **device's hardware-bound P-256 signature**, and returns a
+verdict only if both verify and agree. A single broken enclave, or a forged
+signature, is not enough. `recordVerdict` adds on-chain anti-replay (the device
+counter must advance). This is one realisable leg of the broader 2-of-3 vision
+({TEE, ZK, phone}); binding both roots to the same audio window cryptographically
+(a shared input commitment) is the documented next step.
 
 ## Deploy the whole stack on a local EVM (no funds)
 
@@ -62,10 +67,12 @@ forge script script/DeployLocal.s.sol --rpc-url http://localhost:8545 \
     --broadcast --private-key <anvil key>
 ```
 
-This deploys the verifier, the receipt wrapper, the log anchor, and the quorum,
-then runs live transactions — anchoring a consistency-proven checkpoint sequence
-and reading back both the zk verdict and the 2-of-3 agreed verdict. The same
-script targets a public testnet with a funded key + RPC (the one deferred step).
+anvil is a real EVM implementation (a local devnet, not a public testnet). The
+script deploys the verifier, the receipt wrapper, the log anchor, and the quorum,
+then runs live state-changing transactions — anchoring a consistency-proven
+checkpoint sequence — and reads back both the zk verdict and the dual-root agreed
+verdict via view calls. The same script targets a public testnet with a funded
+key + RPC (the one deferred step).
 
 ## Verify the proof yourself (local, no funds)
 

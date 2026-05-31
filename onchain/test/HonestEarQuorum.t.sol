@@ -7,7 +7,7 @@ import {ControlID} from "risc0/groth16/ControlID.sol";
 import {VerificationFailed} from "risc0/IRiscZeroVerifier.sol";
 import {HonestEarQuorum} from "../src/HonestEarQuorum.sol";
 
-/// On-chain heterogeneous 2-of-3: a REAL Groth16 receipt (test/proof_fixture.json)
+/// On-chain heterogeneous dual-root check (2-of-2): a REAL Groth16 receipt (test/proof_fixture.json)
 /// AND a REAL device P-256 bound-output bundle (test/quorum_fixture.json) for the
 /// same alarm clip must agree before the contract returns a verdict. Verified
 /// entirely on a local EVM — Groth16 via the RISC Zero verifier, P-256 via
@@ -45,6 +45,15 @@ contract HonestEarQuorumTest is Test {
         (uint32 ev, uint32 pres) = q.verdict(seal, journal, aPayload, aSig);
         assertEq(ev, 2, "agreed event should be alarm_tone");
         assertEq(pres, 1, "agreed presence");
+    }
+
+    function test_RecordEnforcesAntiReplay() public {
+        (uint32 ev,) = q.recordVerdict(seal, journal, aPayload, aSig); // counter 1: ok
+        assertEq(ev, 2);
+        assertEq(q.lastCounter(), 1);
+        // Re-submitting the same bundle (counter 1, not > 1) must be rejected.
+        vm.expectRevert(bytes("counter must advance (anti-replay)"));
+        q.recordVerdict(seal, journal, aPayload, aSig);
     }
 
     function test_RejectsDisagreement() public {

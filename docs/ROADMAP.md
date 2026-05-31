@@ -30,13 +30,17 @@ From this PoC to a defensible product, in order of trust-impact.
   `imageId` on a stateless EVM; a real proof fixture verifies on a local EVM
   (`forge test`, no funds/network). A *live testnet* deploy (funded key + RPC) is
   the one deferred step.
-- **A heterogeneous 2-of-3 quorum, on-chain.** `HonestEarQuorum.sol` returns a
-  verdict only if a ZK proof of the detector (Groth16) *and* the device's
-  hardware-bound secp256r1 signature over its bound-output payload (OpenZeppelin
-  P256) agree on the predicate — where, unlike the stdlib-only Go verifier, the
-  EVM can verify both proof systems. Proven on a local EVM with a real receipt +
-  a real device bundle; the full stack also deploys + runs live transactions via
-  `DeployLocal.s.sol` (anvil). The transparency-log checkpoints also have an on-chain
+- **A heterogeneous dual-root check, on-chain (a both-required 2-of-2).**
+  `HonestEarQuorum.sol` returns a verdict only if a ZK proof of the detector
+  (Groth16) *and* the device's hardware-bound secp256r1 signature over its
+  bound-output payload (OpenZeppelin P256) both verify and agree on the predicate
+  (event, presence, voice_active, frames) — where, unlike the stdlib-only Go
+  verifier, the EVM can verify both proof systems. `recordVerdict` enforces
+  on-chain anti-replay via the device counter. Proven on a local EVM with a real
+  receipt + a real device bundle; the full stack also deploys + runs live
+  transactions via `DeployLocal.s.sol` (anvil). One realisable leg of the broader
+  2-of-3 vision; cryptographically binding both roots to the same audio window
+  (a shared input commitment) is the documented next step. The transparency-log checkpoints also have an on-chain
   anchor (`onchain/src/CheckpointAnchor.sol`): it verifies an RFC 9162 consistency
   proof on-chain (SHA-256 precompile) so a fork/rewrite is rejected — proven by a
   real `he-log consistency` proof in `forge test`; only the live deploy is deferred.

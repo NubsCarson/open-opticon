@@ -59,7 +59,7 @@ contract DeployLocal is Script {
         console2.log("anchor latest size     :", anchor.latestSize());
         console2.log("zk-proven event class  :", v.eventClass); // 2 == alarm_tone
         console2.log("zk-proven presence     :", v.presence);
-        console2.log("2-of-3 agreed event    :", qEvent); // ZK + device signature agree
-        console2.log("2-of-3 agreed presence :", qPresence);
+        console2.log("2-of-2 agreed event    :", qEvent); // ZK + device signature agree
+        console2.log("2-of-2 agreed presence :", qPresence);
     }
 }

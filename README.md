@@ -147,11 +147,13 @@ This is a clean overlay on `optee-ra`; it does not modify the upstream tree
 - **on-chain verification of that proof** — a Foundry test verifies the real
   Groth16 receipt for the pinned guest `imageId` on a local EVM, with no enclave
   or operator trusted (`onchain/`, `forge test`; no funds/network). The same
-  project also proves, on-chain: a **heterogeneous 2-of-3 quorum** (a ZK proof
-  *and* the device's secp256r1 signature must agree) and an **append-only log
-  anchor** (RFC 9162 consistency verified on-chain, so a fork/rewrite reverts).
-  The full stack deploys + runs live transactions on a real EVM node
-  (`DeployLocal.s.sol` on anvil); a live testnet deploy is the one deferred step.
+  project also proves, on-chain: a **heterogeneous 2-of-2 check** (a ZK proof
+  *and* the device's secp256r1 signature must both verify and agree — one
+  realisable leg of the broader 2-of-3 vision) and an **append-only log anchor**
+  (RFC 9162 consistency verified on-chain, so a fork/rewrite reverts). The full
+  stack deploys + runs live transactions on a **local anvil devnet** (a real EVM,
+  not a public testnet — `DeployLocal.s.sol`); a public testnet deploy is the one
+  deferred step.
 
 **Reviewed and runbook-driven — builds/runs on an Arm rig (see [`docs/RUNBOOK.md`](docs/RUNBOOK.md)):**
 - the OP-TEE TA/PTA/host code and the live QEMU / RPi 3B+ / i.MX 8M Plus
