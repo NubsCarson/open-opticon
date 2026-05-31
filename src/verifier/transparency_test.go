@@ -151,3 +151,48 @@ func TestCheckpointAndLoggedEndorsement(t *testing.T) {
 		t.Error("tampered checkpoint accepted")
 	}
 }
+
+func TestWitnessCosigning(t *testing.T) {
+	l := buildLog(5)
+	root := l.Root()
+	cpBody := CheckpointBody("honest-ear.log/v1", l.Size(), root)
+
+	// Three independent witnesses cosign the exact checkpoint body.
+	var cosigs []Cosignature
+	for _, name := range []string{"witness-a", "witness-b", "witness-c"} {
+		wk, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		sig, err := CosignCheckpoint(cpBody, wk)
+		if err != nil {
+			t.Fatal(err)
+		}
+		cosigs = append(cosigs, Cosignature{
+			Witness: name,
+			PubX:    leftPad(wk.PublicKey.X.Bytes(), 32),
+			PubY:    leftPad(wk.PublicKey.Y.Bytes(), 32),
+			Sig:     sig,
+		})
+	}
+
+	if got := VerifyCheckpointWitnesses(cpBody, cosigs); len(got) != 3 {
+		t.Fatalf("expected 3 valid witnesses, got %v", got)
+	}
+
+	// Anti-equivocation: those cosignatures do NOT validate a different checkpoint
+	// (the operator can't reuse witness cosigs to back a forked history).
+	forked := CheckpointBody("honest-ear.log/v1", l.Size(), [32]byte{0xff})
+	if got := VerifyCheckpointWitnesses(forked, cosigs); len(got) != 0 {
+		t.Errorf("witnesses validated a checkpoint they never signed: %v", got)
+	}
+
+	// Duplicate witness names are deduped — one key can't pad the threshold.
+	dup := []Cosignature{cosigs[0], cosigs[0], cosigs[0]}
+	if got := VerifyCheckpointWitnesses(cpBody, dup); len(got) != 1 {
+		t.Errorf("duplicate witness counted more than once: %v", got)
+	}
+
+	// A forged cosignature (a name with someone else's signature) is rejected.
+	forged := Cosignature{Witness: "witness-d", PubX: cosigs[0].PubX, PubY: cosigs[0].PubY, Sig: cosigs[1].Sig}
+	if got := VerifyCheckpointWitnesses(cpBody, []Cosignature{forged}); len(got) != 0 {
+		t.Errorf("forged cosignature accepted: %v", got)
+	}
+}

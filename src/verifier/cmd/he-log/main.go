@@ -60,6 +60,16 @@ type consistencyBundle struct {
 	Proof   []string `json:"proof"`
 }
 
+// cosignBundle is an independent witness's signature over a checkpoint body. A
+// verifier requires a threshold of these (VerifyCheckpointWitnesses) so a single
+// log operator cannot equivocate.
+type cosignBundle struct {
+	Witness string `json:"witness"`
+	PubX    string `json:"witness_pub_x"`
+	PubY    string `json:"witness_pub_y"`
+	Sig     string `json:"cosignature"`
+}
+
 func load(path string) *verifier.MerkleLog {
 	l := &verifier.MerkleLog{}
 	raw, err := os.ReadFile(path)
@@ -123,6 +133,7 @@ commands (subcommand first, then flags):
   checkpoint --log L --key <privHex> [--origin O]    sign a (size, root) checkpoint
   prove --log L --index N --key <privHex>            signed inclusion-proof bundle
   consistency --log L --index OLD                    RFC 9162 consistency proof OLD->now
+  cosign --checkpoint <body> --key <privHex> --witness NAME   witness-cosign a checkpoint
   verify --proof <proof.json>                        check an inclusion-proof bundle
 
 State is a JSON file (--log, default he-log.json). Stdlib only.`
@@ -142,6 +153,8 @@ func main() {
 	origin := flag.String("origin", "honest-ear.log/v1", "checkpoint origin line")
 	index := flag.Int("index", 0, "leaf index, for prove")
 	proofPath := flag.String("proof", "", "proof bundle JSON, for verify")
+	cpPath := flag.String("checkpoint", "", "checkpoint body file, for cosign")
+	witness := flag.String("witness", "", "witness name, for cosign")
 	flag.CommandLine.Parse(os.Args[2:]) // subcommand-first; flags follow it
 
 	switch cmd {
@@ -229,6 +242,31 @@ func main() {
 		}
 		for _, node := range proof {
 			cb.Proof = append(cb.Proof, hex.EncodeToString(node[:]))
+		}
+		out, _ := json.MarshalIndent(cb, "", "  ")
+		fmt.Println(string(out))
+
+	case "cosign":
+		if *keyHex == "" || *cpPath == "" || *witness == "" {
+			cli.Die("cosign needs --checkpoint <body> --key <witnessPrivHex> --witness NAME")
+		}
+		body, err := os.ReadFile(*cpPath)
+		if err != nil {
+			cli.Die("reading checkpoint: %v", err)
+		}
+		if _, _, _, err := verifier.ParseCheckpoint(body); err != nil {
+			cli.Die("not a valid checkpoint body: %v", err)
+		}
+		key := loadKey(*keyHex)
+		sig, err := verifier.CosignCheckpoint(body, key)
+		if err != nil {
+			cli.Die("%v", err)
+		}
+		cb := cosignBundle{
+			Witness: *witness,
+			PubX:    hex.EncodeToString(pad32(key.PublicKey.X)),
+			PubY:    hex.EncodeToString(pad32(key.PublicKey.Y)),
+			Sig:     hex.EncodeToString(sig),
 		}
 		out, _ := json.MarshalIndent(cb, "", "  ")
 		fmt.Println(string(out))

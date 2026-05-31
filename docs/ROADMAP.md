@@ -8,10 +8,14 @@ From this PoC to a defensible product, in order of trust-impact.
   *n* enrolled independent roots to verify and agree
   ([`quorum.go`](../src/verifier/quorum.go)). Wiring up genuinely heterogeneous
   provers (a second-vendor TEE, a TPM quote) is the remaining integration.
-- **Endorsement transparency log.** RFC 6962 append-only Merkle log with
-  inclusion + consistency proofs and a signed checkpoint (`he-log`,
-  [`transparency.go`](../src/verifier/transparency.go)); the verifier can require
-  an endorsement to be logged. Witness cosigning (below) is the remaining gap.
+- **Endorsement transparency log + witness cosigning.** RFC 6962 append-only
+  Merkle log with inclusion + consistency proofs and a signed checkpoint
+  (`he-log`, [`transparency.go`](../src/verifier/transparency.go)); the verifier
+  can require an endorsement to be logged. Independent **witnesses cosign**
+  checkpoints (`he-log cosign`, `CosignCheckpoint`/`VerifyCheckpointWitnesses`,
+  C2SP/Sigstore model) and the verifier requires a threshold of them, so a single
+  operator cannot equivocate — the off-chain analogue of the on-chain
+  `CheckpointAnchor`. (On-chain anchoring is the chain-backed alternative.)
 - **Reproducible host builds.** `make repro` proves the host artifacts are
   byte-identical across independent build trees; the TA-measurement recipe is in
   [`REPRODUCIBLE.md`](REPRODUCIBLE.md). CI gates every push on this and publishes
@@ -69,9 +73,11 @@ From this PoC to a defensible product, in order of trust-impact.
   (a measured-boot TPM quote, a second-vendor TEE) as roots in `he-verify
   --quorum`. The ZK leg can't be auto-wired into the stdlib-only Go verifier
   (it can't verify a STARK) — which is exactly why that leg's quorum is on-chain.
-- **Witness cosigning for the transparency log.** Independent witnesses
-  countersign checkpoints (the C2SP/Sigstore model) so a single log operator
-  cannot present a split view; today one operator could still equivocate.
+- **Witness cosigning for the transparency log.** ✅ Done (see "Done in this
+  PoC"): `he-log cosign` + `VerifyCheckpointWitnesses` let independent witnesses
+  countersign checkpoints (C2SP/Sigstore model). Remaining operational work is
+  running real, independent witnesses that gossip + consistency-check before
+  cosigning, not just the protocol.
 - **Sign endorsements as CoRIM.** Provision Veraison with a COSE-signed CoRIM and
   log the signed CoRIM as the transparency-log entry, so endorser authenticity
   is covered end-to-end.

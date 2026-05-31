@@ -210,10 +210,11 @@ func CheckpointBody(origin string, size int, root [32]byte) []byte {
 		origin, size, base64.StdEncoding.EncodeToString(root[:])))
 }
 
-// SignCheckpoint signs a checkpoint body with the log's P-256 key, returning the
-// 64-byte r||s signature used everywhere else in this project.
-func SignCheckpoint(origin string, size int, root [32]byte, key *ecdsa.PrivateKey) ([]byte, error) {
-	h := sha256.Sum256(CheckpointBody(origin, size, root))
+// signNote signs an exact note body with a P-256 key, returning the 64-byte
+// r||s signature used everywhere else in this project. One signing path shared
+// by the log operator (SignCheckpoint) and witnesses (CosignCheckpoint).
+func signNote(body []byte, key *ecdsa.PrivateKey) ([]byte, error) {
+	h := sha256.Sum256(body)
 	r, s, err := ecdsa.Sign(rand.Reader, key, h[:])
 	if err != nil {
 		return nil, err
@@ -222,6 +223,12 @@ func SignCheckpoint(origin string, size int, root [32]byte, key *ecdsa.PrivateKe
 	r.FillBytes(sig[:32])
 	s.FillBytes(sig[32:])
 	return sig, nil
+}
+
+// SignCheckpoint signs a checkpoint body with the log's P-256 key, returning the
+// 64-byte r||s signature used everywhere else in this project.
+func SignCheckpoint(origin string, size int, root [32]byte, key *ecdsa.PrivateKey) ([]byte, error) {
+	return signNote(CheckpointBody(origin, size, root), key)
 }
 
 // ParseCheckpoint extracts (origin, size, root) from a checkpoint body.
@@ -259,4 +266,44 @@ func CheckLoggedEndorsement(entry []byte, index int, proof [][32]byte,
 		return errors.New("endorsement not included under the signed checkpoint root")
 	}
 	return nil
+}
+
+// ---- witness cosigning (anti-equivocation, C2SP/Sigstore model) ----
+
+// A Cosignature is an independent witness's signature over a checkpoint body.
+// Witnesses gossip and cosign only checkpoints they have verified are consistent
+// extensions of what they last saw (VerifyConsistency), so a single log operator
+// cannot present a forked or rewound history without colluding with the
+// witnesses — the off-chain analogue of the on-chain CheckpointAnchor.
+type Cosignature struct {
+	Witness string // enrolled witness name
+	PubX    []byte
+	PubY    []byte
+	Sig     []byte // 64-byte r||s over the checkpoint body
+}
+
+// CosignCheckpoint signs an exact checkpoint body with a witness key (the witness
+// signs the bytes it verified, not a rebuilt body). Same ECDSA primitive as the
+// log operator's signature.
+func CosignCheckpoint(cpBody []byte, key *ecdsa.PrivateKey) ([]byte, error) {
+	return signNote(cpBody, key)
+}
+
+// VerifyCheckpointWitnesses returns the names of distinct enrolled witnesses
+// whose cosignature over cpBody is valid (deduped by name). The verifier requires
+// at least a threshold of these in addition to the operator's signature, so no
+// single operator can equivocate. Reuses verifySig (one ECDSA path).
+func VerifyCheckpointWitnesses(cpBody []byte, cosigs []Cosignature) []string {
+	seen := map[string]bool{}
+	var ok []string
+	for _, c := range cosigs {
+		if c.Witness == "" || seen[c.Witness] {
+			continue
+		}
+		if verifySig(cpBody, c.Sig, c.PubX, c.PubY) == nil {
+			seen[c.Witness] = true
+			ok = append(ok, c.Witness)
+		}
+	}
+	return ok
 }
