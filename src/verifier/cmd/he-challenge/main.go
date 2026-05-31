@@ -31,6 +31,7 @@ import (
 	"time"
 
 	verifier "honest-ear/verifier"
+	"honest-ear/verifier/internal/cli"
 )
 
 // maxSessions caps in-memory sessions so an unauthenticated /challenge flood
@@ -112,7 +113,7 @@ func (s *server) handleChallenge(w http.ResponseWriter, _ *http.Request) {
 	s.gcLocked()
 	if len(s.sessions) >= maxSessions { // bound memory under a /challenge flood
 		s.mu.Unlock()
-		writeJSON(w, 503, map[string]string{"error": "too many active sessions, retry shortly"})
+		cli.WriteJSON(w, 503, map[string]string{"error": "too many active sessions, retry shortly"})
 		return
 	}
 	s.sessions[sid] = &session{nonce: nonce, createdAt: time.Now()}
@@ -124,7 +125,7 @@ func (s *server) handleChallenge(w http.ResponseWriter, _ *http.Request) {
 	// Only the session id is needed; the device gets the nonce from the JSON below.
 	renderQR(fmt.Sprintf("%s/v?session=%s", s.baseURL, sid))
 	log.Printf("issued challenge session=%s nonce=%s", sid, nonceHex)
-	writeJSON(w, 200, map[string]string{
+	cli.WriteJSON(w, 200, map[string]string{
 		"session": sid, "nonce": nonceHex, "attest_url": attestURL,
 	})
 }
@@ -135,14 +136,14 @@ func (s *server) handleAttest(w http.ResponseWriter, r *http.Request) {
 	sess := s.sessions[sid]
 	s.mu.Unlock()
 	if sess == nil {
-		writeJSON(w, 404, map[string]string{"verdict": "FAIL", "reason": "unknown or expired session"})
+		cli.WriteJSON(w, 404, map[string]string{"verdict": "FAIL", "reason": "unknown or expired session"})
 		return
 	}
 
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // bound the body (DoS guard)
 	var b verifier.Bundle
 	if err := json.NewDecoder(r.Body).Decode(&b); err != nil {
-		writeJSON(w, 400, map[string]string{"verdict": "FAIL", "reason": "bad bundle: " + err.Error()})
+		cli.WriteJSON(w, 400, map[string]string{"verdict": "FAIL", "reason": "bad bundle: " + err.Error()})
 		return
 	}
 
@@ -188,7 +189,7 @@ func (s *server) handleAttest(w http.ResponseWriter, r *http.Request) {
 		out["counter"] = res.Predicate.Counter
 	}
 	log.Printf("attest session=%s verdict=%s reason=%s", sid, verdict, reason)
-	writeJSON(w, 200, out)
+	cli.WriteJSON(w, 200, out)
 }
 
 func (s *server) handleRoot(w http.ResponseWriter, _ *http.Request) {
@@ -215,7 +216,7 @@ func (s *server) handleStatus(w http.ResponseWriter, r *http.Request) {
 			"event": sess.event, "reason": sess.reason}
 	}
 	s.mu.Unlock()
-	writeJSON(w, 200, out)
+	cli.WriteJSON(w, 200, out)
 }
 
 // handleVerifyPage serves a mobile-friendly page that polls /status and shows a
@@ -274,12 +275,6 @@ func (s *server) gcLocked() {
 			delete(s.sessions, k)
 		}
 	}
-}
-
-func writeJSON(w http.ResponseWriter, code int, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(code)
-	_ = json.NewEncoder(w).Encode(v)
 }
 
 // renderQR prints a scannable QR if the `qrencode` CLI is available; otherwise

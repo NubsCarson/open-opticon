@@ -18,8 +18,8 @@ import (
 	"sort"
 )
 
-// Root is one enrolled, independent prover identified by its P-256 public key.
-type Root struct {
+// Prover is one enrolled, independent prover identified by its P-256 public key.
+type Prover struct {
 	Name       string
 	PubX, PubY []byte
 }
@@ -27,7 +27,7 @@ type Root struct {
 // QuorumOptions configures k-of-n verification.
 type QuorumOptions struct {
 	ExpectedNonce []byte
-	Roots         []Root
+	Roots         []Prover
 	Threshold     int // k: how many distinct roots must independently verify
 	LastCounter   uint64
 }
@@ -42,8 +42,8 @@ type QuorumResult struct {
 	PassedRoots []string
 }
 
-// matchRoot returns the enrolled root whose key signed this bundle, or nil.
-func matchRoot(b Bundle, roots []Root) *Root {
+// matchProver returns the enrolled root whose key signed this bundle, or nil.
+func matchProver(b Bundle, roots []Prover) *Prover {
 	px, err := hex.DecodeString(b.PubX)
 	if err != nil {
 		return nil
@@ -70,7 +70,7 @@ func VerifyQuorum(bundles []Bundle, qopt QuorumOptions) QuorumResult {
 	}
 	passed := map[string]*Predicate{}
 	for _, b := range bundles {
-		root := matchRoot(b, qopt.Roots)
+		root := matchProver(b, qopt.Roots)
 		if root == nil {
 			continue // not from an enrolled root — ignored
 		}

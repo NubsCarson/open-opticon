@@ -28,6 +28,7 @@ import (
 	"os"
 
 	verifier "honest-ear/verifier"
+	"honest-ear/verifier/internal/cli"
 )
 
 type logFile struct {
@@ -45,11 +46,6 @@ type proofBundle struct {
 	LogPubY    string   `json:"log_pub_y"`
 }
 
-func die(format string, a ...any) {
-	fmt.Fprintf(os.Stderr, "error: "+format+"\n", a...)
-	os.Exit(2)
-}
-
 func load(path string) *verifier.MerkleLog {
 	l := &verifier.MerkleLog{}
 	raw, err := os.ReadFile(path)
@@ -57,16 +53,16 @@ func load(path string) *verifier.MerkleLog {
 		return l
 	}
 	if err != nil {
-		die("reading %s: %v", path, err)
+		cli.Die("reading %s: %v", path, err)
 	}
 	var lf logFile
 	if err := json.Unmarshal(raw, &lf); err != nil {
-		die("parsing %s: %v", path, err)
+		cli.Die("parsing %s: %v", path, err)
 	}
 	for _, h := range lf.Leaves {
 		b, err := hex.DecodeString(h)
 		if err != nil {
-			die("bad leaf hex in %s: %v", path, err)
+			cli.Die("bad leaf hex in %s: %v", path, err)
 		}
 		l.Leaves = append(l.Leaves, b)
 	}
@@ -80,14 +76,14 @@ func save(path string, l *verifier.MerkleLog) {
 	}
 	raw, _ := json.MarshalIndent(lf, "", "  ")
 	if err := os.WriteFile(path, raw, 0o644); err != nil {
-		die("writing %s: %v", path, err)
+		cli.Die("writing %s: %v", path, err)
 	}
 }
 
 func loadKey(privHex string) *ecdsa.PrivateKey {
 	d, err := hex.DecodeString(privHex)
 	if err != nil {
-		die("bad --key hex: %v", err)
+		cli.Die("bad --key hex: %v", err)
 	}
 	k := new(ecdsa.PrivateKey)
 	k.PublicKey.Curve = elliptic.P256()
@@ -119,7 +115,7 @@ func main() {
 	case "genkey":
 		k, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 		if err != nil {
-			die("%v", err)
+			cli.Die("%v", err)
 		}
 		fmt.Printf("priv : %x\n", pad32(k.D))
 		fmt.Printf("pub_x: %x\n", pad32(k.PublicKey.X))
@@ -128,7 +124,7 @@ func main() {
 	case "add":
 		entry, err := hex.DecodeString(flag.Arg(0))
 		if err != nil {
-			die("entry must be hex (usage: he-log add --log L <entryHex>): %v", err)
+			cli.Die("entry must be hex (usage: he-log add --log L <entryHex>): %v", err)
 		}
 		l := load(*logPath)
 		i := l.Add(entry)
@@ -142,14 +138,14 @@ func main() {
 
 	case "checkpoint":
 		if *keyHex == "" {
-			die("checkpoint needs --key <privHex>")
+			cli.Die("checkpoint needs --key <privHex>")
 		}
 		l := load(*logPath)
 		key := loadKey(*keyHex)
 		root := l.Root()
 		sig, err := verifier.SignCheckpoint(*origin, l.Size(), root, key)
 		if err != nil {
-			die("%v", err)
+			cli.Die("%v", err)
 		}
 		fmt.Printf("%s", verifier.CheckpointBody(*origin, l.Size(), root))
 		fmt.Printf("sig  : %x\n", sig)
@@ -157,18 +153,18 @@ func main() {
 
 	case "prove":
 		if *keyHex == "" {
-			die("prove needs --key <privHex> to sign the checkpoint it proves against")
+			cli.Die("prove needs --key <privHex> to sign the checkpoint it proves against")
 		}
 		l := load(*logPath)
 		proof, err := l.InclusionProof(*index)
 		if err != nil {
-			die("%v", err)
+			cli.Die("%v", err)
 		}
 		key := loadKey(*keyHex)
 		root := l.Root()
 		sig, err := verifier.SignCheckpoint(*origin, l.Size(), root, key)
 		if err != nil {
-			die("%v", err)
+			cli.Die("%v", err)
 		}
 		pb := proofBundle{
 			Entry:      hex.EncodeToString(l.Leaves[*index]),
@@ -186,15 +182,15 @@ func main() {
 
 	case "verify":
 		if *proofPath == "" {
-			die("verify needs --proof <proof.json>")
+			cli.Die("verify needs --proof <proof.json>")
 		}
 		raw, err := os.ReadFile(*proofPath)
 		if err != nil {
-			die("reading proof: %v", err)
+			cli.Die("reading proof: %v", err)
 		}
 		var pb proofBundle
 		if err := json.Unmarshal(raw, &pb); err != nil {
-			die("parsing proof: %v", err)
+			cli.Die("parsing proof: %v", err)
 		}
 		entry := mustHex(pb.Entry, "entry")
 		var proof [][32]byte
@@ -221,7 +217,7 @@ func main() {
 func mustHex(s, what string) []byte {
 	b, err := hex.DecodeString(s)
 	if err != nil {
-		die("bad %s hex: %v", what, err)
+		cli.Die("bad %s hex: %v", what, err)
 	}
 	return b
 }

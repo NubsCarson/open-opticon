@@ -24,6 +24,7 @@ import (
 	"sync/atomic"
 
 	verifier "honest-ear/verifier"
+	"honest-ear/verifier/internal/cli"
 )
 
 //go:embed index.html
@@ -90,14 +91,14 @@ func listenHandler(sim string) http.HandlerFunc {
 		}
 		pcm, err := io.ReadAll(io.LimitReader(r.Body, 8<<20))
 		if err != nil || len(pcm) < 64 {
-			writeJSON(w, result{Reason: "no audio"})
+			cli.WriteJSON(w, http.StatusOK, result{Reason: "no audio"})
 			return
 		}
 		if len(pcm)%2 != 0 {
-			writeJSON(w, result{Reason: "PCM must be 16-bit samples (even byte count)"})
+			cli.WriteJSON(w, http.StatusOK, result{Reason: "PCM must be 16-bit samples (even byte count)"})
 			return
 		}
-		writeJSON(w, process(sim, pcm))
+		cli.WriteJSON(w, http.StatusOK, process(sim, pcm))
 	}
 }
 
@@ -141,14 +142,8 @@ func process(sim string, pcm []byte) result {
 		PubX:     b.PubX,
 		PubY:     b.PubY,
 	}
-	// Display the VERIFIED predicate, not the untrusted sim stdout. If verify
-	// failed, show no classification at all — never paint a confident result on
-	// unverified data (that would defeat the whole point).
-	if v.OK && v.Predicate != nil {
-		res.Event = v.Predicate.EventName()
-		res.Presence = v.Predicate.Presence == 1
-		res.Voice = v.Predicate.VoiceActive
-	}
+	// Display the VERIFIED predicate, not the untrusted sim stdout.
+	fillVerified(&res, v)
 	return res
 }
 
@@ -163,25 +158,26 @@ func verifyHandler(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	var q verifyReq
 	if err := json.NewDecoder(r.Body).Decode(&q); err != nil {
-		writeJSON(w, result{Reason: "bad bundle: " + err.Error()})
+		cli.WriteJSON(w, http.StatusOK, result{Reason: "bad bundle: " + err.Error()})
 		return
 	}
 	nb, err := hex.DecodeString(q.Nonce)
 	if err != nil {
-		writeJSON(w, result{Reason: "bad nonce hex"})
+		cli.WriteJSON(w, http.StatusOK, result{Reason: "bad nonce hex"})
 		return
 	}
 	v := verifier.VerifyBundle(q.Bundle, verifier.Options{ExpectedNonce: nb, LastCounter: 0})
 	res := result{Verified: v.OK, Reason: v.Reason}
+	fillVerified(&res, v)
+	cli.WriteJSON(w, http.StatusOK, res)
+}
+
+// fillVerified copies the verified predicate into res — only on success, so an
+// unverified result never shows a confident classification.
+func fillVerified(res *result, v verifier.VerifyResult) {
 	if v.OK && v.Predicate != nil {
 		res.Event = v.Predicate.EventName()
 		res.Presence = v.Predicate.Presence == 1
 		res.Voice = v.Predicate.VoiceActive
 	}
-	writeJSON(w, res)
-}
-
-func writeJSON(w http.ResponseWriter, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(v)
 }

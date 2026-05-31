@@ -14,22 +14,22 @@ var goldenNone = mustHex(
 	"a9" + "0001" + "0142aabb" + "0200" + "03f4" + "0401" +
 		"050a" + "0618a0" + "0707" + "085820" + cfg32)
 
-func newRoot(t *testing.T, name string) (Root, *ecdsa.PrivateKey) {
+func newProver(t *testing.T, name string) (Prover, *ecdsa.PrivateKey) {
 	t.Helper()
 	k, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return Root{Name: name,
+	return Prover{Name: name,
 		PubX: leftPad(k.PublicKey.X.Bytes(), 32),
 		PubY: leftPad(k.PublicKey.Y.Bytes(), 32)}, k
 }
 
 func TestQuorumReached(t *testing.T) {
-	ra, ka := newRoot(t, "tee-optee")
-	rb, kb := newRoot(t, "tee-second-vendor")
-	rc, _ := newRoot(t, "tpm-measured-boot")
-	roots := []Root{ra, rb, rc}
+	ra, ka := newProver(t, "tee-optee")
+	rb, kb := newProver(t, "tee-second-vendor")
+	rc, _ := newProver(t, "tpm-measured-boot")
+	roots := []Prover{ra, rb, rc}
 
 	// Two independent provers both produce a fresh, valid, agreeing bundle.
 	bundles := []Bundle{signWith(t, golden, ka), signWith(t, golden, kb)}
@@ -48,9 +48,9 @@ func TestQuorumReached(t *testing.T) {
 }
 
 func TestQuorumNotEnoughProvers(t *testing.T) {
-	ra, ka := newRoot(t, "tee-optee")
-	rb, _ := newRoot(t, "tee-second-vendor")
-	roots := []Root{ra, rb}
+	ra, ka := newProver(t, "tee-optee")
+	rb, _ := newProver(t, "tee-second-vendor")
+	roots := []Prover{ra, rb}
 	res := VerifyQuorum([]Bundle{signWith(t, golden, ka)}, QuorumOptions{
 		ExpectedNonce: mustHex("aabb"), Roots: roots, Threshold: 2, LastCounter: 6,
 	})
@@ -60,10 +60,10 @@ func TestQuorumNotEnoughProvers(t *testing.T) {
 }
 
 func TestQuorumIgnoresUnenrolledRoot(t *testing.T) {
-	ra, ka := newRoot(t, "tee-optee")
-	rb, _ := newRoot(t, "tee-second-vendor")
+	ra, ka := newProver(t, "tee-optee")
+	rb, _ := newProver(t, "tee-second-vendor")
 	stranger, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	roots := []Root{ra, rb}
+	roots := []Prover{ra, rb}
 	// One enrolled pass + one bundle from a key nobody enrolled -> only 1 counts.
 	res := VerifyQuorum(
 		[]Bundle{signWith(t, golden, ka), signWith(t, golden, stranger)},
@@ -74,9 +74,9 @@ func TestQuorumIgnoresUnenrolledRoot(t *testing.T) {
 }
 
 func TestQuorumRejectsDisagreement(t *testing.T) {
-	ra, ka := newRoot(t, "tee-optee")
-	rb, kb := newRoot(t, "tee-second-vendor")
-	roots := []Root{ra, rb}
+	ra, ka := newProver(t, "tee-optee")
+	rb, kb := newProver(t, "tee-second-vendor")
+	roots := []Prover{ra, rb}
 	// Prover A says alarm_tone, prover B says none -> no agreement.
 	res := VerifyQuorum(
 		[]Bundle{signWith(t, golden, ka), signWith(t, goldenNone, kb)},
@@ -87,9 +87,9 @@ func TestQuorumRejectsDisagreement(t *testing.T) {
 }
 
 func TestQuorumRejectsStaleNonce(t *testing.T) {
-	ra, ka := newRoot(t, "tee-optee")
-	rb, kb := newRoot(t, "tee-second-vendor")
-	roots := []Root{ra, rb}
+	ra, ka := newProver(t, "tee-optee")
+	rb, kb := newProver(t, "tee-second-vendor")
+	roots := []Prover{ra, rb}
 	res := VerifyQuorum([]Bundle{signWith(t, golden, ka), signWith(t, golden, kb)},
 		QuorumOptions{ExpectedNonce: mustHex("ccdd"), Roots: roots, Threshold: 2, LastCounter: 6})
 	if res.OK {
@@ -98,9 +98,9 @@ func TestQuorumRejectsStaleNonce(t *testing.T) {
 }
 
 func TestQuorumRejectsOneVotePerRoot(t *testing.T) {
-	ra, ka := newRoot(t, "tee-optee")
-	rb, _ := newRoot(t, "tee-second-vendor")
-	roots := []Root{ra, rb}
+	ra, ka := newProver(t, "tee-optee")
+	rb, _ := newProver(t, "tee-second-vendor")
+	roots := []Prover{ra, rb}
 	// Same root submitting two bundles must not count as two.
 	res := VerifyQuorum([]Bundle{signWith(t, golden, ka), signWith(t, golden, ka)},
 		QuorumOptions{ExpectedNonce: mustHex("aabb"), Roots: roots, Threshold: 2, LastCounter: 6})
@@ -110,10 +110,10 @@ func TestQuorumRejectsOneVotePerRoot(t *testing.T) {
 }
 
 func TestQuorumBadThreshold(t *testing.T) {
-	ra, ka := newRoot(t, "tee-optee")
+	ra, ka := newProver(t, "tee-optee")
 	for _, th := range []int{0, 2} { // 0 invalid; 2 > len(roots)=1
 		res := VerifyQuorum([]Bundle{signWith(t, golden, ka)},
-			QuorumOptions{ExpectedNonce: mustHex("aabb"), Roots: []Root{ra}, Threshold: th})
+			QuorumOptions{ExpectedNonce: mustHex("aabb"), Roots: []Prover{ra}, Threshold: th})
 		if res.OK {
 			t.Errorf("threshold %d accepted; must fail", th)
 		}

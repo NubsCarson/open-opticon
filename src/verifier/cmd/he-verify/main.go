@@ -25,6 +25,7 @@ import (
 	"strings"
 
 	verifier "honest-ear/verifier"
+	"honest-ear/verifier/internal/cli"
 )
 
 // repeatable --root flag.
@@ -34,11 +35,6 @@ func (r *rootList) String() string { return strings.Join(*r, ",") }
 func (r *rootList) Set(v string) error {
 	*r = append(*r, v)
 	return nil
-}
-
-func die(format string, a ...any) {
-	fmt.Fprintf(os.Stderr, "error: "+format+"\n", a...)
-	os.Exit(2)
 }
 
 func main() {
@@ -52,11 +48,11 @@ func main() {
 	flag.Parse()
 
 	if *nonceHex == "" {
-		die("--nonce is required")
+		cli.Die("--nonce is required")
 	}
 	nonce, err := hex.DecodeString(*nonceHex)
 	if err != nil {
-		die("bad --nonce hex: %v", err)
+		cli.Die("bad --nonce hex: %v", err)
 	}
 
 	if *quorum > 0 {
@@ -71,23 +67,23 @@ func main() {
 		raw, err = io.ReadAll(os.Stdin)
 	}
 	if err != nil {
-		die("reading bundle: %v", err)
+		cli.Die("reading bundle: %v", err)
 	}
 	b, err := parseBundle(raw)
 	if err != nil {
-		die("%v", err)
+		cli.Die("%v", err)
 	}
 
 	opt := verifier.Options{ExpectedNonce: nonce, LastCounter: *lastCounter}
 	if (*pinX == "") != (*pinY == "") {
-		die("--pin-x and --pin-y must be provided together")
+		cli.Die("--pin-x and --pin-y must be provided together")
 	}
 	if *pinX != "" {
 		if opt.PinPubX, err = hex.DecodeString(*pinX); err != nil {
-			die("bad --pin-x: %v", err)
+			cli.Die("bad --pin-x: %v", err)
 		}
 		if opt.PinPubY, err = hex.DecodeString(*pinY); err != nil {
-			die("bad --pin-y: %v", err)
+			cli.Die("bad --pin-y: %v", err)
 		}
 	}
 
@@ -104,32 +100,32 @@ func main() {
 }
 
 func runQuorum(nonce []byte, k int, rootSpecs rootList, lastCounter uint64) {
-	roots := make([]verifier.Root, 0, len(rootSpecs))
+	roots := make([]verifier.Prover, 0, len(rootSpecs))
 	for _, spec := range rootSpecs {
 		parts := strings.Split(spec, ":")
 		if len(parts) != 3 {
-			die("--root must be name:pubXhex:pubYhex, got %q", spec)
+			cli.Die("--root must be name:pubXhex:pubYhex, got %q", spec)
 		}
 		px, err := hex.DecodeString(parts[1])
 		if err != nil {
-			die("bad pub X for root %q: %v", parts[0], err)
+			cli.Die("bad pub X for root %q: %v", parts[0], err)
 		}
 		py, err := hex.DecodeString(parts[2])
 		if err != nil {
-			die("bad pub Y for root %q: %v", parts[0], err)
+			cli.Die("bad pub Y for root %q: %v", parts[0], err)
 		}
-		roots = append(roots, verifier.Root{Name: parts[0], PubX: px, PubY: py})
+		roots = append(roots, verifier.Prover{Name: parts[0], PubX: px, PubY: py})
 	}
 
 	var bundles []verifier.Bundle
 	for _, path := range flag.Args() {
 		raw, err := os.ReadFile(path)
 		if err != nil {
-			die("reading %s: %v", path, err)
+			cli.Die("reading %s: %v", path, err)
 		}
 		b, err := parseBundle(raw)
 		if err != nil {
-			die("%s: %v", path, err)
+			cli.Die("%s: %v", path, err)
 		}
 		bundles = append(bundles, b)
 	}
