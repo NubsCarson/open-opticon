@@ -71,25 +71,32 @@ static uint8_t *read_file(const char *path, size_t *len)
     return buf;
 }
 
+/* Open a session to the Honest Ear TA; errx() on failure. The caller closes the
+ * session and finalizes the context. Shared by the attest and --trip paths. */
+static void he_open(TEEC_Context *ctx, TEEC_Session *sess)
+{
+    TEEC_UUID uuid = TA_REMOTE_ATTESTATION_UUID;
+    uint32_t err_origin = 0;
+    TEEC_Result res = TEEC_InitializeContext(NULL, ctx);
+    if (res != TEEC_SUCCESS)
+        errx(1, "TEEC_InitializeContext: 0x%x", res);
+    res = TEEC_OpenSession(ctx, sess, &uuid, TEEC_LOGIN_PUBLIC, NULL, NULL,
+                           &err_origin);
+    if (res != TEEC_SUCCESS)
+        errx(1, "TEEC_OpenSession: 0x%x origin 0x%x", res, err_origin);
+}
+
 static int do_trip(void)
 {
     TEEC_Context ctx;
     TEEC_Session sess;
     TEEC_Operation op = {0};
-    TEEC_UUID uuid = TA_REMOTE_ATTESTATION_UUID;
     uint32_t err_origin = 0;
-    TEEC_Result res;
 
-    res = TEEC_InitializeContext(NULL, &ctx);
-    if (res != TEEC_SUCCESS)
-        errx(1, "TEEC_InitializeContext: 0x%x", res);
-    res = TEEC_OpenSession(&ctx, &sess, &uuid, TEEC_LOGIN_PUBLIC, NULL, NULL,
-                           &err_origin);
-    if (res != TEEC_SUCCESS)
-        errx(1, "TEEC_OpenSession: 0x%x", res);
+    he_open(&ctx, &sess);
     op.paramTypes = TEEC_PARAM_TYPES(TEEC_NONE, TEEC_NONE, TEEC_NONE, TEEC_NONE);
-    res = TEEC_InvokeCommand(&sess, TA_REMOTE_ATTESTATION_CMD_TRIP_TAMPER, &op,
-                             &err_origin);
+    TEEC_Result res = TEEC_InvokeCommand(&sess, TA_REMOTE_ATTESTATION_CMD_TRIP_TAMPER,
+                                         &op, &err_origin);
     TEEC_CloseSession(&sess);
     TEEC_FinalizeContext(&ctx);
     if (res != TEEC_SUCCESS)
@@ -138,17 +145,10 @@ int main(int argc, char *argv[])
     TEEC_Context ctx;
     TEEC_Session sess;
     TEEC_Operation op = {0};
-    TEEC_UUID uuid = TA_REMOTE_ATTESTATION_UUID;
     uint32_t err_origin = 0;
     TEEC_Result res;
 
-    res = TEEC_InitializeContext(NULL, &ctx);
-    if (res != TEEC_SUCCESS)
-        errx(1, "TEEC_InitializeContext: 0x%x", res);
-    res = TEEC_OpenSession(&ctx, &sess, &uuid, TEEC_LOGIN_PUBLIC, NULL, NULL,
-                           &err_origin);
-    if (res != TEEC_SUCCESS)
-        errx(1, "TEEC_OpenSession: 0x%x origin 0x%x", res, err_origin);
+    he_open(&ctx, &sess);
 
     uint8_t bundle[512] = {0};
     if (key && key_len) {
@@ -186,15 +186,12 @@ int main(int argc, char *argv[])
 
     /* Default pub coords to the published QEMU test key unless overridden /
      * derivable from a provided FullKey (PubX||PubY||blob). */
-    uint8_t def_x[32], def_y[32];
     uint8_t *tk_x = NULL, *tk_y = NULL;
     size_t tklen = 0;
     if (!(px && py)) {
         if (key && key_len >= 64) {
-            memcpy(def_x, key, 32);
-            memcpy(def_y, key + 32, 32);
-            px = def_x;
-            py = def_y;
+            px = key;      /* FullKey = PubX||PubY||blob; key outlives the prints */
+            py = key + 32;
         } else if (parse_hex(HE_TESTKEY_PUB_X_HEX, &tk_x, &tklen) == 0 &&
                    parse_hex(HE_TESTKEY_PUB_Y_HEX, &tk_y, &tklen) == 0) {
             px = tk_x;
