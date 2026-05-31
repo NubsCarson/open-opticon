@@ -31,7 +31,10 @@ python3 "$ROOT/test/gen_frames.py" "$FIX" >/dev/null || { echo "fixture gen fail
 echo "  generated silence/alarm/voice/quiet"
 
 echo "== C detector == Rust port (verdicts must be identical) =="
-for name in silence alarm voice quiet; do
+# Easy fixtures + boundary/adversarial cases (energy-floor edge, full-scale
+# clipping, off-target tone, sub-frame) — the inputs most likely to expose an
+# integer-port divergence.
+for name in silence alarm voice quiet floor_active floor_silent clip tone700 subframe; do
     c="$("$HE" "$FIX/$name.pcm")"
     r="$("$OO" "$FIX/$name.pcm")"
     if [ "$c" = "$r" ]; then

@@ -56,6 +56,14 @@ def main():
     write_pcm(os.path.join(outdir, "alarm.pcm"), gen_tone(3100, 12000))
     write_pcm(os.path.join(outdir, "voice.pcm"), gen_noise(14000))
     write_pcm(os.path.join(outdir, "quiet.pcm"), gen_noise(150))
+    # Boundary / adversarial fixtures — where an integer port is most likely to
+    # diverge from the C reference (used by the C-vs-Rust differential test).
+    write_pcm(os.path.join(outdir, "floor_active.pcm"), [1792] * N)  # just above energy floor
+    write_pcm(os.path.join(outdir, "floor_silent.pcm"), [1728] * N)  # just below energy floor
+    write_pcm(os.path.join(outdir, "clip.pcm"),                       # full-scale: worst case for
+              [32767 if i % 2 == 0 else -32768 for i in range(N)])    #   the i64 Goertzel power
+    write_pcm(os.path.join(outdir, "tone700.pcm"), gen_tone(700, 12000))  # off-target: NOT alarm_tone
+    write_pcm(os.path.join(outdir, "subframe.pcm"), [0] * 100)        # < one frame -> 0 frames
 
 
 if __name__ == "__main__":

@@ -23,6 +23,10 @@ The optional public-verifiability legs build via their own tooling, not
 and `onchain/` (Foundry, `forge test` — see [`onchain/README.md`](onchain/README.md)).
 If you touch either, run and note its own tests.
 
+One bridge is CI-gated: `make port-diff` builds the C `he-detect` and the Rust
+`oo-detect` and asserts byte-identical verdicts (the `port-equivalence` CI job).
+If you change the C detector **or** the Rust port, run it — they must stay equal.
+
 ## Style
 
 - **Go:** `gofmt` clean and `go vet ./...` clean (stdlib only — no new deps).

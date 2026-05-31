@@ -3,6 +3,7 @@
 #   make test       - all host tests (C units, Go units, e2e + vision-e2e, tamper)
 #   make sim        - build the host simulators + CLIs
 #   make e2e        - audio end-to-end pipeline;  make vision-e2e - vision pipeline
+#   make port-diff  - C detector == Rust zk port, differential test (needs cargo)
 #   make gui/sites/fuzz/repro/cross - GUI, static site, fuzzing, reproducible-build,
 #                     Raspberry Pi cross-compile
 #   make clean      - remove build artifacts
