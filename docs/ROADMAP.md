@@ -39,6 +39,9 @@ From this PoC to a defensible product, in order of trust-impact.
   is covered end-to-end.
 
 ## Hardware identity & tamper
+The full board bring-up, bill of materials, wiring, and device picture are in
+[`HARDWARE.md`](HARDWARE.md) (incl. why a phone is the wrong place for the sensor
+but the right place for the verifier).
 - **i.MX 8M Plus CAAM** non-extractable black key as the default signing key;
   per-device endorsement enrolled to a **public manufacturer root** (the
   StrongBox/EKCert analogue we currently self-provision).

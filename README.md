@@ -87,16 +87,17 @@ tools/           stage_optee.sh   - copy overlay sources into an optee-ra checko
                  repro.sh         - prove the host build is byte-reproducible
                  cross.sh         - cross-compile the verifier for Raspberry Pi
                  render_video.py  - render the walkthrough from captured output
-docs/            ARCHITECTURE, THREAT_MODEL, RUNBOOK, ROADMAP, REPRODUCIBLE,
-                 USE_CASES, WHY_TEE
+docs/            ARCHITECTURE, THREAT_MODEL, RUNBOOK, HARDWARE, ROADMAP,
+                 REPRODUCIBLE, USE_CASES, WHY_TEE
 ```
 
 ## Docs
 
 [Use cases](docs/USE_CASES.md) · [Why a TEE? (vs ZK/FHE)](docs/WHY_TEE.md) ·
 [Architecture](docs/ARCHITECTURE.md) · [Threat model & scope](docs/THREAT_MODEL.md) ·
-[Runbook](docs/RUNBOOK.md) · [Reproducible builds](docs/REPRODUCIBLE.md) ·
-[Roadmap](docs/ROADMAP.md) · [Sample attestation (QEMU)](docs/SAMPLE_ATTESTATION.md)
+[Runbook](docs/RUNBOOK.md) · [Hardware & device](docs/HARDWARE.md) ·
+[Reproducible builds](docs/REPRODUCIBLE.md) · [Roadmap](docs/ROADMAP.md) ·
+[Sample attestation (QEMU)](docs/SAMPLE_ATTESTATION.md)
 
 ## What is proven *here* vs *on the rig*
 
