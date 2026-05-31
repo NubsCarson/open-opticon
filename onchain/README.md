@@ -82,6 +82,8 @@ proof and the device signature, bound to the SAME nonce and the SAME audio, agre
 on a public chain. (Deployed from a disposable testnet key; in production you'd
 reuse RISC Zero's canonical verifier router rather than deploy your own.)
 
+Verify it yourself (view-only, no funds): `bash onchain/call-sepolia.sh`.
+
 ## Deploy the whole stack on a local EVM (no funds)
 
 ```sh
