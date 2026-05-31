@@ -76,9 +76,11 @@ src/verifier/    Go (stdlib only) verifier:
                    quorum.go       - k-of-n multi-prover quorum (reuses bound.go)
                    transparency.go - RFC 6962 endorsement log (inclusion/consistency)
                    cmd/he-verify   - verify a bundle, or a --quorum of provers
+                   cmd/he-dump     - decode a bundle to readable fields (no verify) — audit aid
                    cmd/he-log      - operate/prove/verify the transparency log
                    cmd/he-challenge - live nonce server + mobile verifier page (/v)
                    cmd/he-gui      - browser click-to-listen web UI
+                   cmd/he-verify-wasm - the verifier compiled to WASM for docs/verify.html
                    + unit tests, exhaustive log tests, and FuzzDecodePayload
 zk/              RISC Zero zkVM proof of the detector (Rust): a faithful no_std
                  port of he_detector.c proven over private audio, committing only

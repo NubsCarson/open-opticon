@@ -126,6 +126,29 @@ func TestDecodeRejectsMissingKeys(t *testing.T) {
 	}
 }
 
+// The C encoder caps the nonce at HE_NONCE_MAX (64); a 65-byte nonce is a
+// payload no genuine device could produce, so the decoder must reject it even
+// though it is well-formed CBOR.
+func TestDecodeRejectsOversizeNonce(t *testing.T) {
+	nonce65 := hex.EncodeToString(bytes.Repeat([]byte{0xaa}, 65)) // 0x58 0x41 = bstr(65)
+	bad := mustHex("ab" + "0001" + "01" + "5841" + nonce65 + "0202" + "03f4" + "0401" +
+		"050a" + "0618a0" + "0707" + "085820" + cfg32 + "095820" + inp32 + "0a5820" + prev32)
+	if _, err := DecodePayload(bad); err == nil {
+		t.Error("expected error on nonce longer than NonceMax")
+	}
+}
+
+// The three digests are always SHA-256 (32 bytes); a short/long digest is
+// non-conformant and must be rejected at decode.
+func TestDecodeRejectsWrongHashLength(t *testing.T) {
+	h16 := hex.EncodeToString(bytes.Repeat([]byte{0x11}, 16)) // 0x50 = bstr(16)
+	bad := mustHex("ab" + "0001" + "0142aabb" + "0202" + "03f4" + "0401" +
+		"050a" + "0618a0" + "0707" + "0850" + h16 + "095820" + inp32 + "0a5820" + prev32)
+	if _, err := DecodePayload(bad); err == nil {
+		t.Error("expected error on config_hash != 32 bytes")
+	}
+}
+
 // signWith signs SHA-256(payload) with key and returns the on-the-wire Bundle.
 func signWith(t *testing.T, payload []byte, key *ecdsa.PrivateKey) Bundle {
 	t.Helper()
@@ -372,6 +395,12 @@ func FuzzDecodePayload(f *testing.F) {
 		"050a" + "0618a0" + "0707" + "085820" +
 		"1111111111111111111111111111111111111111111111111111111111111111" +
 		"0950" + "2222222222222222222222222222222222")) // key 9 wrong bstr len (16, not 32)
+	f.Add(mustHex("ab" + "0001" + "01" + "5841" + hex.EncodeToString(bytes.Repeat([]byte{0xaa}, 65)) +
+		"0202" + "03f4" + "0401" + "050a" + "0618a0" + "0707" + "085820" + cfg32 +
+		"095820" + inp32 + "0a5820" + prev32)) // nonce 65 > NonceMax -> reject
+	f.Add(mustHex("ab" + "0001" + "0142aabb" + "0202" + "03f4" + "0401" + "050a" + "0618a0" +
+		"0707" + "0850" + hex.EncodeToString(bytes.Repeat([]byte{0x11}, 16)) +
+		"095820" + inp32 + "0a5820" + prev32)) // config_hash 16 != 32 -> reject
 	f.Fuzz(func(t *testing.T, b []byte) {
 		p, err := DecodePayload(b) // must not panic on ANY input
 		if err == nil && p == nil {

@@ -31,6 +31,15 @@ import (
 // PayloadVersion is the only schema version this verifier accepts.
 const PayloadVersion = 1
 
+// Wire-contract lengths (mirror he_payload.h): the device encoder never emits a
+// nonce longer than HE_NONCE_MAX, and the three digests are always SHA-256. The
+// decoder enforces these so a payload no genuine device could produce is rejected
+// at decode, not silently carried forward.
+const (
+	NonceMax = 64 // HE_NONCE_MAX
+	hashLen  = 32 // SHA-256 digest length (config_hash / input_hash / prev_digest)
+)
+
 // Stable payload map keys (mirror he_payload.h).
 const (
 	keyVersion    = 0
@@ -387,6 +396,9 @@ func DecodePayload(b []byte) (*Predicate, error) {
 			p.Version, err = r.readUint()
 		case keyNonce:
 			p.Nonce, err = r.readBstr()
+			if err == nil && len(p.Nonce) > NonceMax {
+				return nil, fmt.Errorf("nonce length %d exceeds max %d", len(p.Nonce), NonceMax)
+			}
 		case keyEvent:
 			p.EventID, err = r.readUint()
 		case keyVoice:
@@ -401,10 +413,19 @@ func DecodePayload(b []byte) (*Predicate, error) {
 			p.Counter, err = r.readUint()
 		case keyConfigHash:
 			p.ConfigHash, err = r.readBstr()
+			if err == nil && len(p.ConfigHash) != hashLen {
+				return nil, fmt.Errorf("config_hash length %d, want %d", len(p.ConfigHash), hashLen)
+			}
 		case keyInputHash:
 			p.InputHash, err = r.readBstr()
+			if err == nil && len(p.InputHash) != hashLen {
+				return nil, fmt.Errorf("input_hash length %d, want %d", len(p.InputHash), hashLen)
+			}
 		case keyPrevDigest:
 			p.PrevDigest, err = r.readBstr()
+			if err == nil && len(p.PrevDigest) != hashLen {
+				return nil, fmt.Errorf("prev_digest length %d, want %d", len(p.PrevDigest), hashLen)
+			}
 		default:
 			return nil, fmt.Errorf("unknown payload key %d", key)
 		}

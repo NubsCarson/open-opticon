@@ -136,7 +136,7 @@ contract HonestEarQuorum {
     /// voice(3), presence(4), frames(5), counter(7), input_hash(9). A minimal
     /// reader; it stops once those eight fields are seen, so the trailing
     /// prev_digest(10, the stream hash-chain link) is simply not read on-chain.
-    function _readDevice(bytes calldata p) private pure returns (Device memory d) {
+    function _readDevice(bytes calldata p) internal pure returns (Device memory d) {
         require(uint8(p[0]) == 0xab, "not an 11-map"); // CBOR map of 11 pairs
         uint256 i = 1;
         uint256 seen;
@@ -177,15 +177,21 @@ contract HonestEarQuorum {
     }
 
     /// Locate a CBOR byte string's data: returns (offset, length) of the bytes.
-    function _bstrSpan(bytes calldata p, uint256 i) private pure returns (uint256 off, uint256 len) {
+    function _bstrSpan(bytes calldata p, uint256 i) internal pure returns (uint256 off, uint256 len) {
         uint8 b = uint8(p[i]);
         if (b >= 0x40 && b <= 0x57) return (i + 1, uint256(b) - 0x40); // inline len
-        if (b == 0x58) return (i + 2, uint8(p[i + 1])); // 1-byte len
+        if (b == 0x58) {
+            // 1-byte length follows; bound it explicitly so a payload truncated at
+            // the length byte reverts with a clear reason, not an opaque panic.
+            require(i + 1 < p.length, "bstr len truncated");
+            return (i + 2, uint8(p[i + 1]));
+        }
         revert("nonce not a bstr");
     }
 
     /// Read a CBOR 32-byte byte string (0x58 0x20 || 32 bytes) as a bytes32.
-    function _bstr32(bytes calldata p, uint256 i) private pure returns (bytes32 h) {
+    function _bstr32(bytes calldata p, uint256 i) internal pure returns (bytes32 h) {
+        require(i + 1 < p.length, "bstr32 header truncated"); // before reading p[i+1]
         require(uint8(p[i]) == 0x58 && uint8(p[i + 1]) == 0x20, "input_hash not bstr32");
         // The 32 data bytes must lie inside the (signed) payload, so calldataload
         // can't pull adjacent, unsigned calldata: header 2 bytes + 32 data = 34.
@@ -199,13 +205,22 @@ contract HonestEarQuorum {
     /// index just past it. Booleans map to 0/1; byte strings return 0 (skipped).
     /// Covers every value type the deterministic he_payload encoder can emit:
     /// uints (inline/1/2/4/8-byte), bool, and byte strings (inline/1-byte len).
-    function _val(bytes calldata p, uint256 i) private pure returns (uint64 v, uint256 next) {
+    function _val(bytes calldata p, uint256 i) internal pure returns (uint64 v, uint256 next) {
         uint8 b = uint8(p[i]);
         if (b <= 0x17) return (b, i + 1); // uint, inline
-        if (b == 0x18) return (uint8(p[i + 1]), i + 2); // uint, 1 byte
-        if (b == 0x19) return ((uint64(uint8(p[i + 1])) << 8) | uint8(p[i + 2]), i + 3); // uint, 2 bytes
+        // Multi-byte heads read trailing bytes; bound each so a payload truncated
+        // mid-value reverts with a clear reason rather than an opaque OOB panic.
+        if (b == 0x18) {
+            require(i + 1 < p.length, "cbor u8 truncated");
+            return (uint8(p[i + 1]), i + 2); // uint, 1 byte
+        }
+        if (b == 0x19) {
+            require(i + 2 < p.length, "cbor u16 truncated");
+            return ((uint64(uint8(p[i + 1])) << 8) | uint8(p[i + 2]), i + 3); // uint, 2 bytes
+        }
         if (b == 0x1a) {
             // uint, 4 bytes (big-endian)
+            require(i + 4 < p.length, "cbor u32 truncated");
             return (
                 (uint64(uint8(p[i + 1])) << 24) | (uint64(uint8(p[i + 2])) << 16)
                     | (uint64(uint8(p[i + 3])) << 8) | uint8(p[i + 4]),
@@ -214,6 +229,7 @@ contract HonestEarQuorum {
         }
         if (b == 0x1b) {
             // uint, 8 bytes (big-endian)
+            require(i + 8 < p.length, "cbor u64 truncated");
             uint64 w;
             for (uint256 k = 1; k <= 8; k++) {
                 w = (w << 8) | uint8(p[i + k]);
@@ -223,7 +239,10 @@ contract HonestEarQuorum {
         if (b == 0xf4) return (0, i + 1); // false
         if (b == 0xf5) return (1, i + 1); // true
         if (b >= 0x40 && b <= 0x57) return (0, i + 1 + (uint64(b) - 0x40)); // bstr, inline len
-        if (b == 0x58) return (0, i + 2 + uint8(p[i + 1])); // bstr, 1-byte len
+        if (b == 0x58) {
+            require(i + 1 < p.length, "cbor bstr truncated");
+            return (0, i + 2 + uint8(p[i + 1])); // bstr, 1-byte len
+        }
         revert("unsupported cbor");
     }
 }
