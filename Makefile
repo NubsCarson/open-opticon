@@ -16,7 +16,7 @@
 
 VERIFIER = src/verifier
 
-.PHONY: test units sim verifier-test e2e vision-e2e chain-e2e port-diff demo tamper-test gui sites fuzz repro cross clean
+.PHONY: test units sim verifier-test e2e vision-e2e chain-e2e port-diff demo tamper-test gui sites wasm fuzz repro cross clean
 
 test: units verifier-test e2e vision-e2e chain-e2e tamper-test
 	@echo ""
@@ -68,6 +68,11 @@ gui:
 # Launch all local web surfaces (landing site + GUI + challenge/phone page).
 sites:
 	bash tools/sites.sh
+
+# Compile the stdlib-only verifier to WebAssembly for the in-browser verifier
+# (docs/verify.html) — same code path as he-verify, no server, no install.
+wasm:
+	bash tools/build_wasm.sh
 
 # Fuzz the CBOR decoder (Ctrl-C to stop; the seed corpus runs under `make test`).
 fuzz:

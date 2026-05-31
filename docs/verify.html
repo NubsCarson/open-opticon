@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>open-opticon — verify a bundle in your browser</title>
+<meta name="description" content="Verify an open-opticon bound-output bundle entirely in your browser. The exact stdlib-only Go verifier, compiled to WebAssembly — same code path as the he-verify CLI, no server, no install. Don't trust the page; the check runs on your machine.">
+<meta property="og:title" content="open-opticon — in-browser verifier">
+<meta property="og:description" content="Check a signed verdict yourself, client-side. The real verifier compiled to WebAssembly.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://nubscarson.github.io/open-opticon/verify.html">
+<meta property="og:image" content="https://nubscarson.github.io/open-opticon/assets/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://nubscarson.github.io/open-opticon/assets/og.png">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%2309090b'/><circle cx='16' cy='16' r='8.5' fill='none' stroke='%23fafafa' stroke-width='2'/><circle cx='16' cy='16' r='2.6' fill='%23fafafa'/></svg>">
+<style>
+  :root{
+    --bg:#09090b; --card:#0b0b0e; --card2:#101014; --border:#26262b; --border2:#1c1c20;
+    --fg:#fafafa; --muted:#a1a1aa; --muted2:#71717a;
+    --green:#4ade80; --red:#f87171; --blue:#60a5fa; --amber:#fbbf24; --violet:#a78bfa;
+    --radius:10px;
+    --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
+  body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans);
+    font-size:16px;line-height:1.6;letter-spacing:-0.011em;
+    -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+  a{color:inherit;text-decoration:none}
+  a.lnk{color:var(--blue)} a.lnk:hover{text-decoration:underline}
+  code,pre,.mono{font-family:var(--mono);font-size:.86em}
+  .wrap{max-width:960px;margin:0 auto;padding:0 24px}
+  .eyebrow{font-size:12px;text-transform:uppercase;letter-spacing:.09em;color:var(--muted2);
+    font-weight:600;margin:0 0 14px}
+  h1,h2,h3{letter-spacing:-0.02em;font-weight:600;margin:0}
+  nav{position:sticky;top:0;z-index:50;border-bottom:1px solid var(--border2);
+    background:rgba(9,9,11,.72);backdrop-filter:saturate(140%) blur(10px)}
+  nav .row{display:flex;align-items:center;justify-content:space-between;height:56px}
+  nav .brand{font-family:var(--mono);font-size:14px;font-weight:600;letter-spacing:-0.02em}
+  nav .brand .dim{color:var(--muted2)}
+  nav .links{display:flex;gap:4px;align-items:center}
+  nav .links a{color:var(--muted);font-size:14px;padding:7px 11px;border-radius:8px}
+  nav .links a:hover{color:var(--fg);background:#161619}
+  @media(max-width:680px){nav .links a:not(.gh){display:none}}
+
+  .hero{padding:72px 0 30px}
+  .hero h1{font-size:clamp(2rem,5vw,2.9rem);line-height:1.08;max-width:18ch;font-weight:650}
+  .hero p.lead{color:var(--muted);font-size:1.06rem;max-width:62ch;margin:20px 0 0}
+  .hero .em{color:var(--fg)}
+
+  .btn{display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 16px;
+    border-radius:8px;font-size:14px;font-weight:500;border:1px solid transparent;
+    transition:.14s ease;cursor:pointer;white-space:nowrap;font-family:var(--sans)}
+  .btn.primary{background:var(--fg);color:#0a0a0a}
+  .btn.primary:hover{background:#e4e4e7}
+  .btn.primary:disabled{background:#3a3a40;color:#71717a;cursor:not-allowed}
+  .btn.outline{border-color:var(--border);color:var(--fg);background:transparent}
+  .btn.outline:hover{background:#161619;border-color:#3a3a40}
+
+  section{padding:30px 0}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:22px}
+  .grid{display:grid;gap:16px}
+  @media(min-width:760px){.grid.c2{grid-template-columns:1.3fr 1fr}}
+
+  label.fld{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.07em;
+    color:var(--muted2);font-weight:600;margin:0 0 6px}
+  textarea,input[type=text]{width:100%;background:var(--card2);color:var(--fg);
+    border:1px solid var(--border);border-radius:8px;padding:11px 13px;font-family:var(--mono);
+    font-size:12.5px;line-height:1.5;resize:vertical}
+  textarea{min-height:150px}
+  textarea:focus,input:focus{outline:none;border-color:#3a3a40}
+  .row2{display:grid;gap:12px;grid-template-columns:1fr 1fr;margin-top:14px}
+  .actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
+
+  details.adv{margin-top:14px;border:1px solid var(--border2);border-radius:8px;background:var(--card2)}
+  details.adv summary{cursor:pointer;padding:11px 14px;font-size:13px;color:var(--muted);
+    list-style:none;display:flex;justify-content:space-between}
+  details.adv summary::-webkit-details-marker{display:none}
+  details.adv summary::after{content:"+";color:var(--muted2);font-family:var(--mono)}
+  details.adv[open] summary::after{content:"–"}
+  details.adv .body{padding:0 14px 14px}
+
+  .verdict{border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px;min-height:64px}
+  .verdict.pass{border-color:#1f3d2b;background:rgba(74,222,128,.05)}
+  .verdict.fail{border-color:#3a2526;background:rgba(248,113,113,.05)}
+  .verdict .banner{font-family:var(--mono);font-size:15px;font-weight:600;display:flex;align-items:center;gap:9px}
+  .verdict.pass .banner{color:var(--green)} .verdict.fail .banner{color:var(--red)}
+  .verdict .reason{color:var(--muted);font-size:.9rem;margin-top:6px}
+  .pdot{width:8px;height:8px;border-radius:50%;flex:none}
+  .verdict.pass .pdot{background:var(--green)} .verdict.fail .pdot{background:var(--red)}
+
+  table{width:100%;border-collapse:collapse;font-size:.88rem;margin-top:14px}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border2);vertical-align:top}
+  th{color:var(--muted2);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:.05em;width:130px}
+  td{color:var(--fg);font-family:var(--mono);font-size:12px;word-break:break-all}
+
+  .note{border:1px solid var(--border);border-left:2px solid var(--muted2);border-radius:8px;
+    padding:13px 15px;color:var(--muted);font-size:.9rem;background:var(--card)}
+  .note.warn{border-left-color:var(--amber)}
+  .small{font-size:.83rem;color:var(--muted2)}
+  .status{font-family:var(--mono);font-size:12px;color:var(--muted2);margin-top:10px}
+  .status .dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--amber);margin-right:6px}
+  .status.ready .dot{background:var(--green)}
+  footer{border-top:1px solid var(--border2);padding:40px 0 64px;color:var(--muted2);font-size:14px;margin-top:30px}
+  footer .links{display:flex;gap:20px;flex-wrap:wrap;margin-bottom:14px}
+  footer a{color:var(--muted)} footer a:hover{color:var(--fg)}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap row">
+    <a class="brand" href="index.html">open-opticon<span class="dim">/</span></a>
+    <div class="links">
+      <a href="index.html#how">How</a>
+      <a href="index.html#evidence">Evidence</a>
+      <a href="transparency.html">Dashboard</a>
+      <a href="index.html#verify">Run locally</a>
+      <a class="gh" href="https://github.com/NubsCarson/open-opticon">GitHub ↗</a>
+    </div>
+  </div>
+</nav>
+
+<header>
+  <div class="wrap hero">
+    <p class="eyebrow">In-browser verifier · WebAssembly</p>
+    <h1>Verify a bundle, on your machine.</h1>
+    <p class="lead">This page runs the <em>exact</em> open-opticon verifier — the stdlib-only Go package
+       (<span class="mono">honest-ear/verifier</span>) compiled to WebAssembly, the same code path as the
+       <span class="mono">he-verify</span> CLI. Nothing is sent anywhere: the signature, freshness, and
+       anti-replay checks run client-side. <span class="em">Don't trust this page — it's the check
+       running on your own machine.</span></p>
+    <p class="status" id="status"><span class="dot"></span><span id="statusText">loading verifier…</span></p>
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <div class="grid c2">
+      <div>
+        <div class="card">
+          <label class="fld" for="bundle">Bound-output bundle (JSON)</label>
+          <textarea id="bundle" spellcheck="false" autocomplete="off"></textarea>
+          <div class="row2">
+            <div>
+              <label class="fld" for="nonce">Expected nonce (hex)</label>
+              <input type="text" id="nonce" spellcheck="false" autocomplete="off">
+            </div>
+            <div>
+              <label class="fld" for="lastCounter">Last counter (anti-replay)</label>
+              <input type="text" id="lastCounter" spellcheck="false" autocomplete="off" value="0">
+            </div>
+          </div>
+          <details class="adv">
+            <summary>Advanced: endorsement pin &amp; stream chain</summary>
+            <div class="body">
+              <div class="row2">
+                <div>
+                  <label class="fld" for="pinX">Pin pub X (hex, optional)</label>
+                  <input type="text" id="pinX" spellcheck="false" autocomplete="off">
+                </div>
+                <div>
+                  <label class="fld" for="pinY">Pin pub Y (hex, optional)</label>
+                  <input type="text" id="pinY" spellcheck="false" autocomplete="off">
+                </div>
+              </div>
+              <div class="row2" style="grid-template-columns:1fr">
+                <div>
+                  <label class="fld" for="expectPrev">Expect prev_digest (hex, optional — stream gap detection)</label>
+                  <input type="text" id="expectPrev" spellcheck="false" autocomplete="off"
+                    placeholder="64 zeros for the genesis window; leave blank to skip the chain check">
+                </div>
+              </div>
+            </div>
+          </details>
+          <div class="actions">
+            <button class="btn primary" id="verifyBtn" disabled>Verify</button>
+            <button class="btn outline" id="tamperBtn">Tamper a byte</button>
+            <button class="btn outline" id="resetBtn">Reset sample</button>
+          </div>
+        </div>
+        <p class="small" style="margin-top:12px">The sample is a real bundle produced by the host signer
+           (<span class="mono">he-attest-sim</span>) over a 3.1&nbsp;kHz alarm clip, signed with the
+           published P-256 test key — the same key and algorithm the QEMU TA uses. "Tamper a byte" flips
+           one payload byte so you can watch the signature gate reject it.</p>
+      </div>
+      <div>
+        <div class="verdict" id="verdict">
+          <div class="banner"><span class="pdot" style="background:var(--muted2)"></span>
+            <span id="verdictText">awaiting input…</span></div>
+          <div class="reason" id="verdictReason"></div>
+        </div>
+        <div id="predicate"></div>
+        <div class="note" style="margin-top:16px">
+          <b>What this proves.</b> A PASS means the verdict was signed by the held key over exactly these
+          bytes, echoes your nonce, and advances the counter — so it isn't forged, replayed, or altered by
+          the untrusted host. It says nothing about the raw audio, which never leaves the enclave.
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="links">
+      <a href="index.html">Home</a>
+      <a href="transparency.html">Transparency dashboard</a>
+      <a href="https://github.com/NubsCarson/open-opticon">GitHub</a>
+      <a href="https://github.com/NubsCarson/open-opticon/blob/main/docs/SAMPLE_ATTESTATION.md">Sample attestation</a>
+      <a href="https://github.com/NubsCarson/open-opticon/blob/main/src/verifier/cmd/he-verify-wasm/main.go">WASM source</a>
+    </div>
+    <p>The verifier is <span class="mono">honest-ear/verifier</span> compiled with
+       <span class="mono">GOOS=js GOARCH=wasm</span> (<span class="mono">tools/build_wasm.sh</span>).
+       Rebuild it yourself and diff the bytes. MIT licensed.</p>
+  </div>
+</footer>
+
+<script src="wasm_exec.js"></script>
+<script>
+"use strict";
+// The real sample bundle (see docs/SAMPLE_ATTESTATION.md for the format) and its nonce.
+const SAMPLE = {
+  bundle: {
+    "schema": "honest-ear/bound-output/v1",
+    "payload": "ab00010148d15ea5edc0ffee00020203f40401050c0618c0070108582051e7de71c7f04ed661fcd4588a5399eafa51553fd6a0ac9b2d173eadab73f9d009582076fce813fbb5a4c577d78eb957bcb37962a16a89d3c1151b801acdb96b9b0e2a0a58200000000000000000000000000000000000000000000000000000000000000000",
+    "sig": "fd71cb4589d42574da646dd454afe4418dfdadb2d25382309599db72dd6b54000ea476cfd09b3c97c700fe15d14a99663e7c7b06a102294264ed0774a5ec079a",
+    "pub_x": "30a0424cd21c2944838a2d75c92b37e76ea20d9f00893a3b4eee8a3c0aafec3e",
+    "pub_y": "e04b65e92456d9888b52b379bdfbd51ee869ef1f0fc65b6659695b6cce081723"
+  },
+  nonce: "d15ea5edc0ffee00"
+};
+
+const $ = (id) => document.getElementById(id);
+const statusEl = $("status"), statusText = $("statusText");
+
+function loadSample() {
+  $("bundle").value = JSON.stringify(SAMPLE.bundle, null, 2);
+  $("nonce").value = SAMPLE.nonce;
+  $("lastCounter").value = "0";
+  $("pinX").value = ""; $("pinY").value = ""; $("expectPrev").value = "";
+}
+
+function setVerdict(state, banner, reason) {
+  const v = $("verdict");
+  v.className = "verdict" + (state ? " " + state : "");
+  $("verdictText").textContent = banner;
+  $("verdictReason").textContent = reason || "";
+  if (!state) {
+    v.querySelector(".pdot").style.background = "var(--muted2)";
+  } else {
+    v.querySelector(".pdot").style.background = "";
+  }
+}
+
+function row(k, val) {
+  return "<tr><th>" + k + "</th><td>" + val + "</td></tr>";
+}
+
+function showPredicate(res) {
+  const box = $("predicate");
+  if (!res || !res.predicate) { box.innerHTML = ""; return; }
+  const p = res.predicate;
+  let html = "<table>";
+  html += row("event", p.event);
+  html += row("presence", p.presence);
+  html += row("voice_active", p.voiceActive);
+  html += row("frames", p.frames + "  (~" + p.windowMs + " ms)");
+  html += row("counter", p.counter);
+  html += row("nonce", p.nonce || "(empty)");
+  html += row("config_hash", p.configHash);
+  html += row("input_hash", p.inputHash);
+  html += row("prev_digest", p.prevDigest);
+  if (res.nextDigest) html += row("next_digest", res.nextDigest);
+  html += "</table>";
+  box.innerHTML = html;
+}
+
+function doVerify() {
+  if (typeof heVerify !== "function") {
+    setVerdict("fail", "VERIFIER NOT READY", "the WebAssembly module is still loading");
+    return;
+  }
+  const opts = {
+    nonce: $("nonce").value.trim(),
+    pinX: $("pinX").value.trim(),
+    pinY: $("pinY").value.trim(),
+    expectPrev: $("expectPrev").value.trim(),
+    lastCounter: parseInt($("lastCounter").value.trim() || "0", 10) || 0
+  };
+  let res;
+  try {
+    res = heVerify($("bundle").value, opts);
+  } catch (e) {
+    setVerdict("fail", "ERROR", String(e));
+    showPredicate(null);
+    return;
+  }
+  if (res.ok) {
+    setVerdict("pass", "PASS", "signature + freshness + anti-replay" +
+      ($("expectPrev").value.trim() ? " + stream chain" : "") +
+      (($("pinX").value.trim()) ? " + endorsement pin" : ""));
+  } else {
+    setVerdict("fail", "FAIL", res.reason);
+  }
+  showPredicate(res);
+}
+
+function tamperByte() {
+  // Flip one nibble of the signed payload AFTER signing -> the signature gate must reject it.
+  let b;
+  try { b = JSON.parse($("bundle").value); } catch (e) {
+    setVerdict("fail", "ERROR", "bundle is not valid JSON, can't tamper"); return;
+  }
+  if (typeof b.payload !== "string" || b.payload.length < 10) return;
+  // Flip a byte in the middle of the payload (avoid the map header at index 0-1).
+  const i = 20;
+  const c = b.payload[i];
+  const flipped = (parseInt(c, 16) ^ 0xf).toString(16);
+  b.payload = b.payload.slice(0, i) + flipped + b.payload.slice(i + 1);
+  $("bundle").value = JSON.stringify(b, null, 2);
+  doVerify();
+}
+
+$("verifyBtn").addEventListener("click", doVerify);
+$("tamperBtn").addEventListener("click", tamperByte);
+$("resetBtn").addEventListener("click", () => { loadSample(); doVerify(); });
+
+loadSample();
+
+// Load the WebAssembly verifier. Use arrayBuffer (not instantiateStreaming) so it
+// works regardless of the server's Content-Type for .wasm.
+async function boot() {
+  if (typeof Go === "undefined") {
+    statusText.textContent = "failed to load wasm_exec.js";
+    return;
+  }
+  try {
+    const go = new Go();
+    const resp = await fetch("verify.wasm");
+    if (!resp.ok) throw new Error("HTTP " + resp.status + " fetching verify.wasm");
+    const bytes = await resp.arrayBuffer();
+    const result = await WebAssembly.instantiate(bytes, go.importObject);
+    go.run(result.instance); // registers heVerify(), then blocks on select{}
+    statusEl.className = "status ready";
+    statusText.textContent = "verifier ready — runs entirely in this tab (" +
+      (bytes.byteLength / 1048576).toFixed(1) + " MB wasm)";
+    $("verifyBtn").disabled = false;
+    doVerify(); // show the sample verifying immediately
+  } catch (e) {
+    statusText.textContent = "could not load verifier: " + e.message +
+      " — serve this page over HTTP (e.g. 'make sites'), not file://";
+  }
+}
+boot();
+</script>
+</body>
+</html>

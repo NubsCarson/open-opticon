@@ -149,7 +149,8 @@
       <a href="#evidence">Evidence</a>
       <a href="#scope">Scope</a>
       <a href="#verify">Verify</a>
-      <a href="#faq">FAQ</a>
+      <a href="verify.html">Verifier</a>
+      <a href="transparency.html">Dashboard</a>
       <a class="gh" href="https://github.com/NubsCarson/open-opticon">GitHub ↗</a>
     </div>
   </div>
@@ -448,6 +449,16 @@ signer-id         : rLsRx+TaIXIFUjzkzhokWuGi…</pre>
     <p class="sub">Everything above is a claim. Here is how to check it on your own machine — the host
        pipeline needs only <span class="mono">gcc</span>, <span class="mono">go</span>,
        <span class="mono">openssl</span>, and <span class="mono">python3</span>, and runs offline.</p>
+    <div class="card" style="margin-bottom:26px;border-color:#1f3d2b">
+      <span class="lbl verify">zero install</span>
+      <h3 style="margin-bottom:7px">Verify a bundle right now, in your browser</h3>
+      <p style="margin-bottom:14px">The verifier is compiled to WebAssembly and runs entirely in your
+         tab — the <em>same</em> stdlib-only Go code as the <span class="mono">he-verify</span> CLI.
+         A real signed sample is preloaded; tamper a byte and watch the signature gate reject it.
+         Nothing is sent anywhere.</p>
+      <a class="btn primary" href="verify.html">Open the in-browser verifier →</a>
+      <a class="btn outline" href="transparency.html" style="margin-left:8px">Transparency dashboard</a>
+    </div>
     <figure class="term">
       <div class="hd">check it</div>
 <pre><span class="cp">$</span> git clone https://github.com/NubsCarson/open-opticon &amp;&amp; cd open-opticon
@@ -536,6 +547,8 @@ signer-id         : rLsRx+TaIXIFUjzkzhokWuGi…</pre>
   <div class="wrap">
     <div class="links">
       <a href="https://github.com/NubsCarson/open-opticon">GitHub</a>
+      <a href="verify.html">In-browser verifier</a>
+      <a href="transparency.html">Transparency dashboard</a>
       <a href="https://github.com/NubsCarson/open-opticon/blob/main/docs/RUNBOOK.md">Runbook</a>
       <a href="https://github.com/NubsCarson/open-opticon/blob/main/docs/SAMPLE_ATTESTATION.md">Sample attestation</a>
       <a href="https://github.com/NubsCarson/open-opticon/blob/main/docs/THREAT_MODEL.md">Threat model</a>

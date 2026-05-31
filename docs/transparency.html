@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>open-opticon — transparency dashboard</title>
+<meta name="description" content="The live, checkable state of open-opticon: the contracts deployed on Ethereum Sepolia, the append-only transparency log anchored on-chain, and the reproducible-build measurements. Don't trust the page — every value links to its independent source.">
+<meta property="og:title" content="open-opticon — transparency dashboard">
+<meta property="og:description" content="Live on-chain state, transparency-log anchor, and reproducible-build measurements — each checkable at its source.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://nubscarson.github.io/open-opticon/transparency.html">
+<meta property="og:image" content="https://nubscarson.github.io/open-opticon/assets/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://nubscarson.github.io/open-opticon/assets/og.png">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%2309090b'/><circle cx='16' cy='16' r='8.5' fill='none' stroke='%23fafafa' stroke-width='2'/><circle cx='16' cy='16' r='2.6' fill='%23fafafa'/></svg>">
+<style>
+  :root{
+    --bg:#09090b; --card:#0b0b0e; --card2:#101014; --border:#26262b; --border2:#1c1c20;
+    --fg:#fafafa; --muted:#a1a1aa; --muted2:#71717a;
+    --green:#4ade80; --red:#f87171; --blue:#60a5fa; --amber:#fbbf24; --violet:#a78bfa;
+    --radius:10px;
+    --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
+  body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans);
+    font-size:16px;line-height:1.6;letter-spacing:-0.011em;
+    -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+  a{color:inherit;text-decoration:none}
+  a.lnk{color:var(--blue)} a.lnk:hover{text-decoration:underline}
+  code,pre,.mono{font-family:var(--mono);font-size:.86em}
+  .wrap{max-width:1000px;margin:0 auto;padding:0 24px}
+  .eyebrow{font-size:12px;text-transform:uppercase;letter-spacing:.09em;color:var(--muted2);
+    font-weight:600;margin:0 0 14px}
+  h1,h2,h3{letter-spacing:-0.02em;font-weight:600;margin:0}
+  nav{position:sticky;top:0;z-index:50;border-bottom:1px solid var(--border2);
+    background:rgba(9,9,11,.72);backdrop-filter:saturate(140%) blur(10px)}
+  nav .row{display:flex;align-items:center;justify-content:space-between;height:56px}
+  nav .brand{font-family:var(--mono);font-size:14px;font-weight:600;letter-spacing:-0.02em}
+  nav .brand .dim{color:var(--muted2)}
+  nav .links{display:flex;gap:4px;align-items:center}
+  nav .links a{color:var(--muted);font-size:14px;padding:7px 11px;border-radius:8px}
+  nav .links a:hover{color:var(--fg);background:#161619}
+  @media(max-width:680px){nav .links a:not(.gh){display:none}}
+
+  .hero{padding:72px 0 26px}
+  .hero h1{font-size:clamp(2rem,5vw,2.9rem);line-height:1.08;max-width:16ch;font-weight:650}
+  .hero p.lead{color:var(--muted);font-size:1.06rem;max-width:62ch;margin:20px 0 0}
+  .hero .em{color:var(--fg)}
+
+  section{padding:34px 0;border-top:1px solid var(--border2)}
+  section h2{font-size:clamp(1.35rem,3vw,1.7rem);margin-bottom:8px}
+  section .sub{color:var(--muted);max-width:66ch;margin:0 0 22px;font-size:1rem}
+
+  .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:20px}
+  .card.live{border-color:#1f3d2b}
+  .lbl{display:inline-block;font-family:var(--mono);font-size:11px;text-transform:uppercase;
+    letter-spacing:.08em;padding:2px 8px;border-radius:6px;margin-bottom:12px}
+  .lbl.verify{color:var(--green);background:rgba(74,222,128,.09)}
+  .lbl.chain{color:var(--blue);background:rgba(96,165,250,.09)}
+  .lbl.warn{color:var(--amber);background:rgba(251,191,36,.09)}
+
+  table{width:100%;border-collapse:collapse;font-size:.9rem}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--border2);vertical-align:top}
+  th{color:var(--muted2);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:.05em}
+  td{color:var(--fg)} td.mono,td .mono{font-family:var(--mono);font-size:12px;word-break:break-all}
+  td .sub2{color:var(--muted);font-size:.8rem;display:block;margin-top:2px}
+
+  .kv{display:grid;grid-template-columns:150px 1fr;gap:8px 16px;font-size:.92rem;margin-top:6px}
+  .kv .k{color:var(--muted2);font-size:12px;text-transform:uppercase;letter-spacing:.05em;padding-top:2px}
+  .kv .v{font-family:var(--mono);font-size:12.5px;word-break:break-all}
+  .ok{color:var(--green)} .bad{color:var(--red)} .pend{color:var(--amber)}
+
+  .term{background:var(--card2);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-top:16px}
+  .term .hd{display:flex;align-items:center;gap:8px;padding:9px 14px;border-bottom:1px solid var(--border);
+    color:var(--muted2);font-family:var(--mono);font-size:12px;background:#0a0a0d}
+  .term pre{margin:0;padding:14px 16px;overflow-x:auto;font-size:12.4px;line-height:1.6;color:#d4d4d8}
+  .cg{color:var(--green)} .cd{color:var(--muted2)} .cp{color:var(--muted)} .cb{color:var(--blue)}
+
+  .note{border:1px solid var(--border);border-left:2px solid var(--muted2);border-radius:8px;
+    padding:13px 15px;color:var(--muted);font-size:.9rem;background:var(--card)}
+  .note.warn{border-left-color:var(--amber)}
+  .small{font-size:.83rem;color:var(--muted2)}
+  .btn{display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 14px;border-radius:8px;
+    font-size:13px;font-weight:500;border:1px solid var(--border);color:var(--fg);background:transparent;
+    cursor:pointer;font-family:var(--sans)}
+  .btn:hover{background:#161619;border-color:#3a3a40}
+  footer{border-top:1px solid var(--border2);padding:40px 0 64px;color:var(--muted2);font-size:14px}
+  footer .links{display:flex;gap:20px;flex-wrap:wrap;margin-bottom:14px}
+  footer a{color:var(--muted)} footer a:hover{color:var(--fg)}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap row">
+    <a class="brand" href="index.html">open-opticon<span class="dim">/</span></a>
+    <div class="links">
+      <a href="index.html#how">How</a>
+      <a href="index.html#evidence">Evidence</a>
+      <a href="verify.html">Verifier</a>
+      <a href="index.html#verify">Run locally</a>
+      <a class="gh" href="https://github.com/NubsCarson/open-opticon">GitHub ↗</a>
+    </div>
+  </div>
+</nav>
+
+<header>
+  <div class="wrap hero">
+    <p class="eyebrow">Transparency dashboard</p>
+    <h1>The live, checkable state.</h1>
+    <p class="lead">open-opticon's claim is "don't trust me, check." This page collects the state that
+       lives <em>outside</em> the maintainer's control — contracts on a public chain, an append-only log
+       anchored on that chain, and byte-reproducible build measurements. <span class="em">Every value
+       below links to its independent source; some are read live from Ethereum Sepolia in your browser.</span></p>
+  </div>
+</header>
+
+<!-- ON-CHAIN -->
+<section>
+  <div class="wrap">
+    <span class="lbl chain">Ethereum Sepolia · chain id 11155111</span>
+    <h2>On-chain: permissionless verification</h2>
+    <p class="sub">The dual-root check, the zk-receipt verifier, and the transparency-log anchor are
+       deployed on a public testnet anyone can call. A read-only <span class="mono">eth_call</span> to
+       <span class="mono">HonestEarQuorum.verdict(…)</span> returns the agreed verdict
+       <span class="mono">(2, 1)</span> = <span class="mono">alarm_tone, presence</span> — the ZK proof
+       and the device P-256 signature, bound to the same nonce and the same audio, agreeing on a chain
+       you don't control. The audio was never on-chain.</p>
+    <div class="card">
+      <table>
+        <thead><tr><th>Contract</th><th>Address (Sepolia)</th></tr></thead>
+        <tbody>
+          <tr><td>HonestEarQuorum<span class="sub2">ZK + device P-256, audio+nonce-bound 2-of-2</span></td>
+              <td class="mono"><a class="lnk" href="https://sepolia.etherscan.io/address/0x05DAa5dc9C21f4d17e930a158A3fc636de5D1815">0x05DAa5dc9C21f4d17e930a158A3fc636de5D1815</a></td></tr>
+          <tr><td>HonestEarVerifier<span class="sub2">RISC Zero Groth16 receipt for the pinned image id</span></td>
+              <td class="mono"><a class="lnk" href="https://sepolia.etherscan.io/address/0xdf52D19185CE798b7842874649344Ae5de5e40e2">0xdf52D19185CE798b7842874649344Ae5de5e40e2</a></td></tr>
+          <tr><td>CheckpointAnchor<span class="sub2">RFC 9162 consistency, verified on-chain (SHA-256 precompile)</span></td>
+              <td class="mono"><a class="lnk" href="https://sepolia.etherscan.io/address/0xB6F85c08e35799300Fa66dD421D10C3467b54634">0xB6F85c08e35799300Fa66dD421D10C3467b54634</a></td></tr>
+          <tr><td>RiscZeroGroth16Verifier<span class="sub2">RISC Zero's verifier contract</span></td>
+              <td class="mono"><a class="lnk" href="https://sepolia.etherscan.io/address/0x819162b456674F8B98f560d1aB375aD4e5401507">0x819162b456674F8B98f560d1aB375aD4e5401507</a></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card live" style="margin-top:16px">
+      <span class="lbl verify">live read</span>
+      <h3 style="font-size:1.02rem;margin-bottom:6px">CheckpointAnchor state, read live from Sepolia</h3>
+      <p class="small" style="margin-bottom:12px">Your browser calls <span class="mono">latestSize()</span>
+         and <span class="mono">latestRoot()</span> on the anchor via a public RPC and compares them to the
+         transparency-log checkpoint committed in this repo. If they match, the public ledger agrees with
+         the log's published root.</p>
+      <div class="kv">
+        <div class="k">latestSize</div><div class="v" id="liveSize"><span class="pend">reading…</span></div>
+        <div class="k">latestRoot</div><div class="v" id="liveRoot"><span class="pend">reading…</span></div>
+        <div class="k">vs. committed</div><div class="v" id="liveMatch"><span class="pend">checking against checkpoint_fixture.json (size 5)…</span></div>
+      </div>
+      <p class="small" id="liveSrc" style="margin-top:10px"></p>
+    </div>
+    <p class="note warn" style="margin-top:14px"><b>Testnet, honestly.</b> This is a public-testnet
+       proof-of-concept deployed from a disposable key — real on a real chain, but not a production
+       deployment. For a production chain you'd reuse RISC Zero's canonical audited verifier router rather
+       than a self-deployed one. Verify any of this yourself, view-only and free, with
+       <span class="mono">bash onchain/call-sepolia.sh</span>.</p>
+  </div>
+</section>
+
+<!-- TRANSPARENCY LOG -->
+<section>
+  <div class="wrap">
+    <span class="lbl chain">RFC 6962 / RFC 9162</span>
+    <h2>Transparency log: append-only, anchored</h2>
+    <p class="sub">Device endorsements go into an append-only Merkle log. A signed checkpoint is three
+       lines — origin, size, base64 root — and a consistency proof shows the log only ever grew (no
+       rewrite, no fork). That same proof is checked <em>on-chain</em> by CheckpointAnchor, so even the
+       log operator can't equivocate without the public ledger rejecting it.</p>
+    <div class="card">
+      <div class="kv">
+        <div class="k">checkpoint body</div><div class="v">&lt;origin&gt;\n&lt;size&gt;\n&lt;base64(root)&gt;\n</div>
+        <div class="k">committed proof</div><div class="v">consistency: size 3 → 5 (onchain/test/checkpoint_fixture.json)</div>
+        <div class="k">old root (size 3)</div><div class="v">0xb0735f9ed75ac2b87ef88a0e62de2d7f86cdf1797f3653e797664f0b0172484a</div>
+        <div class="k">new root (size 5)</div><div class="v">0xd3fb07a3e7c48d1710a4006bbedaed70d9f6f31a65e4a2c83ba2b3a2f6394462</div>
+      </div>
+      <div class="term">
+        <div class="hd">verify the log yourself</div>
+<pre><span class="cp">$</span> make sim   <span class="cd"># builds he-log</span>
+<span class="cp">$</span> he-log consistency --log L --index 3   <span class="cd"># RFC 9162 proof 3 → current</span>
+<span class="cp">$</span> cd onchain &amp;&amp; forge test --match-contract CheckpointAnchorTest
+<span class="cg">  [PASS]</span> test_AnchorsConsistentExtension  <span class="cd"># the 3→5 proof, checked on-chain</span>
+<span class="cg">  [PASS]</span> test_RejectsForkedRoot           <span class="cd"># a rewrite is rejected</span>
+<span class="cg">  [PASS]</span> test_RejectsRollback</pre>
+      </div>
+      <p class="small" style="margin-top:12px">The <span class="mono">new root (size 5)</span> above is the
+         exact value the live anchor read returns — that's the agreement the dashboard checks for you.
+         Witnesses can additionally cosign checkpoints (<span class="mono">he-log cosign</span>); the
+         verifier requires a threshold of enrolled, pinned-key cosignatures so one operator can't mint
+         keys to equivocate.</p>
+    </div>
+  </div>
+</section>
+
+<!-- REPRODUCIBLE BUILD -->
+<section>
+  <div class="wrap">
+    <span class="lbl verify">reproducible · attested</span>
+    <h2>Build measurements: recompute the bytes</h2>
+    <p class="sub">The host artifacts (the C simulator/detector and the Go verifier tools) are built
+       twice, in two trees at different paths, with deterministic flags, and every binary's SHA-256 is
+       compared. Identical hashes prove the output depends only on the source — not the path, the clock,
+       or the machine. CI runs this on every push, publishes the manifest, and attaches a SLSA
+       build-provenance attestation to it.</p>
+    <div class="card">
+      <div class="kv">
+        <div class="k">manifest format</div><div class="v">&lt;sha256&gt;&nbsp;&nbsp;&lt;binary-basename&gt;  (sorted)</div>
+        <div class="k">produced by</div><div class="v">make repro  (tools/repro.sh)</div>
+        <div class="k">published as</div><div class="v">CI artifact "repro-manifest" + the run summary</div>
+        <div class="k">provenance</div><div class="v">SLSA via actions/attest-build-provenance (gh attestation verify)</div>
+      </div>
+      <div class="term">
+        <div class="hd">recompute + check provenance</div>
+<pre><span class="cp">$</span> make repro
+<span class="cg">  REPRODUCIBLE</span>  all host artifacts are byte-identical across two trees
+<span class="cp">$</span> gh attestation verify repro-manifest.txt --repo NubsCarson/open-opticon
+<span class="cg">  ✓</span> verification succeeded   <span class="cd"># the manifest's GitHub build provenance</span></pre>
+      </div>
+      <p class="small" style="margin-top:12px">The latest manifest is on the
+        <a class="lnk" href="https://github.com/NubsCarson/open-opticon/actions/workflows/ci.yml">CI runs page</a>
+        (each run's summary + the <span class="mono">repro-manifest</span> artifact). The OP-TEE TA
+        measurement and the zk guest image id are re-derivable from source with pinned toolchains — see
+        <a class="lnk" href="https://github.com/NubsCarson/open-opticon/blob/main/docs/REPRODUCIBLE.md">REPRODUCIBLE.md</a>.</p>
+    </div>
+  </div>
+</section>
+
+<!-- CHECK IT -->
+<section>
+  <div class="wrap">
+    <h2>Check it, three ways</h2>
+    <p class="sub">Nothing here asks for your trust.</p>
+    <div class="card">
+      <div class="kv" style="grid-template-columns:170px 1fr;gap:14px 16px">
+        <div class="k">in your browser</div><div class="v" style="font-family:var(--sans);font-size:.95rem">
+          <a class="lnk" href="verify.html">verify.html</a> — the real verifier compiled to WebAssembly,
+          checks a signed bundle client-side.</div>
+        <div class="k">on a public chain</div><div class="v" style="font-family:var(--sans);font-size:.95rem">
+          <span class="mono">bash onchain/call-sepolia.sh</span> — read the dual-root verdict from Sepolia, no funds.</div>
+        <div class="k">on your machine</div><div class="v" style="font-family:var(--sans);font-size:.95rem">
+          <span class="mono">make test &amp;&amp; make repro</span> — units, e2e, and byte-identical rebuilds, offline.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="links">
+      <a href="index.html">Home</a>
+      <a href="verify.html">In-browser verifier</a>
+      <a href="https://github.com/NubsCarson/open-opticon">GitHub</a>
+      <a href="https://github.com/NubsCarson/open-opticon/blob/main/onchain/README.md">onchain/README</a>
+      <a href="https://github.com/NubsCarson/open-opticon/blob/main/docs/REPRODUCIBLE.md">Reproducible builds</a>
+    </div>
+    <p>A working proof-of-concept, not a certified product. Sepolia is a public testnet; the deploy uses a
+       disposable key. MIT licensed.</p>
+  </div>
+</footer>
+
+<script>
+"use strict";
+// Read-only: latestSize() / latestRoot() on CheckpointAnchor, compared to the
+// transparency-log checkpoint committed in this repo. Best-effort across a few
+// public RPCs; if none respond (CORS/rate limit), fall back to the Etherscan link.
+const ANCHOR = "0xB6F85c08e35799300Fa66dD421D10C3467b54634";
+const SEL_SIZE = "0x1293ed37"; // latestSize()
+const SEL_ROOT = "0xd7b0fef1"; // latestRoot()
+const COMMITTED_ROOT = "0xd3fb07a3e7c48d1710a4006bbedaed70d9f6f31a65e4a2c83ba2b3a2f6394462";
+const COMMITTED_SIZE = 5;
+const RPCS = [
+  "https://ethereum-sepolia-rpc.publicnode.com",
+  "https://sepolia.drpc.org",
+  "https://1rpc.io/sepolia"
+];
+
+async function ethCall(rpc, data) {
+  const r = await fetch(rpc, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_call",
+      params: [{ to: ANCHOR, data: data }, "latest"] })
+  });
+  if (!r.ok) throw new Error("HTTP " + r.status);
+  const j = await r.json();
+  if (j.error) throw new Error(j.error.message || "rpc error");
+  return j.result; // 0x + 64 hex chars
+}
+
+async function readAnchor() {
+  const elSize = document.getElementById("liveSize");
+  const elRoot = document.getElementById("liveRoot");
+  const elMatch = document.getElementById("liveMatch");
+  const elSrc = document.getElementById("liveSrc");
+  for (const rpc of RPCS) {
+    try {
+      const sizeHex = await ethCall(rpc, SEL_SIZE);
+      const rootHex = await ethCall(rpc, SEL_ROOT);
+      const size = parseInt(sizeHex, 16);
+      const root = "0x" + rootHex.slice(2).replace(/^0+/, "").padStart(64, "0");
+      const rootNorm = "0x" + rootHex.slice(-64);
+      elSize.textContent = String(size);
+      elRoot.textContent = rootNorm;
+      const sizeOk = size === COMMITTED_SIZE;
+      const rootOk = rootNorm.toLowerCase() === COMMITTED_ROOT.toLowerCase();
+      if (sizeOk && rootOk) {
+        elMatch.innerHTML = '<span class="ok">✓ matches the committed checkpoint (size 5, root 0xd3fb…4462)</span>';
+      } else {
+        elMatch.innerHTML = '<span class="pend">live anchor has advanced beyond the committed checkpoint' +
+          ' (size ' + size + ') — the repo fixture is a snapshot; check Etherscan for current state.</span>';
+      }
+      elSrc.innerHTML = "read via " + rpc.replace("https://", "") +
+        ' · <a class="lnk" href="https://sepolia.etherscan.io/address/' + ANCHOR + '#readContract">cross-check on Etherscan</a>';
+      return;
+    } catch (e) { /* try next RPC */ }
+  }
+  elSize.innerHTML = elRoot.innerHTML = '<span class="bad">—</span>';
+  elMatch.innerHTML = '<span class="bad">couldn\'t reach a public Sepolia RPC from this browser.</span>';
+  elSrc.innerHTML = 'Read it directly on <a class="lnk" href="https://sepolia.etherscan.io/address/' +
+    ANCHOR + '#readContract">Etherscan (Read Contract → latestSize / latestRoot)</a>.';
+}
+readAnchor();
+</script>
+</body>
+</html>
