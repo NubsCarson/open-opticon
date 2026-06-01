@@ -35,12 +35,17 @@ typedef enum {
 typedef struct {
     uint32_t sample_rate;       /* Hz, e.g. 16000 */
     uint32_t frame_samples;     /* per-frame window, e.g. 256 */
-    uint32_t tone_freq_hz;      /* Goertzel target, e.g. 3100 (alarm) */
+    uint32_t tone_freq_hz;      /* Goertzel band CENTER, e.g. 3100 (alarm) */
     uint32_t input_shift;       /* right-shift applied to each sample (scaling) */
     int64_t energy_floor;       /* per-frame energy threshold (scaled domain) */
     uint32_t min_active_frames; /* active frames required to assert presence */
     uint32_t tone_ratio_min;    /* tone if goertzel_power >= energy*ratio */
+    uint32_t tone_bins;         /* # of probe frequencies across the band (>=1) */
+    uint32_t tone_band_hz;      /* half-width of the probe band around tone_freq_hz */
 } he_detector_config_t;
+
+/* Upper bound on tone_bins (bounds the per-frame Goertzel state on the stack). */
+#define HE_TONE_BINS_MAX 8u
 
 typedef struct {
     uint32_t frames;        /* total frames examined */
@@ -63,8 +68,8 @@ void he_detector_default_config(he_detector_config_t *cfg);
 size_t he_detector_config_blob(const he_detector_config_t *cfg, uint8_t *out,
                                size_t cap);
 
-/* Canonical config blob length (7 x uint64 big-endian). */
-#define HE_CONFIG_BLOB_LEN 56u
+/* Canonical config blob length (9 x uint64 big-endian). */
+#define HE_CONFIG_BLOB_LEN 72u
 
 /*
  * Run the detector over `n_samples` of int16 PCM. Pure function: reads pcm,

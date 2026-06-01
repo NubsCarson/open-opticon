@@ -16,6 +16,8 @@ const INPUT_SHIFT: i64 = 6;
 const ENERGY_FLOOR: i64 = 200000;
 const MIN_ACTIVE_FRAMES: u32 = 8;
 const TONE_RATIO_MIN: i64 = 40;
+const TONE_BINS: usize = 3; // probe 3 frequencies across the band ...
+const TONE_BAND_HZ: i64 = 200; // ... 2900 / 3100 / 3300 Hz (matches he_detector.c defaults)
 
 /// The detector's verdict, mirroring he_detect_result_t in he_detector.h.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -48,29 +50,56 @@ fn cos_q28(mut a: i64) -> i64 {
     sign * acc
 }
 
+/// Goertzel coefficient 2*cos(2*pi*f/fs) in Q15 (mirrors he_coeff_q15 in C).
+fn coeff_q15(f: i64, fs: i64) -> i64 {
+    let theta_q28 = (TWO_PI_Q28 * f) / fs;
+    let cos_val = cos_q28(theta_q28);
+    ((2 * cos_val) >> 13) as i32 as i64 // mirror C int32_t coeff
+}
+
+/// The k-th probe frequency across the band (mirrors he_probe_freq in C).
+fn probe_freq(k: usize, bins: usize) -> i64 {
+    if bins <= 1 {
+        return TONE_FREQ_HZ;
+    }
+    TONE_FREQ_HZ - TONE_BAND_HZ + (2 * TONE_BAND_HZ * k as i64) / (bins as i64 - 1)
+}
+
 /// Run the detector over little-endian s16 mono PCM samples.
 pub fn detect(pcm: &[i16]) -> Verdict {
-    let theta_q28 = (TWO_PI_Q28 * TONE_FREQ_HZ) / SAMPLE_RATE;
-    let cos_val = cos_q28(theta_q28);
-    let coeff_q15: i64 = ((2 * cos_val) >> 13) as i32 as i64; // mirror C int32_t coeff
+    // Probe a small band of frequencies around the center (mirrors he_detector.c):
+    // take the strongest Goertzel power across the probes per frame.
+    let bins = TONE_BINS;
+    let mut coeff = [0i64; TONE_BINS];
+    for k in 0..bins {
+        coeff[k] = coeff_q15(probe_freq(k, bins), SAMPLE_RATE);
+    }
     let n_frames = pcm.len() / FRAME_SAMPLES;
     let (mut frames, mut active, mut tone, mut voice) = (0u32, 0u32, 0u32, 0u32);
     for f in 0..n_frames {
         let frame = &pcm[f * FRAME_SAMPLES..f * FRAME_SAMPLES + FRAME_SAMPLES];
-        let (mut s1, mut s2, mut energy): (i64, i64, i64) = (0, 0, 0);
+        let mut s1 = [0i64; TONE_BINS];
+        let mut s2 = [0i64; TONE_BINS];
+        let mut energy: i64 = 0;
         for &sample in frame {
             let x = (sample as i64) >> INPUT_SHIFT;
-            let s0 = x + ((coeff_q15 * s1) >> 15) - s2;
-            s2 = s1;
-            s1 = s0;
+            for k in 0..bins {
+                let s0 = x + ((coeff[k] * s1[k]) >> 15) - s2[k];
+                s2[k] = s1[k];
+                s1[k] = s0;
+            }
             energy += x * x;
         }
         frames += 1;
         if energy < ENERGY_FLOOR { continue; }
         active += 1;
-        let mut power = s1 * s1 + s2 * s2 - ((coeff_q15 * s1) >> 15) * s2;
-        if power < 0 { power = 0; }
-        if power >= energy * TONE_RATIO_MIN { tone += 1; } else { voice += 1; }
+        let mut max_power: i64 = 0;
+        for k in 0..bins {
+            let mut power = s1[k] * s1[k] + s2[k] * s2[k] - ((coeff[k] * s1[k]) >> 15) * s2[k];
+            if power < 0 { power = 0; }
+            if power > max_power { max_power = power; }
+        }
+        if max_power >= energy * TONE_RATIO_MIN { tone += 1; } else { voice += 1; }
     }
     let presence = if active >= MIN_ACTIVE_FRAMES { 1 } else { 0 };
     let (event, voice_active) = if presence == 1 && tone * 2 >= active {

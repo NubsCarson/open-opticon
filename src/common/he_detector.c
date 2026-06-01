@@ -57,6 +57,8 @@ void he_detector_default_config(he_detector_config_t *cfg)
     cfg->energy_floor = 200000;      /* per-frame, scaled domain */
     cfg->min_active_frames = 8;
     cfg->tone_ratio_min = 40;        /* tone if goertzel_power >= energy*40 */
+    cfg->tone_bins = 3;              /* probe 3 frequencies across the band ... */
+    cfg->tone_band_hz = 200;         /* ... 2900 / 3100 / 3300 Hz (UL alarm drift) */
 }
 
 size_t he_detector_config_blob(const he_detector_config_t *cfg, uint8_t *out,
@@ -71,6 +73,8 @@ size_t he_detector_config_blob(const he_detector_config_t *cfg, uint8_t *out,
     he_be64(out + 32, (uint64_t)cfg->energy_floor);
     he_be64(out + 40, cfg->min_active_frames);
     he_be64(out + 48, cfg->tone_ratio_min);
+    he_be64(out + 56, cfg->tone_bins);
+    he_be64(out + 64, cfg->tone_band_hz);
     return HE_CONFIG_BLOB_LEN;
 }
 
@@ -95,6 +99,24 @@ uint32_t he_window_ms(const he_detector_config_t *cfg, uint32_t frames)
                       cfg->sample_rate);
 }
 
+/* Goertzel coefficient 2*cos(2*pi*f/fs) in Q15 for frequency f at rate fs. */
+static int32_t he_coeff_q15(int64_t f, int64_t fs)
+{
+    int64_t theta_q28 = (TWO_PI_Q28 * f) / fs;
+    int64_t cos_val = cos_q28(theta_q28);            /* Q28 */
+    return (int32_t)((2 * cos_val) >> 13);           /* Q28 -> Q15, x2 */
+}
+
+/* The k-th probe frequency across [center-band, center+band] for `bins` probes
+ * (integer arithmetic, so it is reproducible bit-for-bit in the Rust port). */
+static int64_t he_probe_freq(const he_detector_config_t *cfg, uint32_t k, uint32_t bins)
+{
+    if (bins <= 1)
+        return (int64_t)cfg->tone_freq_hz;
+    return (int64_t)cfg->tone_freq_hz - (int64_t)cfg->tone_band_hz +
+           (2 * (int64_t)cfg->tone_band_hz * (int64_t)k) / (int64_t)(bins - 1);
+}
+
 void he_detector_run(const he_detector_config_t *cfg, const int16_t *pcm,
                      size_t n_samples, he_detect_result_t *res)
 {
@@ -104,11 +126,19 @@ void he_detector_run(const he_detector_config_t *cfg, const int16_t *pcm,
     if (!cfg || !pcm || cfg->frame_samples == 0)
         return;
 
-    /* Goertzel coefficient: 2*cos(2*pi*f/fs), in Q15. Computed once. */
-    int64_t theta_q28 =
-        (TWO_PI_Q28 * (int64_t)cfg->tone_freq_hz) / (int64_t)cfg->sample_rate;
-    int64_t cos_val = cos_q28(theta_q28);           /* Q28 */
-    int32_t coeff_q15 = (int32_t)((2 * cos_val) >> 13); /* Q28 -> Q15, x2 */
+    /* Probe a small BAND of frequencies around the configured center, not a
+     * single bin, so a real alarm that sits slightly off the nominal frequency
+     * (UL-217 alarms drift across ~3000-3400 Hz) is still detected. Per frame we
+     * take the strongest Goertzel power across the probes. One coefficient per
+     * probe, computed once. */
+    uint32_t bins = cfg->tone_bins;
+    if (bins < 1)
+        bins = 1;
+    if (bins > HE_TONE_BINS_MAX)
+        bins = HE_TONE_BINS_MAX;
+    int32_t coeff[HE_TONE_BINS_MAX];
+    for (uint32_t k = 0; k < bins; k++)
+        coeff[k] = he_coeff_q15(he_probe_freq(cfg, k, bins), (int64_t)cfg->sample_rate);
 
     const uint32_t fs_frame = cfg->frame_samples;
     const uint32_t shift = cfg->input_shift;
@@ -116,14 +146,17 @@ void he_detector_run(const he_detector_config_t *cfg, const int16_t *pcm,
 
     for (size_t f = 0; f < n_frames; f++) {
         const int16_t *frame = pcm + (size_t)f * fs_frame;
-        int64_t s1 = 0, s2 = 0;
+        int64_t s1[HE_TONE_BINS_MAX] = {0};
+        int64_t s2[HE_TONE_BINS_MAX] = {0};
         int64_t energy = 0;
 
         for (uint32_t i = 0; i < fs_frame; i++) {
             int64_t x = (int64_t)(frame[i] >> shift);
-            int64_t s0 = x + ((coeff_q15 * s1) >> 15) - s2;
-            s2 = s1;
-            s1 = s0;
+            for (uint32_t k = 0; k < bins; k++) {
+                int64_t s0 = x + ((coeff[k] * s1[k]) >> 15) - s2[k];
+                s2[k] = s1[k];
+                s1[k] = s0;
+            }
             energy += x * x;
         }
 
@@ -134,12 +167,17 @@ void he_detector_run(const he_detector_config_t *cfg, const int16_t *pcm,
 
         res->active_frames++;
 
-        /* Goertzel power at target frequency for this frame. */
-        int64_t power = s1 * s1 + s2 * s2 - ((coeff_q15 * s1) >> 15) * s2;
-        if (power < 0)
-            power = 0;
+        /* Strongest Goertzel power across the probe band for this frame. */
+        int64_t max_power = 0;
+        for (uint32_t k = 0; k < bins; k++) {
+            int64_t power = s1[k] * s1[k] + s2[k] * s2[k] - ((coeff[k] * s1[k]) >> 15) * s2[k];
+            if (power < 0)
+                power = 0;
+            if (power > max_power)
+                max_power = power;
+        }
 
-        if (power >= energy * (int64_t)cfg->tone_ratio_min)
+        if (max_power >= energy * (int64_t)cfg->tone_ratio_min)
             res->tone_frames++;
         else
             res->voice_frames++;

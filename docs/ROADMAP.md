@@ -131,9 +131,21 @@ but the right place for the verifier).
   PoC). This closes the analog-hole-equivalent gap fully.
 
 ## Detector quality
-- Replace the threshold detector with a small, **audited** keyword/acoustic-event
-  model; publish the model + policy and bind its hash (already wired via
-  `config_hash`). Add a constant-time / no-secret-dependent-branch audit pass.
+- **Probe-band tone detection.** ✅ Done: the detector now scans a small band of
+  frequencies around the configured center (default 2900/3100/3300 Hz via
+  `tone_bins`/`tone_band_hz`, taking the strongest Goertzel power per frame), so a
+  real alarm that sits off the nominal frequency (UL-217 alarms drift across
+  ~3000-3400 Hz) is still detected. Integer-only, config-hash-bound, and
+  bit-for-bit identical in the C detector and the Rust zk port (`make port-diff`);
+  an off-center 3300 Hz alarm is detected in `test_detector`. This is a stronger
+  HEURISTIC, not a learned model.
+- **Replace the heuristic with a small, _audited_ keyword/acoustic-event model.**
+  Still open and the honest hard part: it needs a real labelled dataset, a
+  fixed-point model whose weights are published + bound via `config_hash`, a
+  constant-time / no-secret-dependent-branch audit pass, AND an independent audit
+  (the word "audited" is load-bearing — it is not something the maintainer can
+  self-assert). The probe-band detector above and the existing `config_hash`
+  binding are the on-ramp; the model + audit are future work, not a laptop task.
 
 ## Confidentiality migration
 - Where richer outputs are needed, migrate sensitive computation toward

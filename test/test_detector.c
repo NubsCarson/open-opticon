@@ -86,6 +86,14 @@ int main(void)
     he_detector_run(&cfg, buf, N, &res);
     check(res.event != HE_EVENT_ALARM_TONE, "700Hz tone => not ALARM_TONE");
 
+    /* 5b) An alarm that sits OFF the nominal 3100 Hz center (real UL-217 alarms
+     * drift across ~3000-3400 Hz) is still detected, thanks to the probe band —
+     * a single 3100 Hz bin would under-detect it. */
+    for (int i = 0; i < N; i++)
+        buf[i] = (int16_t)(12000.0 * sin(2.0 * M_PI * 3300.0 * i / SR));
+    he_detector_run(&cfg, buf, N, &res);
+    check(res.event == HE_EVENT_ALARM_TONE, "3300Hz off-center alarm => ALARM_TONE (probe band)");
+
     /* 6) Buffer shorter than one frame -> zero frames, NONE, no crash. */
     memset(buf, 0x7f, 100 * sizeof(int16_t));
     he_detector_run(&cfg, buf, 100, &res);
@@ -124,6 +132,8 @@ int main(void)
         0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x0D, 0x40, /* energy_floor=200000 */
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08, /* min_active_frames=8 */
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x28, /* tone_ratio_min=40 */
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, /* tone_bins=3 */
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xC8, /* tone_band_hz=200 */
     };
     uint8_t cfg_blob[HE_CONFIG_BLOB_LEN];
     size_t cfg_blob_len = he_detector_config_blob(&cfg, cfg_blob, sizeof(cfg_blob));
