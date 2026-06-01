@@ -159,7 +159,10 @@ func indexByte(s string, c byte) int {
 
 func runCheck(args []string) {
 	cfg := parseCommon(args, nil)
-	st := loadState(cfg.statePath)
+	st, err := loadState(cfg.statePath)
+	if err != nil {
+		cli.Die("%v", err)
+	}
 	res, err := poll(http.DefaultClient, cfg.logURL, cfg.origin, cfg.logPubX, cfg.logPubY, cfg.key, cfg.name, st)
 	if err != nil {
 		cli.Die("poll: %v", err)
@@ -168,7 +171,9 @@ func runCheck(args []string) {
 		fmt.Fprintf(os.Stderr, "%s  REFUSED to cosign: %s\n", cli.Fail(), res.Reason)
 		os.Exit(1)
 	}
-	saveState(cfg.statePath, st)
+	if err := saveState(cfg.statePath, st); err != nil {
+		cli.Die("save state: %v", err)
+	}
 	c := res.Cosignature
 	_ = json.NewEncoder(os.Stdout).Encode(map[string]string{
 		"witness":       c.Witness,
@@ -194,7 +199,11 @@ func runServe(args []string) {
 		}
 	}
 
-	d := &daemon{cfg: cfg, st: loadState(cfg.statePath)}
+	st, err := loadState(cfg.statePath)
+	if err != nil {
+		cli.Die("%v", err)
+	}
+	d := &daemon{cfg: cfg, st: st}
 	d.once() // poll immediately so /cosignature is populated before first tick
 	go func() {
 		t := time.NewTicker(interval)
@@ -234,7 +243,10 @@ func (d *daemon) once() {
 		r := res
 		d.latest = &r
 		d.healthOK = true
-		saveState(d.cfg.statePath, d.st)
+		if err := saveState(d.cfg.statePath, d.st); err != nil {
+			d.lastErr = "state save failed: " + err.Error()
+			d.healthOK = false // persistence failure is operationally significant
+		}
 	} else {
 		// A detected inconsistency is NOT healthy — surface it, keep the last good cosig.
 		d.lastErr = "REFUSED: " + res.Reason
@@ -396,23 +408,40 @@ func getJSON(client *http.Client, url string, v any) error {
 	return json.Unmarshal(raw, v)
 }
 
-func loadState(path string) *witnessState {
+// loadState reads the persisted witness view. A MISSING file is the honest
+// first-run baseline; a PRESENT-but-corrupt file (bad JSON, or a malformed root)
+// is an error, not a silent reset to baseline — re-trusting first-sight after
+// state corruption could let a fork slip past, so the operator must see it.
+func loadState(path string) (*witnessState, error) {
 	st := &witnessState{}
 	if path == "" {
-		return st
+		return st, nil
 	}
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		return st // first run: empty baseline
+		if os.IsNotExist(err) {
+			return st, nil // first run: baseline
+		}
+		return nil, err
 	}
-	_ = json.Unmarshal(raw, st)
-	return st
+	if err := json.Unmarshal(raw, st); err != nil {
+		return nil, fmt.Errorf("corrupt witness state %s: %w", path, err)
+	}
+	if st.Root != "" {
+		if _, err := hexRoot(st.Root); err != nil {
+			return nil, fmt.Errorf("invalid root in state %s: %w", path, err)
+		}
+	}
+	return st, nil
 }
 
-func saveState(path string, st *witnessState) {
+func saveState(path string, st *witnessState) error {
 	if path == "" {
-		return
+		return nil
 	}
-	raw, _ := json.MarshalIndent(st, "", "  ")
-	_ = os.WriteFile(path, raw, 0o600)
+	raw, err := json.MarshalIndent(st, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, raw, 0o600)
 }

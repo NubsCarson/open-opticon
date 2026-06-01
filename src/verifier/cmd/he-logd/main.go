@@ -16,6 +16,7 @@
 package main
 
 import (
+	"crypto/ecdsa"
 	"encoding/hex"
 	"encoding/json"
 	"flag"
@@ -44,24 +45,35 @@ func main() {
 		cli.Die("bad --key: %v", err)
 	}
 
-	px, py := verifier.PubXY(key)
 	loadLog := func() (*verifier.MerkleLog, error) { return loadLogFile(*logPath) }
+	http.HandleFunc("/checkpoint", checkpointHandler(loadLog, *origin, key))
+	http.HandleFunc("/consistency", consistencyHandler(loadLog))
 
-	http.HandleFunc("/checkpoint", func(w http.ResponseWriter, r *http.Request) {
-		l, err := loadLog()
+	fmt.Fprintf(os.Stderr, "he-logd: serving %s on %s (origin %q)\n", *logPath, *addr, *origin)
+	log.Fatal(http.ListenAndServe(*addr, nil))
+}
+
+// loadFunc loads the current log (re-read per request so appends are served live).
+type loadFunc = func() (*verifier.MerkleLog, error)
+
+// checkpointHandler serves the log's current signed checkpoint.
+func checkpointHandler(load loadFunc, origin string, key *ecdsa.PrivateKey) http.HandlerFunc {
+	px, py := verifier.PubXY(key)
+	return func(w http.ResponseWriter, _ *http.Request) {
+		l, err := load()
 		if err != nil {
 			cli.WriteJSON(w, 500, map[string]string{"error": err.Error()})
 			return
 		}
 		root := l.Root()
-		body := verifier.CheckpointBody(*origin, l.Size(), root)
-		sig, err := verifier.SignCheckpoint(*origin, l.Size(), root, key)
+		body := verifier.CheckpointBody(origin, l.Size(), root)
+		sig, err := verifier.SignCheckpoint(origin, l.Size(), root, key)
 		if err != nil {
 			cli.WriteJSON(w, 500, map[string]string{"error": err.Error()})
 			return
 		}
 		cli.WriteJSON(w, 200, map[string]any{
-			"origin":    *origin,
+			"origin":    origin,
 			"size":      l.Size(),
 			"root":      hex.EncodeToString(root[:]),
 			"body":      string(body),
@@ -69,15 +81,18 @@ func main() {
 			"log_pub_x": hex.EncodeToString(px),
 			"log_pub_y": hex.EncodeToString(py),
 		})
-	})
+	}
+}
 
-	http.HandleFunc("/consistency", func(w http.ResponseWriter, r *http.Request) {
+// consistencyHandler serves an RFC 9162 consistency proof from ?from to current.
+func consistencyHandler(load loadFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
 		from, err := strconv.Atoi(r.URL.Query().Get("from"))
 		if err != nil || from < 0 {
 			cli.WriteJSON(w, 400, map[string]string{"error": "bad ?from"})
 			return
 		}
-		l, err := loadLog()
+		l, err := load()
 		if err != nil {
 			cli.WriteJSON(w, 500, map[string]string{"error": err.Error()})
 			return
@@ -102,10 +117,7 @@ func main() {
 			"new_root": hex.EncodeToString(root[:]),
 			"proof":    ph,
 		})
-	})
-
-	fmt.Fprintf(os.Stderr, "he-logd: serving %s on %s (origin %q)\n", *logPath, *addr, *origin)
-	log.Fatal(http.ListenAndServe(*addr, nil))
+	}
 }
 
 // loadLogFile reads the {"leaves":[hex,...]} log file and rebuilds the MerkleLog.

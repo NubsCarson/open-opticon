@@ -16,6 +16,7 @@ import (
 	"encoding/hex"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -84,12 +85,12 @@ flags:
 	if err != nil {
 		fmt.Printf("%s  %v\n", cli.Fail(), err)
 		if claims != nil {
-			printClaims(claims)
+			printClaims(os.Stdout, claims)
 		}
 		os.Exit(1)
 	}
 	fmt.Printf("%s  PSA token verified (signature + profile + freshness + reference measurements)\n", cli.Pass())
-	printClaims(claims)
+	printClaims(os.Stdout, claims)
 }
 
 // readToken accepts either a path to a file (hex or raw bytes) or a raw hex string.
@@ -108,13 +109,13 @@ func readToken(arg string) []byte {
 	return raw
 }
 
-func printClaims(c *verifier.PSAClaims) {
-	fmt.Printf("  eat_profile      : %s\n", c.Profile)
-	fmt.Printf("  nonce            : %x\n", c.Nonce)
-	fmt.Printf("  instance_id      : %x\n", c.InstanceID)
-	fmt.Printf("  implementation_id: %x\n", c.ImplementationID)
+func printClaims(w io.Writer, c *verifier.PSAClaims) {
+	fmt.Fprintf(w, "  eat_profile      : %s\n", c.Profile)
+	fmt.Fprintf(w, "  nonce            : %x\n", c.Nonce)
+	fmt.Fprintf(w, "  instance_id      : %x\n", c.InstanceID)
+	fmt.Fprintf(w, "  implementation_id: %x\n", c.ImplementationID)
 	for i, sc := range c.SoftwareComponents {
-		fmt.Printf("  sw[%d] %-8s measurement=%x signer=%x\n",
+		fmt.Fprintf(w, "  sw[%d] %-8s measurement=%x signer=%x\n",
 			i, sc.MeasurementType, sc.MeasurementValue, sc.SignerID)
 	}
 }
