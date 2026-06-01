@@ -81,6 +81,15 @@ From this PoC to a defensible product, in order of trust-impact.
   `cose.go`), and `make cose-e2e` proves C→Go end-to-end. Remaining: the TA emits
   it on the next rig build (a re-measure + re-attest, since it changes the
   in-enclave wire format already proven on QEMU).
+- **Host-side PSA attestation-token (EAT) verifier.** ✅ Implemented: `eat.go` /
+  `he-attest-verify` parse a PSA token (COSE_Sign1, profile
+  `http://arm.com/psa/2.0.0`) and check the offline-verifiable core of what
+  Veraison does — the ES256 signature under a pinned attestation key, the EAT
+  profile, the freshness nonce, and that every software-component measurement is a
+  published reference value. Reuses the COSE machinery above; tested against a
+  faithfully-minted PSA token. It does NOT replace Veraison's full
+  endorsement/trust-anchor provisioning and policy — a real Veraison-issued token
+  is the rig step.
 - **Fold the bound output into the EAT itself** as a custom claim, so there is a
   single attestation token rather than two signatures. (Two signatures is fine
   for the PoC and keeps Veraison freshness untouched.)

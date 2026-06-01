@@ -75,8 +75,9 @@ src/verifier/    Go (stdlib only) verifier:
                    bound.go        - 4-gate bundle verify (sig/pin/freshness/replay)
                    quorum.go       - k-of-n multi-prover quorum (reuses bound.go)
                    transparency.go - RFC 6962 endorsement log (inclusion/consistency)
-                   cmd/he-verify   - verify a bundle, or a --quorum of provers
+                   cmd/he-verify   - verify a bundle (raw or --cose), or a --quorum of provers
                    cmd/he-dump     - decode a bundle to readable fields (no verify) — audit aid
+                   cmd/he-attest-verify - verify a PSA attestation token (EAT) offline
                    cmd/he-log      - operate/prove/verify the transparency log
                    cmd/he-logd     - HTTP log server (checkpoints + consistency proofs)
                    cmd/he-witness  - witness daemon: consistency-check + cosign, refuse forks

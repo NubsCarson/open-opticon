@@ -54,20 +54,26 @@ func VerifyCOSEBundle(b COSEBundle, opt Options) VerifyResult {
 	}
 
 	// Gate 1: signature over SHA-256(Sig_structure) under the attested key.
-	// Sig_structure = [ "Signature1", protected, external_aad(empty), payload ];
-	// protected and payload are spliced in verbatim (their on-wire bstr bytes).
-	sigStruct := make([]byte, 0, 1+len(coseContext)+len(protBstr)+1+len(payloadBstr))
-	sigStruct = append(sigStruct, 0x84) // array(4)
-	sigStruct = append(sigStruct, coseContext...)
-	sigStruct = append(sigStruct, protBstr...)
-	sigStruct = append(sigStruct, 0x40) // external_aad = empty bstr
-	sigStruct = append(sigStruct, payloadBstr...)
-	if err := verifySig(sigStruct, sig, px, py); err != nil {
+	if err := verifySig(coseSigStruct(protBstr, payloadBstr), sig, px, py); err != nil {
 		return VerifyResult{Reason: "signature: " + err.Error()}
 	}
 
 	// Gates 2-4 (+ version/decode) — identical to the raw envelope.
 	return gatesAfterSig(payload, opt)
+}
+
+// coseSigStruct rebuilds the COSE_Sign1 Sig_structure that was signed:
+// [ "Signature1", protected, external_aad(empty), payload ]. The protected and
+// payload bstrs are spliced in verbatim (their exact on-wire bytes), so the
+// reconstructed bytes match what the signer hashed byte-for-byte.
+func coseSigStruct(protBstr, payloadBstr []byte) []byte {
+	ss := make([]byte, 0, 1+len(coseContext)+len(protBstr)+1+len(payloadBstr))
+	ss = append(ss, 0x84) // array(4)
+	ss = append(ss, coseContext...)
+	ss = append(ss, protBstr...)
+	ss = append(ss, 0x40) // external_aad = empty bstr
+	ss = append(ss, payloadBstr...)
+	return ss
 }
 
 // parseCOSESign1 parses a COSE_Sign1 message and returns the protected header's

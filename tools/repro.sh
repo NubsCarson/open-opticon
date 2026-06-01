@@ -34,7 +34,7 @@ build_tree() {
   make -C "$d/sim" all CFLAGS="$cflags" >/dev/null 2>&1
   ( cd "$d/src/verifier"
     export CGO_ENABLED=0 GOPROXY=off GOFLAGS="-trimpath -buildvcs=false"
-    for c in he-verify he-log he-challenge he-gui he-dump; do
+    for c in he-verify he-log he-challenge he-gui he-dump he-logd he-witness he-attest-verify; do
       go build -ldflags=-buildid= -o "$d/bin-$c" "./cmd/$c"
     done
     # The in-browser verifier ships as a committed wasm artifact; prove it is
