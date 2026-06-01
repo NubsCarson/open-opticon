@@ -7,7 +7,7 @@
  * non-extractable CAAM black key on i.MX 8M Plus. This is what BINDS the
  * detector's output to the attested key.
  *
- * It is a thin, audited wrapper over the existing, already-tested
+ * It is a thin, reviewed wrapper over the existing, already-tested
  * sign_ecdsa_sha256() (sign.c): SHA-256(msg) then ECDSA-P256, output 64-byte
  * r||s (RFC 7518). Crucially it lives OUTSIDE the CFG_NXP_CAAM guard, so it
  * works on the QEMU path too.

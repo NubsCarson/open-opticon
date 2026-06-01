@@ -274,6 +274,10 @@ func (s *server) verifyAndRecord(sid string, sess *session, b verifier.Bundle) m
 				Payload:    b.Payload, Sig: b.Sig, PubX: b.PubX, PubY: b.PubY,
 				Pinned: len(s.pinX) > 0 && len(s.pinY) > 0,
 			}
+		} else {
+			// A later FAIL (e.g. a replay) must not leave a prior PASS's proof
+			// attached — keep /status self-consistent with the recorded verdict.
+			sess.proof = nil
 		}
 	}
 	s.mu.Unlock()
@@ -500,19 +504,19 @@ function evName(p){return p.event||"an event";}
 // marked so a green page never implies more than the signature carries.
 function cards(p){return [
  {q:"1 · what gets captured?",
-  a:"sound is analyzed for one thing — "+esc(evName(p))+" — then discarded. you get a verdict, not a recording.",
+  a:"sound is analyzed for one thing — "+esc(evName(p))+". you get a verdict, not a recording.",
   badge:["proven","✓ proven by this check"],
   art:kv("event",p.event)+kv("presence",p.presence)+kv("voice_active",p.voice_active)+kv("frames",p.frames)+kv("window_ms",p.window_ms)+kv("input_hash",p.input_hash),
   cap:"the device signed this verdict, not audio. input_hash is a SHA-256 fingerprint of the exact window analyzed — it names the input without storing it.",
   ok:"the signed output is a small event verdict, not a recording or transcript.",
   warn:"that the raw audio is wiped inside the chip and never reaches the OS is firmware behavior — proven on QEMU; on a shipped unit it rests on hardware attestation + public source audit."},
  {q:"2 · where does it go?",
-  a:"nowhere. the only thing that left the device is the signed verdict your phone just checked.",
+  a:"the bundle your phone just checked is a signed verdict with no audio field in it — that is the whole artifact.",
   badge:["proven","✓ proven by this check"],
   art:kv("payload",p.payload)+kv("sig",p.sig)+kv("pub_x",p.pub_x)+kv("pub_y",p.pub_y),
-  cap:"this is everything the device emitted for your challenge: a signature over the verdict. there is no audio field anywhere in it.",
-  ok:"the entire wire output is this signed verdict — there is no audio channel.",
-  warn:"a second microphone in the room or physical side-channels are out of scope — this proves the data path, not physics."},
+  cap:"this is the exact bundle posted for your challenge: a signature over the verdict. there is no audio field anywhere in it.",
+  ok:"the bundle carries only a signed verdict — it has no audio field or channel.",
+  warn:"that the device has no SEPARATE covert channel emitting audio is not provable from one signature — it rests on firmware measurement (attestation) + public source audit, like the wipe in cards 1 and 4. a second microphone or physical side-channel is out of scope entirely."},
  {q:"3 · who can access or release it?",
   a:"no one. nothing capturable is kept, so there is nothing to release. "+(p.pinned?"only the enrolled device's key can mint a valid verdict, and it cannot be replayed.":"only a key the device controls can mint a valid verdict, and it cannot be replayed."),
   badge:["access","○ integrity only"],
@@ -528,7 +532,7 @@ function cards(p){return [
   ok:"the live check shows the counter advancing (anti-replay); no audio is in anything that crossed the wire.",
   warn:"the in-enclave zeroize is firmware behavior — proven on QEMU and by reading he_audio_ta.c; on a shipped unit it rests on hardware attestation."},
  {q:"5 · how is it used?",
-  a:"only to compute this coarse verdict under a published policy. the rules that decide what counts are fingerprinted into the signature, so you can audit them from source.",
+  a:"to compute this coarse verdict under a published policy. the rules that decide what counts are fingerprinted into the signature, so you can audit them from source.",
   badge:["proven","✓ proven by this check"],
   art:kv("config_hash (SHA-256 of the detector policy)",p.config_hash),
   cap:"config_hash is carried inside the signed payload, so the device cannot quietly use different rules than the published ones.",

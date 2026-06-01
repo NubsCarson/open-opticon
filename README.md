@@ -110,7 +110,8 @@ tools/           stage_optee.sh   - copy overlay sources into an optee-ra checko
                  cross.sh         - cross-compile the verifier for Raspberry Pi
                  render_video.py  - render the walkthrough from captured output
 docs/            ARCHITECTURE, THREAT_MODEL, RUNBOOK, HARDWARE, ROADMAP,
-                 REPRODUCIBLE, USE_CASES, WHY_TEE
+                 REPRODUCIBLE, USE_CASES, WHY_TEE, INTEGRATIONS, T3,
+                 PI_ST_ELEMENT, SAMPLE_ATTESTATION
 ```
 
 ## Docs
@@ -155,8 +156,9 @@ This is a clean overlay on `optee-ra`; it does not modify the upstream tree
   never the untrusted simulator's raw output (and the live tamper/replay buttons
   show the verifier rejecting forgeries);
 - the tamper watcher's breach action securely erases the device **key file** and
-  writes the tamper-**flag file** (the on-device TA-side `TRIP_TAMPER` latch and
-  the GPIO path are reviewed-but-run-on-rig).
+  writes the tamper-**flag file**; the on-device TA-side `TRIP_TAMPER` latch +
+  fail-closed re-attest is demonstrated on QEMU (`tools/qemu_tamper.expect`), while
+  the physical GPIO loop / enclosure breach needs the rig.
 
 **Two independent verification legs (own toolchains, laptop-runnable):**
 - a **zero-knowledge proof of the detector** — a RISC Zero zkVM runs the
@@ -223,9 +225,10 @@ sim/bin/he-attest-sim test/fixtures/alarm.pcm "$N" 1 > bundle.json
 
 This is meant to run on a Pi. The detector and host code are integer-only C that
 compiles natively on Raspberry Pi OS (`make sim`, `make -C src/tamper`), and
-OP-TEE remote attestation runs on the **Raspberry Pi 3B+** (a Tier-1 target in
-[`docs/RUNBOOK.md`](docs/RUNBOOK.md)). The Go verifier is pure stdlib with CGO
-off, so it cross-compiles to the Pi from any machine with no toolchain:
+OP-TEE remote attestation targets the **Raspberry Pi 3B+** as the Tier-1-on-silicon
+step (see [`docs/HARDWARE.md`](docs/HARDWARE.md)) — not yet run on a physical Pi;
+everything proven so far is on QEMU. The Go verifier is pure stdlib with CGO off,
+so it cross-compiles to the Pi from any machine with no toolchain:
 
 ```sh
 make cross        # -> dist/linux-arm64/  (Pi 3B+/4/5, 64-bit OS)

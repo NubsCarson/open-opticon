@@ -2,7 +2,7 @@
  * Honest Ear — TA-side attest-audio command.
  *
  * This is the heart of the non-panopticon guarantee, expressed in code:
- *   1. run the audited detector over the audio INSIDE the secure world,
+ *   1. run the auditable detector over the audio INSIDE the secure world,
  *   2. ZEROIZE the raw audio immediately,
  *   3. build the canonical bound-output payload (nonce + minimal predicate +
  *      monotonic counter + policy hash),

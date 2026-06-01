@@ -295,3 +295,25 @@ func TestVerifyPageAnswersFiveQuestionsNoOverclaim(t *testing.T) {
 		t.Error("page reintroduced the 'No audio left the device' overclaim")
 	}
 }
+
+// A PASS sets the proof; a later replay FAIL on the same session must CLEAR it,
+// so /status never shows a stale PASS proof next to a FAIL verdict.
+func TestProofClearedOnLaterFail(t *testing.T) {
+	s := newServer()
+	sess := &session{nonce: goldenNonce, createdAt: time.Now()}
+	s.sessions["sid"] = sess
+	payload := goldenPayload(t)
+	if out := s.verifyAndRecord("sid", sess, signBundle(t, payload)); out["verdict"] != "PASS" {
+		t.Fatalf("first attest = %v, want PASS", out["verdict"])
+	}
+	if sess.proof == nil {
+		t.Fatal("proof not set after PASS")
+	}
+	// Re-submit the same counter (7) — must FAIL as a replay and clear the proof.
+	if out := s.verifyAndRecord("sid", sess, signBundle(t, payload)); out["verdict"] != "FAIL" {
+		t.Fatalf("replay attest = %v, want FAIL", out["verdict"])
+	}
+	if sess.proof != nil {
+		t.Error("stale proof left attached after a replay FAIL")
+	}
+}

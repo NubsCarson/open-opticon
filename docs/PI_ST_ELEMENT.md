@@ -75,7 +75,7 @@ What changes vs. today:
 3. **The verifier-facing public key is the STSAFE's per-device key**, read once at
    provisioning and enrolled (§4).
 
-**The detector placement catch (mandatory for Noah to weigh).** A stock Pi 3B+
+**The detector placement catch (mandatory — the hardware side must weigh this).** A stock Pi 3B+
 runs OP-TEE/TrustZone, so the detector can still run in the secure world and audio
 is still zeroized there. But the STSAFE talks I2C, and on a Pi the I2C controller
 and driver live in the **normal world**. So either (a) the secure-world TA owns the

@@ -97,7 +97,7 @@ re-derivable:
 The RISC Zero guest's `image_id` is a hash of the *published detector* compiled
 for the zkVM — the same recompute-from-source property, in a second trust domain.
 Anyone with the pinned toolchain and the committed `Cargo.lock` rebuilds the
-guest and gets the same `image_id` (e.g. `0x14d9f548…`), and the *same* receipt
+guest and gets the same `image_id` (e.g. `0x7b3b6516…`), and the *same* receipt
 is checkable on an EVM against that id. So the detector's measurement is
 independently re-derivable two ways (TEE firmware hash + zk guest image id). This
 is re-derivable from source with a pinned toolchain — not a byte-identical
