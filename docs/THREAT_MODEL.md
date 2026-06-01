@@ -63,8 +63,9 @@ toward PIR/FHE as performance allows.
   roadmap.
 - **Counter rollback.** Trusted-Storage anti-rollback depends on RPMB; on QEMU
   it is best-effort. A hardware monotonic counter is the production answer.
-- **The detector is a stub.** A keyword/VAD threshold, not a hardened model;
-  "what is an event" is a policy claim, audited via source + `config_hash`. The
+- **The detector is a heuristic stub.** A probe-band Goertzel + energy-floor VAD,
+  not a hardened/learned model; "what is an event" is a policy claim that is
+  *auditable* from source and bound via `config_hash` (not formally audited). The
   coarse classifier can mislabel a non-target pure tone as "voice".
 - **The enclosure is theatre-grade.** A determined attacker can bridge the loop
   before cutting, glitch power to skip the handler, or probe the bus. Real

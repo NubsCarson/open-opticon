@@ -43,6 +43,7 @@ else left the device.*
             gate 2: payload.nonce == issued fresh nonce        (freshness)
             gate 3: payload.counter > last seen                (anti-replay)
            (gate 0: pubkey == enrolled endorsement, optional)  (device identity)
+           (gate 4: payload.prev_digest == expected, optional) (stream/no-gap)
 
       … in parallel, the existing optee-ra client + Veraison verify firmware
         identity for the SAME nonce.

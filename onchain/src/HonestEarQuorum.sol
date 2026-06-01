@@ -142,7 +142,7 @@ contract HonestEarQuorum {
         uint256 seen;
         // Walk pairs until the eight fields we need (keys 0,1,2,3,4,5,7,9) are read.
         while (i < p.length && seen != 0xff) {
-            uint8 key = uint8(p[i]); // keys are small uints 0x00..0x08 (one byte)
+            uint8 key = uint8(p[i]); // CBOR map has 11 fields (keys 0..10); we read the 8 we need
             i += 1;
             uint256 vstart = i;
             (uint64 v, uint256 ni) = _val(p, i);
@@ -179,12 +179,19 @@ contract HonestEarQuorum {
     /// Locate a CBOR byte string's data: returns (offset, length) of the bytes.
     function _bstrSpan(bytes calldata p, uint256 i) internal pure returns (uint256 off, uint256 len) {
         uint8 b = uint8(p[i]);
-        if (b >= 0x40 && b <= 0x57) return (i + 1, uint256(b) - 0x40); // inline len
+        if (b >= 0x40 && b <= 0x57) {
+            // inline length; bound the DATA so a truncated nonce reverts cleanly
+            // instead of slicing adjacent (unsigned) calldata.
+            uint256 n = uint256(b) - 0x40;
+            require(i + 1 + n <= p.length, "nonce data truncated");
+            return (i + 1, n);
+        }
         if (b == 0x58) {
-            // 1-byte length follows; bound it explicitly so a payload truncated at
-            // the length byte reverts with a clear reason, not an opaque panic.
+            // 1-byte length follows; bound the length byte AND the data it points to.
             require(i + 1 < p.length, "bstr len truncated");
-            return (i + 2, uint8(p[i + 1]));
+            uint256 n = uint8(p[i + 1]);
+            require(i + 2 + n <= p.length, "nonce data truncated");
+            return (i + 2, n);
         }
         revert("nonce not a bstr");
     }
@@ -238,9 +245,14 @@ contract HonestEarQuorum {
         }
         if (b == 0xf4) return (0, i + 1); // false
         if (b == 0xf5) return (1, i + 1); // true
-        if (b >= 0x40 && b <= 0x57) return (0, i + 1 + (uint64(b) - 0x40)); // bstr, inline len
+        if (b >= 0x40 && b <= 0x57) {
+            // bstr, inline len — bound the data so a mid-string truncation reverts.
+            require(i + 1 + (uint256(b) - 0x40) <= p.length, "cbor bstr data truncated");
+            return (0, i + 1 + (uint64(b) - 0x40));
+        }
         if (b == 0x58) {
             require(i + 1 < p.length, "cbor bstr truncated");
+            require(i + 2 + uint8(p[i + 1]) <= p.length, "cbor bstr data truncated");
             return (0, i + 2 + uint8(p[i + 1])); // bstr, 1-byte len
         }
         revert("unsupported cbor");

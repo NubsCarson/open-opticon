@@ -86,8 +86,8 @@ From this PoC to a defensible product, in order of trust-impact.
   in-enclave wire format already proven on QEMU).
 - **Host-side PSA attestation-token (EAT) verifier.** ✅ Implemented: `eat.go` /
   `he-attest-verify` parse a PSA token (COSE_Sign1, profile
-  `http://arm.com/psa/2.0.0`) and check the offline-verifiable core of what
-  Veraison does — the ES256 signature under a pinned attestation key, the EAT
+  `http://arm.com/psa/2.0.0`) and check the parts that are verifiable offline (a
+  subset of Veraison's appraisal) — the ES256 signature under a pinned attestation key, the EAT
   profile, the freshness nonce, and that every software-component measurement is a
   published reference value. Reuses the COSE machinery above; tested against a
   faithfully-minted PSA token. It does NOT replace Veraison's full
@@ -102,8 +102,8 @@ From this PoC to a defensible product, in order of trust-impact.
   (a measured-boot TPM quote, a second-vendor TEE) as roots in `he-verify
   --quorum`. The ZK leg can't be auto-wired into the stdlib-only Go verifier
   (it can't verify a STARK) — which is exactly why that leg's quorum is on-chain.
-- **Witness cosigning for the transparency log.** ✅ Done, now including the
-  OPERATIONAL layer: `he-logd` serves the log's signed checkpoints + RFC 9162
+- **Witness cosigning for the transparency log.** ✅ Protocol + a runnable
+  operational layer done (proven single-host): `he-logd` serves the log's signed checkpoints + RFC 9162
   consistency proofs over HTTP, and `he-witness` is a real witness daemon that
   polls it, verifies each checkpoint is a consistent append-only extension of the
   one it last cosigned, and **refuses to cosign a forked or rewound history**

@@ -13,3 +13,6 @@ dist/
 he-log.json
 __pycache__/
 *.pyc
+
+# stray binary if cmd/he-verify-wasm is built without -o
+src/verifier/he-verify-wasm

@@ -65,6 +65,7 @@ src/common/      Shared, pure-C, integer-only sources compiled into BOTH the TA
                    he_detector.[ch]  - VAD + Goertzel alarm-tone detector
                    he_vision.[ch]    - vision occupancy detector (empty/occupied)
                    he_payload.[ch]   - deterministic-CBOR bound-output payload
+                   he_cose.[ch]      - COSE_Sign1 (RFC 9052) envelope encoder (TA-portable)
                    he_serialize.h    - shared big-endian config-blob serializer
                    he_testkey.h      - published QEMU test key (NOT secret)
 src/optee/       OP-TEE integration (builds on the rig):
@@ -72,7 +73,7 @@ src/optee/       OP-TEE integration (builds on the rig):
                    ta/   ATTEST_AUDIO + TRIP_TAMPER TA commands + INTEGRATION.md
                    host/ he_host CA + INTEGRATION.md
 src/verifier/    Go (stdlib only) verifier:
-                   bound.go        - 4-gate bundle verify (sig/pin/freshness/replay)
+                   bound.go        - 5-gate bundle verify (pin/sig/freshness/replay/stream-chain)
                    quorum.go       - k-of-n multi-prover quorum (reuses bound.go)
                    transparency.go - RFC 6962 endorsement log (inclusion/consistency)
                    cmd/he-verify   - verify a bundle (raw or --cose), or a --quorum of provers

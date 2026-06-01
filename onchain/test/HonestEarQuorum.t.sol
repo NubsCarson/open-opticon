@@ -121,7 +121,9 @@ contract HonestEarQuorumTest is Test {
         h.readVersion(hex"ab071b0102030405"); // key 7, 8-byte-uint head, 3 bytes short
         vm.expectRevert(bytes("cbor bstr truncated"));
         h.readVersion(hex"ab0158"); // key 1 (nonce), bstr 1-byte-len head, no length byte
-        vm.expectRevert(bytes("input_hash truncated"));
-        h.readVersion(hex"ab0958201111111111111111111111111111111111"); // key 9 bstr32, only 16 data bytes
+        // key 9 bstr32 with only 16 data bytes: _val's data-bounds check fires first
+        // (earlier + clearer than _bstr32's), so the truncation is still rejected.
+        vm.expectRevert(bytes("cbor bstr data truncated"));
+        h.readVersion(hex"ab0958201111111111111111111111111111111111");
     }
 }
