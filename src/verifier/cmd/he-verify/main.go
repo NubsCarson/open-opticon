@@ -86,19 +86,19 @@ flags:
 	}
 	opt := verifier.Options{ExpectedNonce: nonce, LastCounter: *lastCounter}
 	if *expectPrev != "" {
-		if opt.ExpectedPrevDigest, err = hex.DecodeString(*expectPrev); err != nil {
-			cli.Die("bad --expect-prev hex: %v", err)
+		if opt.ExpectedPrevDigest, err = hex.DecodeString(*expectPrev); err != nil || len(opt.ExpectedPrevDigest) != 32 {
+			cli.Die("--expect-prev must be 32 bytes hex")
 		}
 	}
 	if (*pinX == "") != (*pinY == "") {
 		cli.Die("--pin-x and --pin-y must be provided together")
 	}
 	if *pinX != "" {
-		if opt.PinPubX, err = hex.DecodeString(*pinX); err != nil {
-			cli.Die("bad --pin-x: %v", err)
+		if opt.PinPubX, err = hex.DecodeString(*pinX); err != nil || len(opt.PinPubX) != 32 {
+			cli.Die("--pin-x must be 32 bytes hex")
 		}
-		if opt.PinPubY, err = hex.DecodeString(*pinY); err != nil {
-			cli.Die("bad --pin-y: %v", err)
+		if opt.PinPubY, err = hex.DecodeString(*pinY); err != nil || len(opt.PinPubY) != 32 {
+			cli.Die("--pin-y must be 32 bytes hex")
 		}
 	}
 

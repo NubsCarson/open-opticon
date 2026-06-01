@@ -65,12 +65,12 @@ flags:
 	}
 	token := readToken(*tokenArg)
 	px, err := hex.DecodeString(*pinX)
-	if err != nil {
-		cli.Die("bad --pin-x: %v", err)
+	if err != nil || len(px) != 32 {
+		cli.Die("--pin-x must be 32 bytes hex")
 	}
 	py, err := hex.DecodeString(*pinY)
-	if err != nil {
-		cli.Die("bad --pin-y: %v", err)
+	if err != nil || len(py) != 32 {
+		cli.Die("--pin-y must be 32 bytes hex")
 	}
 	nonce, err := hex.DecodeString(*nonceHex)
 	if err != nil {

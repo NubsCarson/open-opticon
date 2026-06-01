@@ -10,8 +10,8 @@
 //	he-receipt emit  --session S --batch N --audio <file> --text <file|-> \
 //	                 --key <privHex> [--prev <hex>] [--retained]
 //	      -> prints a signed receipt bundle JSON; its digest (the next prev) on stderr.
-//	he-receipt verify [--expect-prev <hex>] [--pin-x <hex> --pin-y <hex>]
-//	                 [--require-not-retained] [receipt.json]
+//	he-receipt verify [--file receipt.json] [--expect-prev <hex>] [--pin-x <hex> --pin-y <hex>]
+//	                 [--require-not-retained]   (reads stdin if --file is omitted)
 //	      -> PASS/FAIL + fields + next_digest.
 //
 // HONEST SCOPE: a receipt is a signed, tamper-evident, gap-free binding of
@@ -28,6 +28,7 @@ import (
 	"io"
 	"os"
 	"strconv"
+	"strings"
 
 	verifier "honest-ear/verifier"
 	"honest-ear/verifier/internal/cli"
@@ -65,7 +66,7 @@ func flags(args []string) map[string]string {
 			m[k] = "1"
 			continue
 		}
-		if i+1 >= len(args) {
+		if i+1 >= len(args) || (len(args[i+1]) >= 2 && args[i+1][:2] == "--") {
 			cli.Die("flag --%s needs a value", k)
 		}
 		m[k] = args[i+1]
@@ -115,6 +116,10 @@ func runEmit(args []string) {
 	if err != nil {
 		cli.Die("bad --batch: %v", err)
 	}
+	session := need("session")
+	if strings.ContainsAny(session, "\n\r") {
+		cli.Die("--session must not contain newlines (it is a line in the canonical receipt body)")
+	}
 	prev := make([]byte, 32) // genesis default
 	if m["prev"] != "" {
 		if prev, err = hex.DecodeString(m["prev"]); err != nil || len(prev) != 32 {
@@ -124,7 +129,7 @@ func runEmit(args []string) {
 	px, py := verifier.PubXY(key)
 	r := verifier.Receipt{
 		Origin:     verifier.ReceiptOrigin,
-		Session:    need("session"),
+		Session:    session,
 		Batch:      batch,
 		InputHash:  sha256File(need("audio")), // hashed, then discarded
 		OutputHash: sha256File(need("text")),
@@ -168,19 +173,19 @@ func runVerify(args []string) {
 	var opt verifier.ReceiptOptions
 	opt.RequireNotRetained = m["require-not-retained"] == "1"
 	if m["expect-prev"] != "" {
-		if opt.ExpectedPrevDigest, err = hex.DecodeString(m["expect-prev"]); err != nil {
-			cli.Die("bad --expect-prev: %v", err)
+		if opt.ExpectedPrevDigest, err = hex.DecodeString(m["expect-prev"]); err != nil || len(opt.ExpectedPrevDigest) != 32 {
+			cli.Die("--expect-prev must be 32 bytes hex")
 		}
 	}
 	if (m["pin-x"] == "") != (m["pin-y"] == "") {
 		cli.Die("--pin-x and --pin-y must be provided together")
 	}
 	if m["pin-x"] != "" {
-		if opt.PinPubX, err = hex.DecodeString(m["pin-x"]); err != nil {
-			cli.Die("bad --pin-x: %v", err)
+		if opt.PinPubX, err = hex.DecodeString(m["pin-x"]); err != nil || len(opt.PinPubX) != 32 {
+			cli.Die("--pin-x must be 32 bytes hex")
 		}
-		if opt.PinPubY, err = hex.DecodeString(m["pin-y"]); err != nil {
-			cli.Die("bad --pin-y: %v", err)
+		if opt.PinPubY, err = hex.DecodeString(m["pin-y"]); err != nil || len(opt.PinPubY) != 32 {
+			cli.Die("--pin-y must be 32 bytes hex")
 		}
 	}
 	res := verifier.VerifyReceipt(b, opt)
