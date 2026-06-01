@@ -53,6 +53,19 @@ he-receipt emit --session $S --batch $N --audio window.pcm --text out.txt \
 he-receipt verify --file receipt.json --expect-prev <prevDigest> --require-not-retained
 ```
 
+### Reference adapter + proven cross-language interop
+
+A reference VoxTerm-side emitter exists: a standalone Python `ReceiptEmitter`
+(using VoxTerm's existing `cryptography` dependency, P-256) that produces receipts
+in this exact wire format. **Interop is proven** — a Python-emitted receipt
+verifies with this project's stdlib-only Go `he-receipt`, the chain links across
+batches, and a suppressed batch is detected as a gap (cross-checked end to end).
+A small, opt-in PR (module + tests + a maintainer wiring recipe) is prepared for
+the VoxTerm team's review; it is **not yet merged** (it lives in their repo, not
+this one). VoxTerm's "audio is discarded" claim was verified against their code
+(`audio/buffer.py` clears the PCM buffer; audio is never persisted), so the
+receipt's `retained=0` is truthful.
+
 ## Heterogeneous hardware roots (the "outside the box" part)
 
 The receipt's signature can come from **whatever hardware root the platform
