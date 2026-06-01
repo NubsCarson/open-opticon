@@ -61,6 +61,17 @@ function check(name, cond) {
   check("event is alarm_tone", r.predicate && r.predicate.event === "alarm_tone");
   check("nextDigest is returned", typeof r.nextDigest === "string" && r.nextDigest.length === 64);
 
+  // Proof-explorer fields: the gate-by-gate walk and the 5-question answers.
+  check("steps is a 5-gate walk", Array.isArray(r.steps) && r.steps.length === 5);
+  check("signature step passed", r.steps && r.steps.some(s => s.gate === "signature" && s.status === "pass"));
+  check("freshness step applicable on PASS", r.steps && r.steps.some(s => s.gate === "freshness" && s.status === "pass"));
+  check("answers cover all 5 questions", Array.isArray(r.answers) && r.answers.length === 5);
+  check("answers carry honest tiers", r.answers && r.answers.every(a => a.tier && a.notProven && a.q && a.a));
+  check("a 'where' answer is present", r.answers && r.answers.some(a => /where/.test(a.q)));
+  // A FAIL must not emit predicate-derived answers (nothing was proven).
+  let rf = H(JSON.stringify(BUNDLE), { nonce: "deadbeef", lastCounter: 0 });
+  check("no answers on FAIL", rf.ok === false && rf.answers === undefined);
+
   // Wrong nonce -> FAIL (freshness).
   r = H(JSON.stringify(BUNDLE), { nonce: "deadbeef", lastCounter: 0 });
   check("wrong nonce fails", r.ok === false);

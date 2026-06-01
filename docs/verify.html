@@ -99,6 +99,20 @@
     padding:13px 15px;color:var(--muted);font-size:.9rem;background:var(--card)}
   .note.warn{border-left-color:var(--amber)}
   .small{font-size:.83rem;color:var(--muted2)}
+  .walk{margin-top:16px}
+  .walkhead,.qa-head{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted2);margin:0 0 8px}
+  .step{display:flex;align-items:baseline;gap:8px;padding:7px 10px;border:1px solid var(--border2);
+    border-radius:7px;margin-bottom:6px;background:var(--card2);font-size:.86rem}
+  .step .sm{width:1em} .step .sg{font-weight:600;min-width:108px} .step .sp{color:var(--muted);flex:1}
+  .step .st{font-family:var(--mono);font-size:11px;color:var(--muted2)}
+  .step.spass .sm{color:var(--green)} .step.sskip{opacity:.6} .step.sskip .sm{color:var(--muted2)}
+  .qa{border:1px solid var(--border2);border-radius:8px;padding:12px 14px;margin-bottom:10px;background:var(--card)}
+  .qa-q{font-weight:600;font-size:.92rem} .qa-a{color:var(--muted);font-size:.88rem;margin-top:3px}
+  .qa-badge{display:inline-block;margin-top:8px;font-size:11px;font-weight:600;padding:2px 8px;
+    border-radius:999px;border:1px solid var(--border2)}
+  .qa-badge.proven{color:var(--green);border-color:#1f3d2b;background:#0c1b12}
+  .qa-badge.attestation{color:var(--amber);border-color:#4a3a12;background:#1c1606}
+  .qa-badge.integrity{color:var(--blue);border-color:#1e2f4a;background:#0a121f}
   .status{font-family:var(--mono);font-size:12px;color:var(--muted2);margin-top:10px}
   .status .dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--amber);margin-right:6px}
   .status.ready .dot{background:var(--green)}
@@ -195,10 +209,14 @@
           <div class="reason" id="verdictReason"></div>
         </div>
         <div id="predicate"></div>
+        <div id="steps"></div>
+        <div id="answers"></div>
         <div class="note" style="margin-top:16px">
           <b>What this proves.</b> A PASS means the verdict was signed by the held key over exactly these
           bytes, echoes your nonce, and advances the counter — so it isn't forged, replayed, or altered by
-          the untrusted host. It says nothing about the raw audio, which never leaves the enclave.
+          the untrusted host. It says nothing about the raw audio: that the audio never leaves the enclave
+          is a firmware-attestation property, not something this signature alone proves (see the answers
+          above, where such claims are marked "not proven by this check").
         </div>
       </div>
     </div>
@@ -275,6 +293,46 @@ function row(k, val) {
   return "<tr><th>" + k + "</th><td>" + val + "</td></tr>";
 }
 
+function esc(s) {
+  return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) {
+    return { "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;" }[c];
+  });
+}
+
+// Render the gate-by-gate proof walk (steps) — only present on a PASS.
+function showSteps(res) {
+  const box = $("steps");
+  if (!res || !Array.isArray(res.steps)) { box.innerHTML = ""; return; }
+  let html = "<div class='walk'><div class='walkhead'>proof walk — what each gate checked</div>";
+  for (const s of res.steps) {
+    const cls = s.status === "pass" ? "spass" : (s.status === "skipped" ? "sskip" : "scheck");
+    const mark = s.status === "pass" ? "✓" : (s.status === "skipped" ? "—" : "·");
+    html += "<div class='step " + cls + "'><span class='sm'>" + mark + "</span>" +
+      "<span class='sg'>" + esc(s.gate) + "</span>" +
+      "<span class='sp'>" + esc(s.proves) + "</span>" +
+      "<span class='st'>" + esc(s.status) + "</span></div>";
+  }
+  html += "</div>";
+  box.innerHTML = html;
+}
+
+// Render the credible-sensors 5-question answers with honest tier badges —
+// mirrors the live /v walk-up page; only present on a PASS.
+function showAnswers(res) {
+  const box = $("answers");
+  if (!res || !Array.isArray(res.answers)) { box.innerHTML = ""; return; }
+  const label = { proven: "✓ proven by this check", attestation: "△ firmware-attestation tier", integrity: "○ integrity only" };
+  let html = "<div class='qa-head'>the 5 questions, answered from the verified verdict</div>";
+  for (const a of res.answers) {
+    html += "<div class='qa'><div class='qa-q'>" + esc(a.q) + "</div>" +
+      "<div class='qa-a'>" + esc(a.a) + "</div>" +
+      "<span class='qa-badge " + esc(a.tier) + "'>" + esc(label[a.tier] || a.tier) + "</span>" +
+      "<details class='adv'><summary>what this does not prove</summary>" +
+      "<div class='body'>" + esc(a.notProven) + "</div></details></div>";
+  }
+  box.innerHTML = html;
+}
+
 function showPredicate(res) {
   const box = $("predicate");
   if (!res || !res.predicate) { box.innerHTML = ""; return; }
@@ -311,7 +369,7 @@ function doVerify() {
     res = heVerify($("bundle").value, opts);
   } catch (e) {
     setVerdict("fail", "ERROR", String(e));
-    showPredicate(null);
+    showPredicate(null); showSteps(null); showAnswers(null);
     return;
   }
   if (res.ok) {
@@ -323,6 +381,8 @@ function doVerify() {
     setVerdict("fail", "FAIL", res.reason);
   }
   showPredicate(res);
+  showSteps(res);   // steps/answers are emitted by the wasm only on a PASS, so
+  showAnswers(res); // a FAIL clears them (nothing was proven).
 }
 
 function tamperByte() {

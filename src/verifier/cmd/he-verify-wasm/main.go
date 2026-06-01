@@ -142,8 +142,72 @@ func heVerify(this js.Value, args []js.Value) any {
 			"inputHash":   hex.EncodeToString(p.InputHash),
 			"prevDigest":  hex.EncodeToString(p.PrevDigest),
 		}
+		// Additive proof-explorer fields (do not affect the verdict): the
+		// gate-by-gate walk and the credible-sensors 5-question answers, emitted
+		// ONLY on a PASS — nothing is "proven" or "answered" on a FAIL, so a failed
+		// bundle shows just the verdict + reason, like the live /v page.
+		if res.OK {
+			out["steps"] = verifySteps(res, opt)
+			out["answers"] = fiveAnswers(p)
+		}
 	}
 	return out
+}
+
+// verifySteps describes, gate by gate, what the verifier checked — derived from
+// the options, in the verifier's own gate order. Only called on a PASS, so every
+// applicable gate passed; an applicable gate is "pass", an unused optional gate
+// (no pin / no expected-prev / no nonce) is "skipped". It is a presentation of
+// the result, not a re-verification.
+func verifySteps(res verifier.VerifyResult, opt verifier.Options) []any {
+	pinned := len(opt.PinPubX) > 0 && len(opt.PinPubY) > 0
+	chained := len(opt.ExpectedPrevDigest) > 0
+	st := func(name, proves string, applicable bool) map[string]any {
+		status := "skipped"
+		if applicable {
+			status = "pass"
+		}
+		return map[string]any{"gate": name, "proves": proves, "status": status}
+	}
+	return []any{
+		st("endorsement pin", "the signing key matches the enrolled device key", pinned),
+		st("signature", "a key the device controls signed this exact verdict (ECDSA-P256 over SHA-256 of the payload)", true),
+		st("freshness", "the signed nonce equals the challenge — not a replayed or photographed verdict", len(opt.ExpectedNonce) > 0),
+		st("anti-replay", "the monotonic counter advanced past the last accepted one", true),
+		st("stream chain", "this window chains onto the previous one (a dropped window is a visible gap)", chained),
+	}
+}
+
+// fiveAnswers mirrors the live /v walk-up page: the credible-sensors 5 questions
+// answered from the verified predicate, with the SAME honest tiers — green
+// "proven" attaches only to what the signature carries; firmware/hardware claims
+// are marked. tier: "proven" | "attestation" | "integrity".
+func fiveAnswers(p *verifier.Predicate) []any {
+	qa := func(q, a, tier, notProven string) map[string]any {
+		return map[string]any{"q": q, "a": a, "tier": tier, "notProven": notProven}
+	}
+	return []any{
+		qa("what gets captured?",
+			"sound is analyzed for one thing — "+p.EventName()+". the signed output is a verdict, not a recording or transcript.",
+			"proven",
+			"that the raw audio is wiped in-enclave and never reaches the OS is firmware behavior — not proven by this signature (attestation tier)."),
+		qa("where does it go?",
+			"the bundle is a signed verdict with no audio field — that is the whole artifact.",
+			"proven",
+			"that the device has no separate covert channel rests on firmware measurement + source audit, not on one signature."),
+		qa("who can access or release it?",
+			"no retained audio to release; only a key the device controls can mint a valid verdict, and replays are rejected.",
+			"integrity",
+			"tying the verdict to a specific physical device needs a non-extractable hardware key (i.MX CAAM / ST element)."),
+		qa("how long is it kept?",
+			"only a monotonic counter persists across windows — it carries no audio; the analyzed window is a fingerprint (input_hash), not stored audio.",
+			"attestation",
+			"the in-enclave zeroize is firmware behavior — verified on QEMU and by reading the source, not by this signature."),
+		qa("how is it used?",
+			"to compute this coarse verdict under a published policy; config_hash is bound into the signature so the rules are auditable from source.",
+			"proven",
+			"config_hash makes the policy checkable, not correct — the detector is a heuristic, not an audited model."),
+	}
 }
 
 func main() {
