@@ -170,6 +170,12 @@ func (r *cborReader) readSoftwareComponents() ([]SWComponent, error) {
 	if major != 4 {
 		return nil, fmt.Errorf("software-components is not an array (major %d)", major)
 	}
+	// Bound the count by the remaining bytes before allocating: each component is
+	// at least one byte, so a header claiming a huge array (e.g. 2^40) cannot be
+	// real and must not drive a giant allocation (DoS). Mirrors readBstr's guard.
+	if n > uint64(len(r.b)-r.pos) {
+		return nil, errors.New("software-components count exceeds buffer")
+	}
 	out := make([]SWComponent, 0, n)
 	for i := uint64(0); i < n; i++ {
 		cm, cn, err := r.readHead()

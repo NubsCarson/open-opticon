@@ -143,6 +143,19 @@ func TestVerifyPSATokenRejectsTamper(t *testing.T) {
 	}
 }
 
+// A claims map whose software-components array header claims a huge count must be
+// rejected by the bounds guard, not drive a giant allocation (DoS). Exercises the
+// parser directly since the signature gate sits in front of it on the full path.
+func TestParsePSAClaimsRejectsHugeComponentArray(t *testing.T) {
+	var b []byte
+	b = append(b, cbHead(5, 1)...)        // claims map(1)
+	b = append(b, cbUint(psaKeySoftware)...) // key 2399
+	b = append(b, cbHead(4, 1_000_000)...)   // array claiming 1e6 components, buffer is tiny
+	if _, err := parsePSAClaims(b); err == nil {
+		t.Error("huge software-components count accepted; must be bounded")
+	}
+}
+
 func TestVerifyPSATokenRejectsWrongProfile(t *testing.T) {
 	key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	px, py := PubXY(key)

@@ -22,8 +22,11 @@ done
 
 echo "building docs/verify.wasm (GOOS=js GOARCH=wasm)"
 ( cd "$ROOT/src/verifier"
-  GOOS=js GOARCH=wasm CGO_ENABLED=0 GOFLAGS="-buildvcs=false" \
-    go build -trimpath -ldflags="-s -w -buildid=" -o "$OUT/verify.wasm" ./cmd/he-verify-wasm )
+  # Same determinism flags as tools/repro.sh (kept byte-identical so the committed
+  # wasm matches a repro rebuild): -trimpath + -buildvcs=false in GOFLAGS, stripped,
+  # cleared build id.
+  GOOS=js GOARCH=wasm CGO_ENABLED=0 GOFLAGS="-trimpath -buildvcs=false" \
+    go build -ldflags="-s -w -buildid=" -o "$OUT/verify.wasm" ./cmd/he-verify-wasm )
 
 cp "$WASM_EXEC" "$OUT/wasm_exec.js"
 
