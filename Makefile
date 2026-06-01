@@ -7,6 +7,7 @@
 #   make cose-e2e   - COSE_Sign1 (RFC 9052) envelope: emit (C) -> verify (Go)
 #   make witness-e2e - operating log witnesses: cosign quorum + fork refusal
 #   make voxterm-e2e - portable restraint receipts (VoxTerm bridge): see docs/INTEGRATIONS.md
+#   make voxterm-demo - narrated walkthrough of the restraint-receipt bridge
 #   make port-diff  - C detector == Rust zk port, differential test (needs cargo)
 #   make demo       - whole thesis on one clip: TEE + ZK + on-chain 2-of-2 agree
 #   make gui/sites/fuzz/repro/cross - GUI, static site, fuzzing, reproducible-build,
@@ -19,7 +20,7 @@
 
 VERIFIER = src/verifier
 
-.PHONY: test units sim verifier-test e2e vision-e2e chain-e2e cose-e2e witness-e2e voxterm-e2e port-diff demo tamper-test gui sites wasm fuzz repro cross clean
+.PHONY: test units sim verifier-test e2e vision-e2e chain-e2e cose-e2e witness-e2e voxterm-e2e voxterm-demo port-diff demo tamper-test gui sites wasm fuzz repro cross clean
 
 test: units verifier-test e2e vision-e2e chain-e2e cose-e2e witness-e2e voxterm-e2e tamper-test
 	@echo ""
@@ -67,6 +68,12 @@ witness-e2e:
 # log + gap detection. See docs/INTEGRATIONS.md.
 voxterm-e2e:
 	bash test/run_voxterm_e2e.sh
+
+# Narrated walkthrough of the restraint-receipt bridge (a readable demo of
+# voxterm-e2e: emit -> verify -> gap + tamper + retained negatives -> the
+# 5-question receipt view). Self-contained; does not touch the VoxTerm repo.
+voxterm-demo:
+	bash tools/voxterm_demo.sh
 
 # C detector == Rust zk port: differential test over the shared fixtures (needs cargo).
 port-diff:
