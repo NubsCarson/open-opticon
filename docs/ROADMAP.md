@@ -216,6 +216,14 @@ but the right place for the verifier).
   — SPECED/FRONTIER, not built; the verifier is already root-agnostic so an ST key
   enrolls with no verifier change. HONEST SCOPE: integrity + provenance, Tier-1
   proven on QEMU; device identity / secure boot / secure capture are hardware work.
+- **Track 6 (consent / query / policy) mechanisms.** ✅ `threshold.go` (stdlib):
+  **k-of-n threshold reveal** (Shamir over the Mersenne prime 2^521-1 + AES-256-GCM
+  seal — a full record is revealable only with group agreement, k-1 holders learn
+  nothing) and **consent-gated single-window disclosure** (reveal one window of a
+  logged predicate stream with a Merkle inclusion proof, hiding the others).
+  HONEST SCOPE: these are mechanisms, not a solution to the joint-data
+  conflicting-wishes problem (still open); share custody + key lifecycle are
+  operational policy, not enforced in code. Tier-1, host-tested under `-race`.
 
 ## Ops
 - **Reproducible builds:** host artifacts are byte-reproducible today
