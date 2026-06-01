@@ -58,6 +58,7 @@ flags:
 	expectPrev := flag.String("expect-prev", "", "expected prev_digest (hex) — the digest this window must chain from (stream gap detection); use 64 zeros for the genesis window")
 	cose := flag.Bool("cose", false, "verify a COSE_Sign1 (RFC 9052) bundle ({schema,cose,pub_x,pub_y}) instead of the raw envelope")
 	quorum := flag.Int("quorum", 0, "require k-of-n independent provers (quorum mode)")
+	coAttest := flag.Int("co-attest", 0, "require k DISTINCT modalities (e.g. audio + vision) bound to the same nonce; bundles are file args")
 	var roots rootList
 	flag.Var(&roots, "root", "enrolled prover as name:pubXhex:pubYhex (repeatable, quorum mode)")
 	flag.Parse()
@@ -72,6 +73,23 @@ flags:
 
 	if *quorum > 0 {
 		runQuorum(nonce, *quorum, roots, *lastCounter)
+		return
+	}
+
+	if *coAttest > 0 {
+		opt := verifier.Options{ExpectedNonce: nonce, LastCounter: *lastCounter}
+		if *pinX != "" || *pinY != "" {
+			if (*pinX == "") != (*pinY == "") {
+				cli.Die("--pin-x and --pin-y must be provided together")
+			}
+			if opt.PinPubX, err = hex.DecodeString(*pinX); err != nil || len(opt.PinPubX) != 32 {
+				cli.Die("--pin-x must be 32 bytes hex")
+			}
+			if opt.PinPubY, err = hex.DecodeString(*pinY); err != nil || len(opt.PinPubY) != 32 {
+				cli.Die("--pin-y must be 32 bytes hex")
+			}
+		}
+		runCoAttest(opt, *coAttest)
 		return
 	}
 
@@ -174,6 +192,33 @@ func runQuorum(nonce []byte, k int, rootSpecs rootList, lastCounter uint64) {
 		k, len(roots), strings.Join(res.PassedRoots, ", "))
 	fmt.Printf("  agreed event : %s\n", res.Event)
 	fmt.Printf("  (only the event class is quorum-agreed; counters/presence are per-prover)\n")
+}
+
+// runCoAttest verifies k DISTINCT modalities (each a separate sensor input) are
+// bound to the SAME nonce — the cross-modal sibling of the quorum. Unlike the
+// quorum it does NOT require the modalities to agree on an event.
+func runCoAttest(opt verifier.Options, k int) {
+	var bundles []verifier.Bundle
+	for _, path := range flag.Args() {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			cli.Die("reading %s: %v", path, err)
+		}
+		b, err := parseBundle(raw)
+		if err != nil {
+			cli.Die("%s: %v", path, err)
+		}
+		bundles = append(bundles, b)
+	}
+	res := verifier.VerifyCoAttestation(bundles, opt, k)
+	if !res.OK {
+		fmt.Printf("%s  co-attestation not reached: %s\n", cli.Fail(), res.Reason)
+		os.Exit(1)
+	}
+	fmt.Printf("%s  co-attestation reached: %d distinct modalities bound to the same nonce\n",
+		cli.Pass(), len(res.Modalities))
+	fmt.Printf("  modalities  : %s\n", strings.Join(res.Modalities, ", "))
+	fmt.Printf("  (modalities are NOT required to agree — they share the challenge nonce, not a verdict)\n")
 }
 
 func parseBundle(raw []byte) (verifier.Bundle, error) {

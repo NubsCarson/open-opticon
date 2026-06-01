@@ -105,3 +105,59 @@ func VerifyQuorum(bundles []Bundle, qopt QuorumOptions) QuorumResult {
 	}
 	return QuorumResult{OK: true, Reason: "quorum reached", Event: event, PassedRoots: names}
 }
+
+// CoAttestation is the outcome of multi-modal co-attestation (see below).
+type CoAttestation struct {
+	OK     bool
+	Reason string
+	// Modalities lists each accepted modality's event label, in deterministic
+	// order. Unlike a quorum, these are NOT required to agree — different sensors
+	// report different verdicts ("alarm_tone", "occupied"); the shared fact is the
+	// nonce they are all bound to.
+	Modalities []string
+}
+
+// VerifyCoAttestation verifies that several DIFFERENT-modality bound outputs
+// (e.g. an audio verdict and a vision verdict) are each a valid, fresh signature
+// over the SAME challenge nonce. This is the cross-modal sibling of VerifyQuorum,
+// but with deliberately different semantics:
+//
+//   - a quorum requires k INDEPENDENT roots to AGREE on one event (redundancy);
+//   - co-attestation requires k modalities each bound to the SAME nonce, and does
+//     NOT require them to agree — an alarm tone and an occupied room are different
+//     facts about the same moment.
+//
+// To stop one modality being replayed as two, the accepted bundles must have
+// DISTINCT input_hash values (each attests a distinct sensor input). Bundles are
+// pinned to the device key when PinPubX/Y are set (one multi-sensor device).
+//
+// HONEST SCOPE: this proves the signing key produced a fresh, signed verdict for
+// each modality bound to one challenge. It does NOT prove the modalities observed
+// the same physical scene, nor (on Tier-1, shared test key) that they came from a
+// specific physical device — only that they share the challenge and the key.
+func VerifyCoAttestation(bundles []Bundle, opt Options, threshold int) CoAttestation {
+	if threshold <= 0 {
+		return CoAttestation{Reason: "threshold must be >= 1"}
+	}
+	seenInput := map[string]bool{}
+	var modalities []string
+	for _, b := range bundles {
+		res := VerifyBundle(b, opt)
+		if !res.OK || res.Predicate == nil {
+			continue
+		}
+		ih := hex.EncodeToString(res.Predicate.InputHash)
+		if seenInput[ih] {
+			continue // same sensor input — not an independent modality
+		}
+		seenInput[ih] = true
+		modalities = append(modalities, res.Predicate.EventName())
+	}
+	if len(modalities) < threshold {
+		return CoAttestation{Reason: fmt.Sprintf(
+			"only %d of the required %d distinct modalities bound to this nonce verified",
+			len(modalities), threshold)}
+	}
+	sort.Strings(modalities)
+	return CoAttestation{OK: true, Reason: "co-attestation reached", Modalities: modalities}
+}

@@ -120,3 +120,50 @@ func TestQuorumBadThreshold(t *testing.T) {
 		}
 	}
 }
+
+// goldenVision mimics a SECOND modality bound to the SAME nonce (aabb) but with a
+// distinct input_hash (0x44*32 instead of inp32's 0x22*32) and event "none" — a
+// vision verdict alongside the audio one. Same key (one multi-sensor device).
+var inpVision = "4444444444444444444444444444444444444444444444444444444444444444"
+var goldenVision = mustHex(
+	"ab" + "0001" + "0142aabb" + "0200" + "03f4" + "0401" +
+		"050a" + "0618a0" + "0707" + "085820" + cfg32 +
+		"095820" + inpVision + "0a5820" + prev32)
+
+func TestCoAttestationDistinctModalities(t *testing.T) {
+	_, k := newProver(t, "device")
+	opt := Options{ExpectedNonce: mustHex("aabb"), LastCounter: 6}
+	// Audio (golden, input_hash inp32) + vision (goldenVision, input_hash 0x44*32),
+	// both for nonce aabb, signed by the same device key.
+	audio := signWith(t, golden, k)
+	vision := signWith(t, goldenVision, k)
+	res := VerifyCoAttestation([]Bundle{audio, vision}, opt, 2)
+	if !res.OK {
+		t.Fatalf("co-attestation should reach 2 modalities: %s", res.Reason)
+	}
+	if len(res.Modalities) != 2 {
+		t.Errorf("got %d modalities, want 2: %v", len(res.Modalities), res.Modalities)
+	}
+}
+
+func TestCoAttestationRejectsReplayedModality(t *testing.T) {
+	_, k := newProver(t, "device")
+	opt := Options{ExpectedNonce: mustHex("aabb"), LastCounter: 6}
+	// The SAME bundle twice is one modality (identical input_hash), not two.
+	b := signWith(t, golden, k)
+	res := VerifyCoAttestation([]Bundle{b, b}, opt, 2)
+	if res.OK {
+		t.Error("one modality replayed as two should NOT reach a 2-modality co-attestation")
+	}
+}
+
+func TestCoAttestationRejectsWrongNonce(t *testing.T) {
+	_, k := newProver(t, "device")
+	// A vision bundle bound to aabb but the verifier expects a different nonce:
+	// neither modality is fresh for the challenge, so co-attestation fails.
+	opt := Options{ExpectedNonce: mustHex("ccdd"), LastCounter: 6}
+	res := VerifyCoAttestation([]Bundle{signWith(t, golden, k), signWith(t, goldenVision, k)}, opt, 2)
+	if res.OK {
+		t.Error("bundles bound to a different nonce than expected should not co-attest")
+	}
+}

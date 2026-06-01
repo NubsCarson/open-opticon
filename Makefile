@@ -6,6 +6,7 @@
 #   make chain-e2e  - streaming hash-chain: append-only stream + gap detection
 #   make cose-e2e   - COSE_Sign1 (RFC 9052) envelope: emit (C) -> verify (Go)
 #   make witness-e2e - operating log witnesses: cosign quorum + fork refusal
+#   make multimodal-e2e - audio + vision verdicts co-attested to one nonce
 #   make voxterm-e2e - portable restraint receipts (VoxTerm bridge): see docs/INTEGRATIONS.md
 #   make voxterm-demo - narrated walkthrough of the restraint-receipt bridge
 #   make port-diff  - C detector == Rust zk port, differential test (needs cargo)
@@ -20,9 +21,9 @@
 
 VERIFIER = src/verifier
 
-.PHONY: test units sim verifier-test e2e vision-e2e chain-e2e cose-e2e witness-e2e voxterm-e2e voxterm-demo port-diff demo tamper-test gui sites wasm fuzz repro cross clean
+.PHONY: test units sim verifier-test e2e vision-e2e chain-e2e cose-e2e witness-e2e voxterm-e2e multimodal-e2e voxterm-demo port-diff demo tamper-test gui sites wasm fuzz repro cross clean
 
-test: units verifier-test e2e vision-e2e chain-e2e cose-e2e witness-e2e voxterm-e2e tamper-test
+test: units verifier-test e2e vision-e2e chain-e2e cose-e2e witness-e2e voxterm-e2e multimodal-e2e tamper-test
 	@echo ""
 	@echo "==================================================="
 	@echo " ALL HOST TESTS PASSED"
@@ -68,6 +69,12 @@ witness-e2e:
 # log + gap detection. See docs/INTEGRATIONS.md.
 voxterm-e2e:
 	bash test/run_voxterm_e2e.sh
+
+# Multi-modal co-attestation: an audio AND a vision verdict, each a fresh signature
+# bound to the SAME nonce, accepted by `he-verify --co-attest 2`. Cross-modal
+# sibling of the quorum (same challenge, not same event).
+multimodal-e2e:
+	bash test/run_multimodal_e2e.sh
 
 # Narrated walkthrough of the restraint-receipt bridge (a readable demo of
 # voxterm-e2e: emit -> verify -> gap + tamper + retained negatives -> the

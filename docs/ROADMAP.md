@@ -224,6 +224,15 @@ but the right place for the verifier).
   HONEST SCOPE: these are mechanisms, not a solution to the joint-data
   conflicting-wishes problem (still open); share custody + key lifecycle are
   operational policy, not enforced in code. Tier-1, host-tested under `-race`.
+- **Multi-modal co-attestation.** ✅ `VerifyCoAttestation` + `he-verify
+  --co-attest k` (`make multimodal-e2e`): an AUDIO verdict and a VISION verdict,
+  each a fresh signature bound to the SAME challenge nonce, accepted as a
+  k-modality co-attestation. The cross-modal sibling of the quorum — a quorum
+  requires k independent roots to AGREE on one event; co-attestation requires k
+  distinct modalities (distinct input_hash) bound to one nonce and does NOT
+  require agreement. HONEST SCOPE: proves the key signed a fresh verdict per
+  modality for one challenge; does NOT prove they observed the same physical
+  scene, nor (Tier-1 shared key) a specific device.
 
 ## Ops
 - **Reproducible builds:** host artifacts are byte-reproducible today
