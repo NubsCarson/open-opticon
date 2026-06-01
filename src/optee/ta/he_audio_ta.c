@@ -212,8 +212,12 @@ TEE_Result he_attest_audio(uint32_t param_types, TEE_Param params[4])
      * the audio. */
     uint8_t input_hash[32];
     TEE_Result hres = he_sha256(pcm, n_samples * sizeof(int16_t), input_hash);
-    if (hres != TEE_SUCCESS)
+    if (hres != TEE_SUCCESS) {
+        /* Never leave raw audio in the buffer, even on the hash-failure path —
+         * this is the only post-detect early return before the scrub below. */
+        TEE_MemFill(params[0].memref.buffer, 0, pcm_bytes);
         return hres;
+    }
 
     /* 2. zeroize the raw audio immediately — nothing to leak afterwards. */
     TEE_MemFill(params[0].memref.buffer, 0, pcm_bytes);

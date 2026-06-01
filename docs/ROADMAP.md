@@ -138,6 +138,19 @@ immutable snapshot, so these apply to any future deploy.
   out-of-order keys are rejected). Done in source with a forge test; the live
   instances are the pre-hardening snapshot.
 
+## Secure-world signing-path hardening
+- **Centralized tamper gate.** `he_tamper_tripped()` is checked in
+  `he_attest_audio` but must gate EVERY command that uses the attested key — the
+  `SIGN_DATA` PTA and the PSA/CBOR-evidence command included — so an opened device
+  whose embedded key was not physically destroyed (the QEMU case, where there is no
+  normal-world key file to erase) cannot keep signing or attesting. Today only the
+  audio path is gated.
+- **Restrict the `SIGN_DATA` PTA to the audio TA.** The raw signing primitive must
+  be reachable only from the in-TEE audio TA (a caller-UUID restriction in
+  optee-ra's PTA registration), never normal-world-invocable; otherwise the public
+  canonical payload format (`he_payload.h`) makes it a forging oracle. See
+  [`../src/optee/pta/INTEGRATION.md`](../src/optee/pta/INTEGRATION.md) and THREAT_MODEL.
+
 ## Hardware identity & tamper
 The full board bring-up, bill of materials, wiring, and device picture are in
 [`HARDWARE.md`](HARDWARE.md) (incl. why a phone is the wrong place for the sensor

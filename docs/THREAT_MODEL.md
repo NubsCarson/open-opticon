@@ -20,13 +20,13 @@ side-channel adversary. Attestation does not make a TEE side-channel-proof.
 
 | Adversary | Capability | Outcome |
 |---|---|---|
-| Malicious app / normal-world OS | Full control of normal world | **Defended.** Cannot forge the bound output (no key); cannot alter the predicate (signature breaks); cannot replay (nonce + counter). Cannot see raw audio (zeroized in-enclave; on a production sensor, audio never enters normal world). |
+| Malicious app / normal-world OS | Full control of normal world | **Defended, *given the signing primitive is TA-restricted*.** Cannot forge the bound output *provided* the `SIGN_DATA` PTA command is reachable only from the in-TEE audio TA, never directly from the normal world — a hard integration requirement (see [pta/INTEGRATION.md](../src/optee/pta/INTEGRATION.md)), because the canonical payload format is public, so an exposed raw signing oracle would let the normal world mint any predicate. The predicate is otherwise built in-enclave and any edit breaks the signature; cannot replay (nonce + counter). Cannot see raw audio (zeroized in-enclave; on a production sensor, audio never enters normal world). |
 | Static-QR / sticker swap | Replaces a printed code | **Defended.** Trust is a *live* fresh-nonce signature, not a copyable QR. A photo/replay has no fresh signature. |
 | Device substitution ("skimmer") | Swaps in attacker's own genuine TEE | **Defended on i.MX** by the endorsement pin (verifier checks the key against the enrolled device key). On QEMU/RPi the key is shared, so this proves "genuine published code", not device identity — stated openly. |
 | Firmware modification | Patches the detector to exfiltrate | **Defended.** Measurement changes → Veraison reference-value mismatch → attestation FAIL. |
 | Replay of an old valid bundle | Re-presents a captured PASS | **Defended** within a session by the monotonic counter; across sessions by the per-challenge fresh nonce. |
 | Selective suppression of a window | Silently drops one window from the stream (e.g. swallows the alarm window, forwards the rest) | **Detected** by the append-only hash-chain: each payload carries `prev_digest` = SHA-256 of the previous one, so a verifier tracking the stream sees a broken link where a window was dropped (`make chain-e2e`). Scope: this catches a *gap* in an observed stream; it does not by itself force a device to emit (a verifier seeing *no* stream learns nothing) — liveness/heartbeat policy is the complement. |
-| Enclosure tamper | Opens/drills the case | **Detected (best-effort, software-only).** Tamper loop → key erased + TA flag latched → attestation FAIL. Production: hardware zeroization in a secure element / CAAM. |
+| Enclosure tamper | Opens/drills the case | **Detected (best-effort, software-only).** Tamper loop → key erased (where a normal-world key file exists) + TA flag latched. For "attestation FAIL" to hold the latch must gate *every* command that uses the attested key — audio attest, PSA evidence, and the raw `SIGN_DATA` PTA — not only the audio path; otherwise a tampered device whose key is still intact (the QEMU case: an embedded key, no NW file to erase) could keep signing. Production: hardware zeroization in a secure element / CAAM makes the key itself unavailable. |
 | Side-channel on the TEE | Cache/power/EM/fault to extract secrets | **Out of scope / mitigated by minimization** (below). |
 | Analog domain | A second mic in the room, TEMPEST, accelerometer audio recovery | **Out of scope by physics** — bypasses the TEE entirely. |
 
@@ -71,6 +71,15 @@ toward PIR/FHE as performance allows.
   before cutting, glitch power to skip the handler, or probe the bus. Real
   protection needs a fine anti-tamper mesh + potting + environmental sensors +
   backup battery (the PCI-PTS / HSM model).
+- **The bound-output guarantee assumes a TA-restricted, tamper-gated signing
+  primitive.** The `SIGN_DATA` PTA signs an arbitrary caller-supplied message with
+  the attestation key. For the guarantees above to hold it MUST be (a) reachable
+  only from the in-TEE audio TA — a caller-UUID restriction in optee-ra's PTA
+  registration, since the canonical payload format is public — and (b) gated on
+  the tamper latch like the audio path. The audio command enforces the tamper gate
+  and builds the payload in-enclave today; centralizing the tamper check across
+  every key-using command and restricting the raw PTA to the TA are integration
+  requirements, tracked in ROADMAP and [pta/INTEGRATION.md](../src/optee/pta/INTEGRATION.md).
 - **The on-chain verification leg has no domain separation (yet).** The `onchain/`
   dual-root check binds the zk receipt and the device P-256 signature to the same
   nonce + audio, but not to a chain id or contract address, so a valid bundle is

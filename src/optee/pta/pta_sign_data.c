@@ -17,6 +17,21 @@
  * (next to cmd_convert_to_blackkey), add the dispatch case in invoke_command(),
  * and add the command id to pta_remote_attestation.h. See INTEGRATION.md.
  *
+ * SECURITY (MANDATORY — the whole bound-output guarantee depends on these):
+ *   1. RESTRICT THE CALLER. This command signs an ARBITRARY caller-supplied
+ *      message with the attestation key, and the canonical payload format is
+ *      fully public (see he_payload.h). An unrestricted command is therefore a
+ *      forging oracle: the normal world could build any predicate it likes and
+ *      get a valid signature WITHOUT the in-TEE detector ever running. It MUST be
+ *      reachable only from the in-TEE audio TA — gate on the caller's UUID in the
+ *      PTA; do NOT leave it normal-world invocable the way GET_CBOR_EVIDENCE is.
+ *   2. GATE ON TAMPER. Refuse to sign when the tamper flag is latched, exactly as
+ *      he_attest_audio does (he_audio_ta.c), so an opened device whose embedded
+ *      key was not physically destroyed (the QEMU case) cannot keep signing. The
+ *      latch must cover EVERY key-using command, not only the audio path.
+ * Neither check is shown in the body below (the flag/identity live in the
+ * optee-ra TA this snippet grafts into); both are required, not optional.
+ *
  * This file is NOT compiled standalone; it documents the exact function body
  * to graft in. It relies on symbols already present in remote_attestation.c:
  *   sign_ecdsa_sha256()  (from sign.h, already #included)

@@ -60,6 +60,10 @@ static uint8_t *read_file(const char *path, size_t *len)
     fseek(f, 0, SEEK_END);
     long sz = ftell(f);
     fseek(f, 0, SEEK_SET);
+    if (sz < 0) { /* ftell failed (e.g. a pipe/dir): do not return SIZE_MAX len */
+        fclose(f);
+        return NULL;
+    }
     uint8_t *buf = malloc(sz > 0 ? (size_t)sz : 1);
     if (!buf || (sz > 0 && fread(buf, 1, (size_t)sz, f) != (size_t)sz)) {
         free(buf);
@@ -188,7 +192,9 @@ int main(int argc, char *argv[])
      * derivable from a provided FullKey (PubX||PubY||blob). */
     uint8_t *tk_x = NULL, *tk_y = NULL;
     size_t tklen = 0;
-    if (!(px && py)) {
+    if ((px && !py) || (py && !px))
+        errx(1, "--pubx-hex and --puby-hex must be given together");
+    if (!px && !py) {
         if (key && key_len >= 64) {
             px = key;      /* FullKey = PubX||PubY||blob; key outlives the prints */
             py = key + 32;
@@ -199,6 +205,9 @@ int main(int argc, char *argv[])
         }
         px_len = py_len = 32;
     }
+    if (!px || !py) /* neither overridden nor derivable: don't deref NULL below */
+        errx(1, "no public-key coordinates available (give --pubx-hex/--puby-hex "
+                "or a FullKey via --key-hex)");
 
     printf("{\n");
     printf("  \"schema\": \"honest-ear/bound-output/v1\",\n");

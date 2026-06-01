@@ -47,11 +47,30 @@ and the already-defined `MIN_KEY_PARAM_SIZE` / `PUBKEY_HEADER_SIZE`.
 No `sub.mk` change is needed (same file). The PTA is already gated by
 `CFG_REMOTE_ATTESTATION_PTA`.
 
-## Why this is safe
+## Security — two checks you MUST add
 
 `cmd_sign_data` adds no new crypto: it forwards to `sign_ecdsa_sha256()`, the
-exact primitive that already signs attestation evidence. It validates param
-types, rejects short output buffers (with a size hint), and only reads the
-documented slice of the optional key blob. The signed message is opaque to the
-PTA — binding semantics live entirely in the canonical payload the caller
-builds.
+exact primitive that already signs attestation evidence, validates param types,
+rejects short output buffers (with a size hint), and reads only the documented
+slice of the optional key blob.
+
+But the signed message is **opaque** to the PTA, and because the canonical payload
+format is fully public (`he_payload.h`), that opacity is a *liability*, not a
+safety property: an unrestricted `SIGN_DATA` is a **forging oracle** — the normal
+world could build any predicate it likes (any event/presence/counter/nonce) and
+get a valid signature *without the in-TEE detector ever running*. So this command
+is safe only with **both** of the following. They are mandatory, not optional:
+
+1. **Restrict the caller to the audio TA.** Gate the command on the calling TA's
+   identity/UUID so it is NOT reachable from the normal world the way
+   `GET_CBOR_EVIDENCE` is. The audio TA opens its PTA session in the secure world;
+   only that caller should be able to reach `SIGN_DATA`.
+2. **Gate on the tamper flag.** Refuse to sign when the tamper latch is set — the
+   same check `he_attest_audio` performs — so a tampered device whose embedded key
+   was not physically destroyed (the QEMU case) cannot keep signing.
+
+Without these, the bound-output guarantees in
+[`THREAT_MODEL.md`](../../../docs/THREAT_MODEL.md) ("cannot forge the bound
+output"; "tamper → attestation FAIL") do **not** hold. The audio path enforces
+both today; doing so for every key-using command is tracked in
+[`ROADMAP.md`](../../../docs/ROADMAP.md) ("centralized tamper gate").
