@@ -71,6 +71,14 @@ toward PIR/FHE as performance allows.
   before cutting, glitch power to skip the handler, or probe the bus. Real
   protection needs a fine anti-tamper mesh + potting + environmental sensors +
   backup battery (the PCI-PTS / HSM model).
+- **The on-chain verification leg has no domain separation (yet).** The `onchain/`
+  dual-root check binds the zk receipt and the device P-256 signature to the same
+  nonce + audio, but not to a chain id or contract address, so a valid bundle is
+  replayable into another deployment/instance of the same contract. The fix is to
+  bind `chainid` + the contract address into the signed payload AND the zk journal
+  (a TA + zk-guest wire change + re-prove); the live Sepolia contracts are an
+  immutable PoC snapshot. Off-chain, the verifier's issued-nonce freshness gate
+  still binds a session interactively. See [`../onchain/README.md`](../onchain/README.md).
 - **The non-panopticon guarantee is only as strong as the public audit of the
   firmware source.** Attestation makes the promise *checkable*; humans still
   have to read the code.

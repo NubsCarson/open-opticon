@@ -115,6 +115,29 @@ From this PoC to a defensible product, in order of trust-impact.
   log the signed CoRIM as the transparency-log entry, so endorser authenticity
   is covered end-to-end.
 
+## On-chain hardening
+The `onchain/` layer is a PoC public-verification leg (its honest scope is in
+[`../onchain/README.md`](../onchain/README.md)). The live Sepolia contracts are an
+immutable snapshot, so these apply to any future deploy.
+- **Domain separation against cross-chain / cross-instance replay.** Bind
+  `chainid` + the contract address into BOTH the device-signed payload and the zk
+  journal, so a valid {receipt, signature} bundle for one deployment can't be
+  replayed into another deployment/instance. The two roots already bind each
+  other's nonce + audio; this adds the deployment as a third bound dimension. Needs
+  a TA + zk-guest wire change and a re-prove (batch/audit step), so it is future
+  work, not a laptop task.
+- **On-chain checkpoint-signature verification.** `CheckpointAnchor` enforces RFC
+  9162 consistency on-chain and emits the checkpoint's P-256 signature for
+  off-chain authentication against the published log key; verifying that signature
+  on-chain (RIP-7212 / OpenZeppelin P256) would authenticate even the seeding call
+  to the log key, closing the permissionless-seed gap.
+- ✅ **Counter-boundary + deterministic-CBOR hardening (source).** `HonestEarQuorum`
+  bounds the device counter below `type(uint64).max` (so the monotonic anti-replay
+  check can't be wedged at the integer boundary) and enforces strictly-ascending
+  CBOR keys in the payload reader (one canonical encoding — duplicate or
+  out-of-order keys are rejected). Done in source with a forge test; the live
+  instances are the pre-hardening snapshot.
+
 ## Hardware identity & tamper
 The full board bring-up, bill of materials, wiring, and device picture are in
 [`HARDWARE.md`](HARDWARE.md) (incl. why a phone is the wrong place for the sensor

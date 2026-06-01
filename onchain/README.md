@@ -84,6 +84,42 @@ reuse RISC Zero's canonical verifier router rather than deploy your own.)
 
 Verify it yourself (view-only, no funds): `bash onchain/call-sepolia.sh`.
 
+## On-chain scope & limitations (honest)
+
+This is a PoC public-verification leg, not a hardened production deployment. What
+it does and does not guarantee:
+
+- **The device leg is Tier-1 on the live deploy.** `HonestEarQuorum` pins one
+  device key (`devicePubX/Y`); on Sepolia that is the *published* QEMU test key
+  (see [THREAT_MODEL](../docs/THREAT_MODEL.md)). So the device leg proves "genuine
+  published code signed this", not "a specific non-cloneable device" — the same
+  Tier-1 caveat as the off-chain verifier. With a public key anyone can mint device
+  payloads, so on-chain counter anti-replay is only meaningful once the device key
+  is a non-extractable per-device key (Tier 2 / i.MX CAAM). The source bounds the
+  counter below `type(uint64).max` so the monotonic check can't be wedged at the
+  integer boundary, but that is hygiene, not a substitute for a real device key.
+- **No domain separation (cross-chain / cross-instance replay).** The P-256
+  signature and the zk receipt are bound to each *other* (same nonce + same audio)
+  but NOT to a chain id or contract address, so a bundle valid here is replayable
+  into another deployment of the same contract (another chain, or a second
+  instance). Binding `chainid` + the contract address into the signed payload AND
+  the zk journal closes this; it needs a TA + zk-guest wire change and a re-prove,
+  so it is tracked in [ROADMAP](../docs/ROADMAP.md), not done in this PoC.
+- **`CheckpointAnchor.anchor()` is permissionless; the signature is authenticated
+  off-chain.** On-chain it guarantees *append-only consistency* (each checkpoint
+  must prove an RFC 9162 extension of the anchored one — a fork/rewrite reverts).
+  It does NOT verify the checkpoint's P-256 signature on-chain; that signature is
+  emitted in the `Anchored` event for off-chain authentication against the
+  published log key. A consistency proof to a *different* root needs the operator's
+  own leaf data, so a third party can only relay the operator's real checkpoints,
+  not forge new ones — but the *first* (seeding) call on a fresh deploy is
+  unauthenticated (the live instance is already seeded by the deployer). On-chain
+  log-key verification (RIP-7212 / OpenZeppelin P256) is the documented upgrade.
+- **The live contracts are an immutable PoC snapshot.** The Sepolia addresses were
+  deployed from an earlier source revision and cannot be changed. Hardening added
+  to the source after deploy (the counter-boundary guard, strictly-ascending CBOR
+  keys) applies to any *future* deploy; the live instances are not upgraded.
+
 ## Deploy the whole stack on a local EVM (no funds)
 
 ```sh

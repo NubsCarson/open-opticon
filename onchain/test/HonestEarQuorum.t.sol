@@ -126,4 +126,17 @@ contract HonestEarQuorumTest is Test {
         vm.expectRevert(bytes("cbor bstr data truncated"));
         h.readVersion(hex"ab0958201111111111111111111111111111111111");
     }
+
+    // Deterministic-CBOR conformance: integer keys must be strictly ascending, so a
+    // duplicate or out-of-order key is rejected and the signed payload has exactly
+    // ONE canonical byte encoding (matching he_payload.c and the Go reader), not
+    // "any map that happens to carry these fields". Exercised via the harness; the
+    // real path is gated by the P-256 signature in verdict().
+    function test_ReaderRejectsNonAscendingKeys() public {
+        QuorumHarness h = new QuorumHarness();
+        vm.expectRevert(bytes("cbor keys not ascending"));
+        h.readVersion(hex"ab00000000"); // key 0 repeated (0 is not > 0)
+        vm.expectRevert(bytes("cbor keys not ascending"));
+        h.readVersion(hex"ab02000100"); // key 2 then key 1 (out of order)
+    }
 }

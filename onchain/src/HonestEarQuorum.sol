@@ -122,6 +122,14 @@ contract HonestEarQuorum {
         (eventClass, presence) = verdict(zkSeal, zkJournal, devicePayload, deviceSig);
         uint64 counter = _readDevice(devicePayload).counter;
         require(counter > lastCounter, "counter must advance (anti-replay)");
+        // Bound below the type max so the contract can never store a counter of
+        // type(uint64).max — a value that would make every future "counter >
+        // lastCounter" impossible and brick recordVerdict. This is hygiene, NOT a
+        // substitute for a non-public device key: with the Tier-1 shared QEMU key
+        // anyone can mint counters (and could still advance lastCounter arbitrarily
+        // high), so on-chain anti-replay is only meaningful once the device key is a
+        // non-extractable per-device key (Tier 2). See THREAT_MODEL.
+        require(counter < type(uint64).max, "counter at max");
         lastCounter = counter;
         emit QuorumVerdict(eventClass, presence, counter);
     }
@@ -140,9 +148,21 @@ contract HonestEarQuorum {
         require(uint8(p[0]) == 0xab, "not an 11-map"); // CBOR map of 11 pairs
         uint256 i = 1;
         uint256 seen;
+        uint256 prevKey;
+        bool firstKey = true;
         // Walk pairs until the eight fields we need (keys 0,1,2,3,4,5,7,9) are read.
+        // Enforce strictly-ascending integer keys (RFC 8949 deterministic CBOR), so
+        // duplicate or out-of-order keys are rejected and the payload has exactly one
+        // canonical encoding — matching he_payload.c and the Go reader, not merely
+        // "some encoding that happens to carry these fields".
         while (i < p.length && seen != 0xff) {
             uint8 key = uint8(p[i]); // CBOR map has 11 fields (keys 0..10); we read the 8 we need
+            if (firstKey) {
+                firstKey = false;
+            } else {
+                require(key > prevKey, "cbor keys not ascending");
+            }
+            prevKey = key;
             i += 1;
             uint256 vstart = i;
             (uint64 v, uint256 ni) = _val(p, i);
