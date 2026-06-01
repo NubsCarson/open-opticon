@@ -14,5 +14,6 @@ he-log.json
 __pycache__/
 *.pyc
 
-# stray binary if cmd/he-verify-wasm is built without -o
-src/verifier/he-verify-wasm
+# stray cmd binaries if `go build ./cmd/<name>` is run from src/verifier without
+# -o (they land as src/verifier/<name>); no tracked source is named he-* here.
+src/verifier/he-*

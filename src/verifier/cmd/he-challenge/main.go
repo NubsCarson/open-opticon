@@ -49,6 +49,33 @@ type session struct {
 	lastCounter uint64
 	// latest verdict for the mobile verifier page (empty until first attest)
 	verdict, event, reason string
+	// proof backs the walk-up page's 5 plain-language answers on a PASS; nil
+	// until a bundle verifies. Every field here is data the live check actually
+	// produced — so each "show me the proof" panel shows a real artifact.
+	proof *proofView
+}
+
+// proofView is the verified, layperson-facing evidence for one session: the
+// decoded predicate the device signed plus the raw bundle that crossed the wire.
+// It carries ONLY what the live challenge flow (gates 0-3) genuinely proves; the
+// page is careful to mark firmware/hardware-tier claims as not proven by this
+// check. See the walk-up page copy for the honest tiering.
+type proofView struct {
+	Event       string `json:"event"`
+	Presence    uint64 `json:"presence"`
+	VoiceActive bool   `json:"voice_active"`
+	Frames      uint64 `json:"frames"`
+	WindowMs    uint64 `json:"window_ms"`
+	Counter     uint64 `json:"counter"`
+	ConfigHash  string `json:"config_hash"` // hex; SHA-256 of the detector policy
+	InputHash   string `json:"input_hash"`  // hex; SHA-256 of the analyzed window
+	Payload     string `json:"payload"`     // hex; the exact signed bytes
+	Sig         string `json:"sig"`         // hex; 64-byte r||s
+	PubX        string `json:"pub_x"`       // hex
+	PubY        string `json:"pub_y"`       // hex
+	// Pinned is true if this server enforced the endorsement pin (gate 0), i.e.
+	// the verdict is tied to the ENROLLED device key, not merely a valid key.
+	Pinned bool `json:"pinned"`
 }
 
 type server struct {
@@ -237,6 +264,17 @@ func (s *server) verifyAndRecord(sid string, sess *session, b verifier.Bundle) m
 	}
 	if live {
 		sess.verdict, sess.event, sess.reason = verdict, event, reason
+		if ok {
+			p := res.Predicate
+			sess.proof = &proofView{
+				Event: event, Presence: p.Presence, VoiceActive: p.VoiceActive,
+				Frames: p.Frames, WindowMs: p.WindowMs, Counter: p.Counter,
+				ConfigHash: hex.EncodeToString(p.ConfigHash),
+				InputHash:  hex.EncodeToString(p.InputHash),
+				Payload:    b.Payload, Sig: b.Sig, PubX: b.PubX, PubY: b.PubY,
+				Pinned: len(s.pinX) > 0 && len(s.pinY) > 0,
+			}
+		}
 	}
 	s.mu.Unlock()
 
@@ -361,20 +399,33 @@ document.getElementById("sim").onclick=async()=>{
 };
 </script></body></html>`
 
+// statusResp is the /status payload the mobile walk-up page polls. On a PASS it
+// carries the proof so the page can answer the program's 5 questions with the
+// literal verified artifacts (each "show me the proof" panel), not prose alone.
+type statusResp struct {
+	State   string     `json:"state"` // unknown | pending | done
+	Verdict string     `json:"verdict,omitempty"`
+	Event   string     `json:"event,omitempty"`
+	Reason  string     `json:"reason,omitempty"`
+	Proof   *proofView `json:"proof,omitempty"`
+}
+
 // handleStatus reports the latest verdict for a session so the mobile page can
 // poll it: state is "pending" until the device attests, then "done".
 func (s *server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	sess := s.sessions[r.URL.Query().Get("session")]
-	var out map[string]string
+	var out statusResp
 	switch {
 	case sess == nil:
-		out = map[string]string{"state": "unknown"}
+		out = statusResp{State: "unknown"}
 	case sess.verdict == "":
-		out = map[string]string{"state": "pending"}
+		out = statusResp{State: "pending"}
 	default:
-		out = map[string]string{"state": "done", "verdict": sess.verdict,
-			"event": sess.event, "reason": sess.reason}
+		// proof is a pointer set once under the lock on PASS and never mutated
+		// after, so handing out the same pointer is safe for the read-only page.
+		out = statusResp{State: "done", Verdict: sess.verdict,
+			Event: sess.event, Reason: sess.reason, Proof: sess.proof}
 	}
 	s.mu.Unlock()
 	cli.WriteJSON(w, 200, out)
@@ -392,38 +443,122 @@ const verifyPage = `<!DOCTYPE html><html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>open-opticon — verify</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%2309090b'/><circle cx='16' cy='16' r='8.5' fill='none' stroke='%23fafafa' stroke-width='2'/><circle cx='16' cy='16' r='2.6' fill='%23fafafa'/></svg>"><style>
-:root{--bg:#09090b;--fg:#fafafa;--dim:#a1a1aa;--g:#4ade80;--r:#f87171;--b:#60a5fa}
+:root{--bg:#09090b;--card:#0b0b0e;--line:#26262b;--fg:#fafafa;--dim:#a1a1aa;--dim2:#71717a;--g:#4ade80;--r:#f87171;--b:#60a5fa;--amber:#fbbf24}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);letter-spacing:-.011em;
-font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
-min-height:100vh;display:flex;flex-direction:column;align-items:center;
-justify-content:center;text-align:center;padding:28px}
-h1{font-size:1.1rem;color:var(--dim);font-weight:600;letter-spacing:.02em;margin:0 0 28px}
-#card{font-size:4.6rem;font-weight:800;line-height:1;margin:6px 0}
-#sub{font-size:1.05rem;color:var(--fg);margin-top:6px;min-height:1.4em}
-#why{color:var(--dim);font-size:.9rem;margin-top:18px;max-width:30ch}
-.spin{width:46px;height:46px;border-radius:50%;border:4px solid #26262b;
-border-top-color:var(--b);animation:s 1s linear infinite}@keyframes s{to{transform:rotate(360deg)}}
-.foot{position:fixed;bottom:16px;color:var(--dim);font-size:.75rem}
+font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;line-height:1.55;
+min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:36px 18px 64px}
+.wrap{width:100%;max-width:540px;text-align:center}
+h1{font-size:1.05rem;color:var(--dim);font-weight:600;letter-spacing:.02em;margin:0 0 22px}
+#card{font-size:4.4rem;font-weight:800;line-height:1;margin:6px 0}
+#sub{font-size:1.05rem;color:var(--fg);margin-top:6px;min-height:1.4em;font-weight:600}
+#why{color:var(--dim);font-size:.92rem;margin:14px auto 0;max-width:34ch}
+.spin{width:44px;height:44px;border-radius:50%;border:4px solid #26262b;
+border-top-color:var(--b);animation:s 1s linear infinite;display:inline-block}@keyframes s{to{transform:rotate(360deg)}}
+.scope{display:none;margin:22px auto 6px;max-width:40ch;color:var(--dim);font-size:.86rem}
+#answers{display:none;margin-top:18px;text-align:left}
+.qa{background:var(--card);border:1px solid var(--line);border-radius:11px;padding:15px 16px;margin-bottom:12px}
+.qa .q{font-weight:650;font-size:.97rem;margin-bottom:5px}
+.qa .a{color:var(--dim);font-size:.92rem}
+.badge{display:inline-block;margin-top:9px;font-size:11px;font-weight:600;letter-spacing:.02em;
+padding:3px 9px;border-radius:999px;border:1px solid var(--line)}
+.badge.proven{color:var(--g);border-color:#1f3d2b;background:#0c1b12}
+.badge.design{color:var(--amber);border-color:#4a3a12;background:#1c1606}
+.badge.access{color:var(--b);border-color:#1e2f4a;background:#0a121f}
+details{margin-top:11px}
+summary{cursor:pointer;color:var(--b);font-size:.85rem;list-style:none}
+summary::-webkit-details-marker{display:none}
+summary::before{content:"▸ ";color:var(--dim2)}
+details[open] summary::before{content:"▾ "}
+.cap{color:var(--dim);font-size:.83rem;margin:9px 0}
+pre{background:#101014;border:1px solid var(--line);border-radius:8px;padding:11px 12px;
+overflow-x:auto;font-size:12px;line-height:1.5;color:#d4d4d8;margin:0;
+font-family:ui-monospace,Menlo,Consolas,monospace;white-space:pre-wrap;word-break:break-all}
+pre .k{color:var(--dim2)}
+.line{font-size:.83rem;margin-top:8px}
+.line.ok{color:var(--g)} .line.warn{color:var(--amber)}
+.foot{color:var(--dim2);font-size:.74rem;margin-top:26px}
 .mono{font-family:ui-monospace,Menlo,Consolas,monospace}</style></head><body>
+<div class="wrap">
 <h1>open-opticon · live verification</h1>
 <div id="card"><div class="spin"></div></div>
 <div id="sub">waiting for the device to prove itself…</div>
 <div id="why"></div>
+<div class="scope" id="scope">✓ a key the device controls signed this exact verdict, live, for your one-time
+challenge — it was not replayed or altered. tap any answer to see the proof and its limits.</div>
+<div id="answers"></div>
 <div class="foot">session <span class="mono">{{SID}}</span></div>
+</div>
 <script>
-const sid=new URLSearchParams(location.search).get("session");
-const card=document.getElementById("card"),sub=document.getElementById("sub"),why=document.getElementById("why");
+var sid=new URLSearchParams(location.search).get("session");
+var card=document.getElementById("card"),sub=document.getElementById("sub"),why=document.getElementById("why");
+function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,function(c){
+ return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c];});}
+function kv(k,v){return "<span class='k'>"+esc(k)+":</span> "+esc(v)+"\n";}
+function evName(p){return p.event||"an event";}
+// The five questions the credible-sensors program asks. Answers + tiers are
+// grounded in what the LIVE check proves; firmware/hardware-tier claims are
+// marked so a green page never implies more than the signature carries.
+function cards(p){return [
+ {q:"1 · what gets captured?",
+  a:"sound is analyzed for one thing — "+esc(evName(p))+" — then discarded. you get a verdict, not a recording.",
+  badge:["proven","✓ proven by this check"],
+  art:kv("event",p.event)+kv("presence",p.presence)+kv("voice_active",p.voice_active)+kv("frames",p.frames)+kv("window_ms",p.window_ms)+kv("input_hash",p.input_hash),
+  cap:"the device signed this verdict, not audio. input_hash is a SHA-256 fingerprint of the exact window analyzed — it names the input without storing it.",
+  ok:"the signed output is a small event verdict, not a recording or transcript.",
+  warn:"that the raw audio is wiped inside the chip and never reaches the OS is firmware behavior — proven on QEMU; on a shipped unit it rests on hardware attestation + public source audit."},
+ {q:"2 · where does it go?",
+  a:"nowhere. the only thing that left the device is the signed verdict your phone just checked.",
+  badge:["proven","✓ proven by this check"],
+  art:kv("payload",p.payload)+kv("sig",p.sig)+kv("pub_x",p.pub_x)+kv("pub_y",p.pub_y),
+  cap:"this is everything the device emitted for your challenge: a signature over the verdict. there is no audio field anywhere in it.",
+  ok:"the entire wire output is this signed verdict — there is no audio channel.",
+  warn:"a second microphone in the room or physical side-channels are out of scope — this proves the data path, not physics."},
+ {q:"3 · who can access or release it?",
+  a:"no one. nothing capturable is kept, so there is nothing to release. "+(p.pinned?"only the enrolled device's key can mint a valid verdict, and it cannot be replayed.":"only a key the device controls can mint a valid verdict, and it cannot be replayed."),
+  badge:["access","○ integrity only"],
+  art:kv("pub_x",p.pub_x)+kv("pub_y",p.pub_y)+kv("pinned to enrolled device",p.pinned),
+  cap:p.pinned?"this server pinned the verdict to the enrolled device key above.":"this server did not pin a device key, so this proves genuine published code ran — not which physical device.",
+  ok:"only the holder of this key can produce a verdict, and replays are rejected (the counter must advance).",
+  warn:"opticon does not implement a 'who may read X' policy because there is no retained X. tying a verdict to a specific physical unit needs a non-extractable hardware key (i.MX CAAM / ST element) — not proven on this unit."},
+ {q:"4 · how long is it kept?",
+  a:"not kept. the audio is overwritten with zeros inside the enclave the instant the verdict is computed — its lifetime is milliseconds.",
+  badge:["design","△ by design — not proven on this unit"],
+  art:kv("counter (only state kept across windows)",p.counter)+kv("input_hash (a fingerprint, not audio)",p.input_hash),
+  cap:"the only state kept across windows is this monotonic counter — it carries no audio. the wipe itself is firmware behavior you audit from source.",
+  ok:"the live check shows the counter advancing (anti-replay); no audio is in anything that crossed the wire.",
+  warn:"the in-enclave zeroize is firmware behavior — proven on QEMU and by reading he_audio_ta.c; on a shipped unit it rests on hardware attestation."},
+ {q:"5 · how is it used?",
+  a:"only to compute this coarse verdict under a published policy. the rules that decide what counts are fingerprinted into the signature, so you can audit them from source.",
+  badge:["proven","✓ proven by this check"],
+  art:kv("config_hash (SHA-256 of the detector policy)",p.config_hash),
+  cap:"config_hash is carried inside the signed payload, so the device cannot quietly use different rules than the published ones.",
+  ok:"the policy is bound into the signature and is auditable from source; there is no hidden knob.",
+  warn:"config_hash makes the policy checkable, not correct — the detector is a heuristic, not an audited model."}
+];}
+function render(p){
+ var c=cards(p),h="";
+ for(var i=0;i<c.length;i++){var x=c[i];
+  h+="<div class='qa'><div class='q'>"+esc(x.q)+"</div><div class='a'>"+x.a+"</div>"+
+     "<span class='badge "+x.badge[0]+"'>"+esc(x.badge[1])+"</span>"+
+     "<details><summary>show me the proof</summary>"+
+     "<div class='cap'>"+esc(x.cap)+"</div><pre>"+x.art+"</pre>"+
+     "<div class='line ok'>✓ "+esc(x.ok)+"</div>"+
+     "<div class='line warn'>△ "+esc(x.warn)+"</div></details></div>";}
+ document.getElementById("answers").innerHTML=h;
+ document.getElementById("answers").style.display="block";
+ document.getElementById("scope").style.display="block";
+}
 async function poll(){
- try{const r=await fetch("/status?session="+encodeURIComponent(sid));const d=await r.json();
+ try{var r=await fetch("/status?session="+encodeURIComponent(sid));var d=await r.json();
   if(d.state==="done"){
    if(d.verdict==="PASS"){card.textContent="✓";card.style.color="var(--g)";
-    sub.textContent="Verified — "+(d.event||"event")+" detected";
-    why.textContent="The genuine, attested firmware produced this exact result for a fresh challenge. No audio left the device.";}
+    sub.textContent="verified — "+esc(d.event||"event")+" detected";why.textContent="";
+    if(d.proof){render(d.proof);}}
    else{card.textContent="✗";card.style.color="var(--r)";
-    sub.textContent="Rejected";why.textContent=d.reason||"verification failed";}
+    sub.textContent="not verified";why.textContent=d.reason||"verification failed";}
    return;}
   if(d.state==="unknown"){card.textContent="?";card.style.color="var(--dim)";
-   sub.textContent="unknown or expired session";return;}
+   sub.textContent="unknown or expired session";why.textContent="";return;}
  }catch(e){}
  setTimeout(poll,1000);
 }

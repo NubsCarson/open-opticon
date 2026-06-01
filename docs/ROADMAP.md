@@ -205,6 +205,17 @@ but the right place for the verifier).
   confidentiality proof — "which code ran / no covert exfil" still needs firmware
   measurement (a TEE) and/or reproducible builds + open source. See
   [`INTEGRATIONS.md`](INTEGRATIONS.md).
+- **Credible-sensors program (Track 3).** open-opticon is positioned as the
+  **software side of Track 3** (minimal open attestable sensor) — see
+  [`T3.md`](T3.md). ✅ The walk-up verifier (`/v` in `he-challenge`) now answers the
+  program's five questions (what is captured / where it goes / who accesses / how
+  long kept / how used) in plain language on a PASS, each with a "show me the
+  proof" panel that reveals the literal verified artifact and an honest tier label
+  (proven-here vs needs-hardware). Hardware side (a Raspberry Pi + an ST secure
+  element as the per-device root) is designed in [`PI_ST_ELEMENT.md`](PI_ST_ELEMENT.md)
+  — SPECED/FRONTIER, not built; the verifier is already root-agnostic so an ST key
+  enrolls with no verifier change. HONEST SCOPE: integrity + provenance, Tier-1
+  proven on QEMU; device identity / secure boot / secure capture are hardware work.
 
 ## Ops
 - **Reproducible builds:** host artifacts are byte-reproducible today

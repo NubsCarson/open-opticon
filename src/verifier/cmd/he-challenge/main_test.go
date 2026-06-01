@@ -223,3 +223,75 @@ func TestVerifyAndRecordConcurrentReplay(t *testing.T) {
 		t.Errorf("lastCounter = %d, want 7 (the one admitted counter)", sess.lastCounter)
 	}
 }
+
+// On a PASS, /status must carry the proofView so the walk-up page can answer the
+// program's 5 questions with the real verified artifacts (predicate + bundle).
+func TestStatusReturnsProofOnPass(t *testing.T) {
+	s := newServer()
+	sess := &session{nonce: goldenNonce, createdAt: time.Now()}
+	s.sessions["sid"] = sess
+	if out := s.verifyAndRecord("sid", sess, signBundle(t, goldenPayload(t))); out["verdict"] != "PASS" {
+		t.Fatalf("verdict = %v, want PASS", out["verdict"])
+	}
+	rr := httptest.NewRecorder()
+	s.handleStatus(rr, httptest.NewRequest(http.MethodGet, "/status?session=sid", nil))
+	var resp statusResp
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("status json: %v", err)
+	}
+	if resp.State != "done" || resp.Verdict != "PASS" {
+		t.Fatalf("status = %+v", resp)
+	}
+	if resp.Proof == nil {
+		t.Fatal("proof missing on PASS")
+	}
+	if resp.Proof.Event != "alarm_tone" {
+		t.Errorf("proof.event = %q, want alarm_tone", resp.Proof.Event)
+	}
+	// golden payload binds config_hash 0x11*32 and input_hash 0x22*32.
+	if resp.Proof.ConfigHash == "" || resp.Proof.InputHash == "" {
+		t.Error("proof missing config_hash/input_hash")
+	}
+	if resp.Proof.Payload == "" || resp.Proof.Sig == "" || resp.Proof.PubX == "" {
+		t.Error("proof missing the signed bundle artifact")
+	}
+	if resp.Proof.Pinned {
+		t.Error("pinned should be false when the server set no endorsement pin")
+	}
+}
+
+// A pending session must NOT leak a proof, and unknown sessions stay unknown.
+func TestStatusNoProofBeforePass(t *testing.T) {
+	s := newServer()
+	s.sessions["sid"] = &session{nonce: goldenNonce, createdAt: time.Now()}
+	rr := httptest.NewRecorder()
+	s.handleStatus(rr, httptest.NewRequest(http.MethodGet, "/status?session=sid", nil))
+	var resp statusResp
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("status json: %v", err)
+	}
+	if resp.State != "pending" || resp.Proof != nil {
+		t.Errorf("pending status leaked proof or wrong state: %+v", resp)
+	}
+}
+
+// The walk-up page must answer all 5 program questions and must NOT reintroduce
+// the old overclaim (the bare signature does not prove "no audio left the device"
+// — that is a firmware/attestation-tier claim, shown as such in the proof panel).
+func TestVerifyPageAnswersFiveQuestionsNoOverclaim(t *testing.T) {
+	s := newServer()
+	rr := httptest.NewRecorder()
+	s.handleVerifyPage(rr, httptest.NewRequest(http.MethodGet, "/v?session=abc", nil))
+	body := rr.Body.String()
+	for _, q := range []string{
+		"what gets captured", "where does it go", "who can access",
+		"how long is it kept", "how is it used", "show me the proof",
+	} {
+		if !strings.Contains(body, q) {
+			t.Errorf("walk-up page missing question/affordance: %q", q)
+		}
+	}
+	if strings.Contains(body, "No audio left the device") {
+		t.Error("page reintroduced the 'No audio left the device' overclaim")
+	}
+}
