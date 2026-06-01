@@ -21,7 +21,7 @@ fix = os.environ["FIX"]
 N = 256 * 12  # 12 frames, == the zk/quorum short clip
 p = os.path.join(fix, "alarm_short.pcm")
 if not os.path.exists(p):
-    s = [max(-32768, min(32767, int(12000 * math.sin(2 * math.pi * 3100 * i / 16000)))) for i in range(N)]
+    s = [max(-32768, min(32767, int(8000 * math.sin(2 * math.pi * 3100 * i / 16000)))) for i in range(N)]  # amp 8000 == the canonical clip the committed proof is bound to
     with open(p, "wb") as f:
         f.write(struct.pack("<%dh" % len(s), *s))
 PY

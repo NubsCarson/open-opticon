@@ -27,7 +27,7 @@ make -C "$ROOT/sim" all >/dev/null || { echo "C build failed"; exit 1; }
 [ -f "$CLIP" ] || FIX="$FIX" python3 - <<'PY'
 import math, os, struct
 N = 256 * 12
-s = [max(-32768, min(32767, int(12000 * math.sin(2 * math.pi * 3100 * i / 16000)))) for i in range(N)]
+s = [max(-32768, min(32767, int(8000 * math.sin(2 * math.pi * 3100 * i / 16000)))) for i in range(N)]  # amp 8000 == the canonical zk/quorum-bound clip (sha256 76fce813…)
 open(os.path.join(os.environ["FIX"], "alarm_short.pcm"), "wb").write(struct.pack("<%dh" % len(s), *s))
 PY
 echo "  clip: alarm_short.pcm (a 3.1 kHz alarm tone) — the audio stays private throughout"

@@ -27,7 +27,7 @@ def w(name, samples):
     if not os.path.exists(p):
         with open(p, "wb") as f:
             f.write(struct.pack("<%dh" % len(samples), *samples))
-w("alarm_short.pcm", [max(-32768, min(32767, int(12000 * math.sin(2*math.pi*3100*i/16000)))) for i in range(N)])
+w("alarm_short.pcm", [max(-32768, min(32767, int(8000 * math.sin(2*math.pi*3100*i/16000)))) for i in range(N)])  # amp 8000 == canonical zk-bound clip
 w("silence_short.pcm", [0]*N)
 PY
 
