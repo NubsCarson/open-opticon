@@ -36,6 +36,34 @@ cd onchain && forge install && forge test   # verify the Groth16 receipt on a lo
 
 See [`zk/README.md`](../zk/README.md) and [`onchain/README.md`](../onchain/README.md).
 
+#### Operating transparency-log witnesses (he-logd + he-witness)
+
+A log operator serves its signed checkpoints; independent witnesses poll, verify
+consistency, and cosign only consistent extensions — refusing a forked/rewound
+log. `make witness-e2e` runs the whole thing; to drive it by hand:
+
+```sh
+# build the tools
+( cd src/verifier && go build -o /tmp/he-log ./cmd/he-log \
+    && go build -o /tmp/he-logd ./cmd/he-logd && go build -o /tmp/he-witness ./cmd/he-witness )
+
+/tmp/he-log genkey                                  # one key for the log, one per witness
+/tmp/he-log add --log L.json <entryHex>             # append endorsements
+/tmp/he-logd --addr :8088 --log L.json --key <logPriv> &   # serve checkpoints + proofs
+
+# each witness: one consistency-checked cosignature (or `serve` to run as a daemon)
+/tmp/he-witness check --name w1 --key <wPriv> --log-url http://127.0.0.1:8088 \
+    --log-pub-x <logX> --log-pub-y <logY> --state w1.json   # prints a cosignature, or REFUSES a fork
+
+# the verifier requires a threshold of enrolled, pinned-key cosignatures
+/tmp/he-log cosign-verify --checkpoint body.txt --cosigs cosigs.json \
+    --enrolled w1:<x>:<y> --enrolled w2:<x>:<y> --witness-threshold 2
+```
+
+If the log ever forks or rewinds, a witness that already saw the earlier history
+returns `REFUSED` (exit 1) instead of a cosignature, so the threshold cannot be met
+with a divergent log.
+
 ---
 
 ## Phase B — on device

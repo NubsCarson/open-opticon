@@ -29,6 +29,21 @@ Deterministic flags used:
 
 Expected result: `REPRODUCIBLE  all host artifacts are byte-identical`.
 
+### The in-browser verifier (`docs/verify.wasm`) — honest caveat
+
+`make repro` also rebuilds `docs/verify.wasm` (the in-browser verifier) twice and
+asserts the two are byte-identical, so the build is **deterministic within one Go
+toolchain**. But Go's wasm output embeds runtime code that differs across compiler
+*versions*, so the committed `docs/verify.wasm` is only byte-reproducible with the
+**same Go toolchain** that built it (and `docs/wasm_exec.js` is the matching
+runtime from that toolchain — `tools/build_wasm.sh` copies it from the same
+`GOROOT`, so the pair always agrees). Rebuild it with `make wasm`. CI rebuilds and
+**smoke-tests** the wasm on every push (`tools/build_wasm.sh` + a node harness that
+checks the browser path matches the CLI's verdicts), but does not byte-compare the
+committed binary to the CI build — a strict byte-match gate would require pinning
+an exact Go version, which is deferred. The trust anchor is the source + the smoke
+test, not the prebuilt bytes; anyone can rebuild and diff.
+
 ### CI publishes + attests the manifest (SLSA provenance)
 
 On every push, the `reproducible-build` CI job runs the same check, writes the

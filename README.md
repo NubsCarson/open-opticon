@@ -120,6 +120,11 @@ docs/            ARCHITECTURE, THREAT_MODEL, RUNBOOK, HARDWARE, ROADMAP,
 [Sample attestation (QEMU)](docs/SAMPLE_ATTESTATION.md) ·
 [ZK proof of the detector](zk/README.md) · [On-chain verification](onchain/README.md)
 
+**In-browser, no install:** [verify a bundle yourself](https://nubscarson.github.io/open-opticon/verify.html)
+(the real verifier compiled to WASM — raw or COSE_Sign1) ·
+[transparency dashboard](https://nubscarson.github.io/open-opticon/transparency.html)
+(live Sepolia state + the append-only log anchor).
+
 ## What is proven *here* vs *on the rig*
 
 This is a clean overlay on `optee-ra`; it does not modify the upstream tree

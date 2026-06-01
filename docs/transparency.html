@@ -192,10 +192,16 @@
 <span class="cg">  [PASS]</span> test_RejectsRollback</pre>
       </div>
       <p class="small" style="margin-top:12px">The <span class="mono">new root (size 5)</span> above is the
-         exact value the live anchor read returns — that's the agreement the dashboard checks for you.
-         Witnesses can additionally cosign checkpoints (<span class="mono">he-log cosign</span>); the
-         verifier requires a threshold of enrolled, pinned-key cosignatures so one operator can't mint
-         keys to equivocate.</p>
+         exact value the live anchor read returns — that's the agreement the dashboard checks for you.</p>
+      <div class="kv" style="margin-top:14px">
+        <div class="k">operating witnesses</div><div class="v" style="font-family:var(--sans);font-size:.92rem">
+          <span class="mono">he-logd</span> serves the signed checkpoints + consistency proofs;
+          independent <span class="mono">he-witness</span> daemons poll it, verify each checkpoint is an
+          append-only extension of the one they last cosigned, and <b>refuse to cosign a forked or
+          rewound history</b> (pinning the log key). The verifier then requires a threshold of enrolled,
+          pinned-key cosignatures — so one operator can't equivocate. A 2-of-3 quorum verifying and a fork
+          being refused run end-to-end in <span class="mono">make witness-e2e</span>.</div>
+      </div>
     </div>
   </div>
 </section>
@@ -236,17 +242,24 @@
 <!-- CHECK IT -->
 <section>
   <div class="wrap">
-    <h2>Check it, three ways</h2>
+    <h2>Check it yourself</h2>
     <p class="sub">Nothing here asks for your trust.</p>
     <div class="card">
-      <div class="kv" style="grid-template-columns:170px 1fr;gap:14px 16px">
+      <div class="kv" style="grid-template-columns:180px 1fr;gap:14px 16px">
         <div class="k">in your browser</div><div class="v" style="font-family:var(--sans);font-size:.95rem">
           <a class="lnk" href="verify.html">verify.html</a> — the real verifier compiled to WebAssembly,
-          checks a signed bundle client-side.</div>
+          checks a signed bundle client-side (raw <em>or</em> COSE_Sign1, auto-detected).</div>
         <div class="k">on a public chain</div><div class="v" style="font-family:var(--sans);font-size:.95rem">
           <span class="mono">bash onchain/call-sepolia.sh</span> — read the dual-root verdict from Sepolia, no funds.</div>
+        <div class="k">firmware token</div><div class="v" style="font-family:var(--sans);font-size:.95rem">
+          <span class="mono">he-attest-verify</span> — verify a PSA attestation token (EAT) offline:
+          signature, profile, nonce, and measurement vs published references.</div>
+        <div class="k">inspect a bundle</div><div class="v" style="font-family:var(--sans);font-size:.95rem">
+          <span class="mono">he-dump</span> — decode a bundle to human-readable fields (no verification),
+          an audit aid.</div>
         <div class="k">on your machine</div><div class="v" style="font-family:var(--sans);font-size:.95rem">
-          <span class="mono">make test &amp;&amp; make repro</span> — units, e2e, and byte-identical rebuilds, offline.</div>
+          <span class="mono">make test &amp;&amp; make repro</span> — units, e2e (incl. witness fork-refusal),
+          and byte-identical rebuilds, offline.</div>
       </div>
     </div>
   </div>

@@ -119,6 +119,28 @@ is not audio-specific. Independently, a non-TEE ZK prover leg (`zk/`) proves the
 detector's verdict with no enclave trusted for the math, and its Groth16 receipt
 is verifiable on an EVM (`onchain/`); both can feed the existing k-of-n quorum.
 
+**Transparency log + operating witnesses (anti-equivocation).** Device
+endorsements go into an RFC 6962 append-only Merkle log whose signed checkpoints
+are anchored on-chain (`CheckpointAnchor`, RFC 9162 consistency verified by the
+SHA-256 precompile). Off-chain, a log operator (`he-logd`) serves those
+checkpoints + consistency proofs, and independent witness daemons (`he-witness`)
+poll it, verify each checkpoint is an append-only extension of the one they last
+cosigned, and **refuse to cosign a forked or rewound history** (pinning the log
+key). The verifier requires a threshold of enrolled, pinned-key cosignatures, so
+no single operator can present two different histories — the off-chain analogue
+of the on-chain anchor. `make witness-e2e` exercises a 2-of-3 quorum and a refused
+fork end to end.
+
+**Detection policy is bound, and the alarm detector probes a band.** `config_hash`
+binds the exact detector policy into the signed output, so "what counts as an
+event" is itself attested. The acoustic detector scans a small band of
+frequencies around the configured center (default 2900/3100/3300 Hz), taking the
+strongest Goertzel power per frame, so a real UL-217 alarm that drifts off the
+nominal frequency is still detected. It is a deliberately simple, integer-only
+*heuristic* (bit-identical in the C TA and the Rust zk port) — not a learned
+model; swapping in an audited model is future work (see ROADMAP), and `config_hash`
+is the on-ramp that makes such a swap auditable.
+
 ## Hardware tiers
 
 | Tier | Target | Signing key | What it proves |

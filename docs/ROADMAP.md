@@ -54,7 +54,10 @@ From this PoC to a defensible product, in order of trust-impact.
   of the broader 2-of-3 vision. The transparency-log checkpoints also have an on-chain
   anchor (`onchain/src/CheckpointAnchor.sol`): it verifies an RFC 9162 consistency
   proof on-chain (SHA-256 precompile) so a fork/rewrite is rejected — proven by a
-  real `he-log consistency` proof in `forge test`; only the live deploy is deferred.
+  real `he-log consistency` proof in `forge test`, and **deployed live on Sepolia**
+  (its `latestSize`/`latestRoot` read live on the transparency dashboard, matching
+  the committed checkpoint). Off-chain, **operating witnesses** (`he-logd` +
+  `he-witness`) now consistency-check and cosign that same log and refuse forks.
 - **The primitive generalizes beyond audio.** A vision occupancy detector
   (`he_vision`, integer-only, same discipline as the acoustic one) emits only
   `empty`/`occupied` + a region count, never the frame, and rides the *same*
