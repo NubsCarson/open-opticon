@@ -24,6 +24,13 @@ func fail(reason string) any {
 	return map[string]any{"ok": false, "reason": reason}
 }
 
+func envelopeName(cose string) string {
+	if cose != "" {
+		return "cose-sign1"
+	}
+	return "raw"
+}
+
 func getString(o js.Value, key string) string {
 	if o.Type() != js.TypeObject {
 		return ""
@@ -37,6 +44,10 @@ func getString(o js.Value, key string) string {
 
 // heVerify(bundleJSON string, opts object) -> result object.
 //
+// Accepts either envelope and auto-detects: a raw bound-output bundle
+// ({payload,sig,pub_x,pub_y}) or a COSE_Sign1 bundle ({cose,pub_x,pub_y}). The
+// result includes "envelope": "raw" | "cose-sign1".
+//
 // opts (all optional except nonce):
 //
 //	nonce       hex — the fresh challenge the bundle must echo (required)
@@ -47,8 +58,17 @@ func heVerify(this js.Value, args []js.Value) any {
 	if len(args) < 1 || args[0].Type() != js.TypeString {
 		return fail("usage: heVerify(bundleJSON, opts) — bundleJSON must be a string")
 	}
-	var b verifier.Bundle
-	if err := json.Unmarshal([]byte(args[0].String()), &b); err != nil {
+	// Accept BOTH envelopes: a raw bound-output bundle (has "payload"+"sig") or a
+	// COSE_Sign1 bundle (has "cose"). Detected by which field is present.
+	var probe struct {
+		Schema  string `json:"schema"`
+		Payload string `json:"payload"`
+		COSE    string `json:"cose"`
+		Sig     string `json:"sig"`
+		PubX    string `json:"pub_x"`
+		PubY    string `json:"pub_y"`
+	}
+	if err := json.Unmarshal([]byte(args[0].String()), &probe); err != nil {
 		return fail("invalid bundle JSON: " + err.Error())
 	}
 
@@ -91,11 +111,22 @@ func heVerify(this js.Value, args []js.Value) any {
 		}
 	}
 
-	res := verifier.VerifyBundle(b, opt)
+	var res verifier.VerifyResult
+	if probe.COSE != "" {
+		res = verifier.VerifyCOSEBundle(verifier.COSEBundle{
+			Schema: probe.Schema, COSE: probe.COSE, PubX: probe.PubX, PubY: probe.PubY,
+		}, opt)
+	} else {
+		res = verifier.VerifyBundle(verifier.Bundle{
+			Schema: probe.Schema, Payload: probe.Payload, Sig: probe.Sig,
+			PubX: probe.PubX, PubY: probe.PubY,
+		}, opt)
+	}
 	out := map[string]any{
 		"ok":         res.OK,
 		"reason":     res.Reason,
 		"nextDigest": hex.EncodeToString(res.NextDigest),
+		"envelope":   envelopeName(probe.COSE),
 	}
 	if res.Predicate != nil {
 		p := res.Predicate

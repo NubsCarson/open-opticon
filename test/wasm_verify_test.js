@@ -24,6 +24,16 @@ const BUNDLE = {
 const NONCE = "d15ea5edc0ffee00";
 const ZERO64 = "0".repeat(64);
 
+// The same observation in a COSE_Sign1 (RFC 9052) envelope (HE_COSE=1 signer),
+// same key + nonce — the wasm must auto-detect and verify it identically.
+const COSE_BUNDLE = {
+  schema: "honest-ear/cose-sign1/v1",
+  cose:
+    "d28443a10126a05883ab00010148d15ea5edc0ffee00020203f40401050c0618c00701085820ba3c0d6a27de9bc78a95dd53cf1045ac799cb2a90f6e61a00cfd57bc5f1feea109582076fce813fbb5a4c577d78eb957bcb37962a16a89d3c1151b801acdb96b9b0e2a0a5820000000000000000000000000000000000000000000000000000000000000000058402226ca9000a8176bb8e505b87325f1539fbf8142fb6bf93b5ef5ca5530681e253746e22ebba0d7fe057c74e2bd999987e9212e34b6f67deab40cb1c3bd121e83",
+  pub_x: "30a0424cd21c2944838a2d75c92b37e76ea20d9f00893a3b4eee8a3c0aafec3e",
+  pub_y: "e04b65e92456d9888b52b379bdfbd51ee869ef1f0fc65b6659695b6cce081723",
+};
+
 let failures = 0;
 function check(name, cond) {
   if (cond) {
@@ -82,6 +92,18 @@ function check(name, cond) {
   // Garbage JSON -> error, not a crash.
   r = H("{not json", { nonce: NONCE });
   check("bad JSON handled", r.ok === false);
+
+  // COSE_Sign1 envelope: auto-detected and verified identically to the raw one.
+  r = H(JSON.stringify(COSE_BUNDLE), { nonce: NONCE, lastCounter: 0 });
+  check("COSE bundle verifies", r.ok === true);
+  check("COSE envelope detected", r.envelope === "cose-sign1");
+  check("COSE event is alarm_tone", r.predicate && r.predicate.event === "alarm_tone");
+  r = H(JSON.stringify(COSE_BUNDLE), { nonce: "deadbeef", lastCounter: 0 });
+  check("COSE wrong nonce fails", r.ok === false);
+  const tc = JSON.parse(JSON.stringify(COSE_BUNDLE));
+  tc.cose = tc.cose.slice(0, 40) + ((parseInt(tc.cose[40], 16) ^ 0xf).toString(16)) + tc.cose.slice(41);
+  r = H(JSON.stringify(tc), { nonce: NONCE, lastCounter: 0 });
+  check("tampered COSE fails", r.ok === false);
 
   console.log(failures === 0 ? "wasm_verify_test: all passed" : `wasm_verify_test: ${failures} FAILURE(S)`);
   process.exit(failures === 0 ? 0 : 1);

@@ -177,13 +177,16 @@
           <div class="actions">
             <button class="btn primary" id="verifyBtn" disabled>Verify</button>
             <button class="btn outline" id="tamperBtn">Tamper a byte</button>
-            <button class="btn outline" id="resetBtn">Reset sample</button>
+            <button class="btn outline" id="resetBtn">Raw sample</button>
+            <button class="btn outline" id="coseBtn">COSE_Sign1 sample</button>
           </div>
         </div>
         <p class="small" style="margin-top:12px">The sample is a real bundle produced by the host signer
            (<span class="mono">he-attest-sim</span>) over a 3.1&nbsp;kHz alarm clip, signed with the
-           published P-256 test key — the same key and algorithm the QEMU TA uses. "Tamper a byte" flips
-           one payload byte so you can watch the signature gate reject it.</p>
+           published P-256 test key — the same key and algorithm the QEMU TA uses. The verifier
+           auto-detects the envelope: try the <b>raw</b> bound-output bundle or the standards-aligned
+           <b>COSE_Sign1</b> (RFC 9052) one — same key, same verdict. "Tamper a byte" flips one signed
+           byte so you can watch the signature gate reject it.</p>
       </div>
       <div>
         <div class="verdict" id="verdict">
@@ -232,15 +235,29 @@ const SAMPLE = {
   nonce: "d15ea5edc0ffee00"
 };
 
+// The SAME observation in a COSE_Sign1 (RFC 9052) envelope — same key + nonce.
+// The verifier auto-detects the envelope (raw vs cose) from the JSON fields.
+const SAMPLE_COSE = {
+  bundle: {
+    "schema": "honest-ear/cose-sign1/v1",
+    "cose": "d28443a10126a05883ab00010148d15ea5edc0ffee00020203f40401050c0618c00701085820ba3c0d6a27de9bc78a95dd53cf1045ac799cb2a90f6e61a00cfd57bc5f1feea109582076fce813fbb5a4c577d78eb957bcb37962a16a89d3c1151b801acdb96b9b0e2a0a5820000000000000000000000000000000000000000000000000000000000000000058402226ca9000a8176bb8e505b87325f1539fbf8142fb6bf93b5ef5ca5530681e253746e22ebba0d7fe057c74e2bd999987e9212e34b6f67deab40cb1c3bd121e83",
+    "pub_x": "30a0424cd21c2944838a2d75c92b37e76ea20d9f00893a3b4eee8a3c0aafec3e",
+    "pub_y": "e04b65e92456d9888b52b379bdfbd51ee869ef1f0fc65b6659695b6cce081723"
+  },
+  nonce: "d15ea5edc0ffee00"
+};
+
 const $ = (id) => document.getElementById(id);
 const statusEl = $("status"), statusText = $("statusText");
 
-function loadSample() {
-  $("bundle").value = JSON.stringify(SAMPLE.bundle, null, 2);
-  $("nonce").value = SAMPLE.nonce;
+function loadInto(sample) {
+  $("bundle").value = JSON.stringify(sample.bundle, null, 2);
+  $("nonce").value = sample.nonce;
   $("lastCounter").value = "0";
   $("pinX").value = ""; $("pinY").value = ""; $("expectPrev").value = "";
 }
+function loadSample() { loadInto(SAMPLE); }
+function loadSampleCOSE() { loadInto(SAMPLE_COSE); }
 
 function setVerdict(state, banner, reason) {
   const v = $("verdict");
@@ -298,9 +315,10 @@ function doVerify() {
     return;
   }
   if (res.ok) {
+    const env = res.envelope === "cose-sign1" ? " · COSE_Sign1" : "";
     setVerdict("pass", "PASS", "signature + freshness + anti-replay" +
       ($("expectPrev").value.trim() ? " + stream chain" : "") +
-      (($("pinX").value.trim()) ? " + endorsement pin" : ""));
+      (($("pinX").value.trim()) ? " + endorsement pin" : "") + env);
   } else {
     setVerdict("fail", "FAIL", res.reason);
   }
@@ -308,17 +326,17 @@ function doVerify() {
 }
 
 function tamperByte() {
-  // Flip one nibble of the signed payload AFTER signing -> the signature gate must reject it.
+  // Flip one nibble of the signed bytes AFTER signing -> the signature gate must
+  // reject it. Works for the raw envelope (payload) and COSE (cose).
   let b;
   try { b = JSON.parse($("bundle").value); } catch (e) {
     setVerdict("fail", "ERROR", "bundle is not valid JSON, can't tamper"); return;
   }
-  if (typeof b.payload !== "string" || b.payload.length < 10) return;
-  // Flip a byte in the middle of the payload (avoid the map header at index 0-1).
-  const i = 20;
-  const c = b.payload[i];
-  const flipped = (parseInt(c, 16) ^ 0xf).toString(16);
-  b.payload = b.payload.slice(0, i) + flipped + b.payload.slice(i + 1);
+  const field = typeof b.cose === "string" ? "cose" : "payload";
+  if (typeof b[field] !== "string" || b[field].length < 42) return;
+  const i = 20; // inside the signed bytes, past the envelope header
+  const flipped = (parseInt(b[field][i], 16) ^ 0xf).toString(16);
+  b[field] = b[field].slice(0, i) + flipped + b[field].slice(i + 1);
   $("bundle").value = JSON.stringify(b, null, 2);
   doVerify();
 }
@@ -326,6 +344,7 @@ function tamperByte() {
 $("verifyBtn").addEventListener("click", doVerify);
 $("tamperBtn").addEventListener("click", tamperByte);
 $("resetBtn").addEventListener("click", () => { loadSample(); doVerify(); });
+$("coseBtn").addEventListener("click", () => { loadSampleCOSE(); doVerify(); });
 
 loadSample();
 
