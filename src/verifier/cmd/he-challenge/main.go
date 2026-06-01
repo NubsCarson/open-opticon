@@ -208,8 +208,16 @@ func (s *server) handleSimulate(w http.ResponseWriter, r *http.Request) {
 // could both clear Gate 3; re-checking under the lock makes the per-session
 // compare-and-advance atomic and also guards a session GC'd mid-verification.
 func (s *server) verifyAndRecord(sid string, sess *session, b verifier.Bundle) map[string]any {
+	// Snapshot the per-session counter under the lock — reading it unlocked here
+	// would race the locked compare-and-advance write below under concurrent
+	// attests. VerifyBundle's counter check is only a pre-filter; the lock-held
+	// re-check at the switch is authoritative. (nonce is set once at session
+	// creation and never mutated, so it is safe to read unlocked.)
+	s.mu.Lock()
+	snapCounter := sess.lastCounter
+	s.mu.Unlock()
 	res := verifier.VerifyBundle(b, verifier.Options{
-		ExpectedNonce: sess.nonce, PinPubX: s.pinX, PinPubY: s.pinY, LastCounter: sess.lastCounter,
+		ExpectedNonce: sess.nonce, PinPubX: s.pinX, PinPubY: s.pinY, LastCounter: snapCounter,
 	})
 	ok, reason := res.OK, res.Reason
 	s.mu.Lock()

@@ -34,9 +34,10 @@ sim:
 units: sim
 	$(MAKE) -C sim test
 
-# Go verifier unit tests (stdlib only, offline).
+# Go verifier unit tests (stdlib runtime; offline; -race guards the concurrent
+# attest/anti-replay paths in he-challenge).
 verifier-test:
-	cd $(VERIFIER) && GOPROXY=off go test ./...
+	cd $(VERIFIER) && CGO_ENABLED=1 GOPROXY=off go test -race ./...
 
 # Full detect -> sign -> verify pipeline incl. negative attacks.
 e2e:
