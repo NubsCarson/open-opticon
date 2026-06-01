@@ -326,17 +326,17 @@ function doVerify() {
 }
 
 function tamperByte() {
-  // Flip one nibble of the signed bytes AFTER signing -> the signature gate must
-  // reject it. Works for the raw envelope (payload) and COSE (cose).
+  // Flip one whole byte of the signed bytes AFTER signing -> the signature gate
+  // must reject it. Works for the raw envelope (payload) and COSE (cose).
   let b;
   try { b = JSON.parse($("bundle").value); } catch (e) {
     setVerdict("fail", "ERROR", "bundle is not valid JSON, can't tamper"); return;
   }
   const field = typeof b.cose === "string" ? "cose" : "payload";
   if (typeof b[field] !== "string" || b[field].length < 42) return;
-  const i = 20; // inside the signed bytes, past the envelope header
-  const flipped = (parseInt(b[field][i], 16) ^ 0xf).toString(16);
-  b[field] = b[field].slice(0, i) + flipped + b[field].slice(i + 1);
+  const i = 20; // an even hex offset (byte boundary) past the envelope header
+  const flipped = (parseInt(b[field].substr(i, 2), 16) ^ 0xff).toString(16).padStart(2, "0");
+  b[field] = b[field].slice(0, i) + flipped + b[field].slice(i + 2);
   $("bundle").value = JSON.stringify(b, null, 2);
   doVerify();
 }

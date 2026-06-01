@@ -5,7 +5,7 @@
 #   make e2e        - audio end-to-end pipeline;  make vision-e2e - vision pipeline
 #   make chain-e2e  - streaming hash-chain: append-only stream + gap detection
 #   make cose-e2e   - COSE_Sign1 (RFC 9052) envelope: emit (C) -> verify (Go)
-#   make witness-e2e- operating log witnesses: cosign quorum + fork refusal
+#   make witness-e2e - operating log witnesses: cosign quorum + fork refusal
 #   make port-diff  - C detector == Rust zk port, differential test (needs cargo)
 #   make demo       - whole thesis on one clip: TEE + ZK + on-chain 2-of-2 agree
 #   make gui/sites/fuzz/repro/cross - GUI, static site, fuzzing, reproducible-build,

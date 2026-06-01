@@ -38,7 +38,7 @@ then `rzup install`). Then:
 ```sh
 cd zk
 cargo test -p oo_detector                       # the port matches the C detector
-cargo run --release -- ../path/to.pcm [nonce]   # prove + verify in zero knowledge
+cargo run --release -- ../path/to.pcm [nonce_hex]   # prove + verify in zero knowledge
 ```
 
 Expected (a real STARK proof captured on a 12-frame alarm clip, ~6 min on a
@@ -53,8 +53,8 @@ ZK-VERIFIED  detector(audio) proven in zero knowledge
   voice_active : 0
   frames       : 12  (active 12)
   samples      : 3072  (audio itself never revealed)
-  nonce_sha256 : 8d70d691c822d55638b6e7fd54cd94170c87d19eb1f628b757506ede5688d297
-  audio_sha256 : 76fce813fbb5a4c577d78eb957bcb37962a16a89d3c1151b801acdb96b9b0e2a
+  nonce_sha256 : 8d70d691c822d55638b6e7fd54cd94170c87d19eb1f628b757506ede5688d297  (binds the proof to the challenge)
+  audio_sha256 : 76fce813fbb5a4c577d78eb957bcb37962a16a89d3c1151b801acdb96b9b0e2a  (binds the proof to the exact input)
   image_id     : 7b3b6516a727718282f79230824c557da58b0edc9b4641f44d9aa240424996aa
 ```
 

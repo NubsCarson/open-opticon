@@ -1,9 +1,11 @@
 // Package verifier checks Honest Ear "bound-output" bundles.
 //
 // A bundle ties the detector's minimal output to the same P-256 key whose
-// identity is proven by OP-TEE remote attestation. Verification is three
-// independent gates, ALL of which must pass:
+// identity is proven by OP-TEE remote attestation. Verification is up to five
+// independent gates (gates 0 and 4 are optional); ALL applicable ones must pass:
 //
+//  0. Endorsement pin (optional): if a public-key pin is supplied, the bundle's
+//     key must equal it (constant-time). Ties trust to an enrolled device key.
 //  1. Signature: ECDSA-P256 over SHA-256(payload) verifies under the attested
 //     public key. (Proves the bytes were produced by the attested enclave key
 //     and were not altered by the untrusted host.)
@@ -12,6 +14,11 @@
 //  3. Anti-replay: the monotonic counter strictly exceeds the last one seen
 //     for this device. (Defeats re-presentation of an old, otherwise-valid
 //     bundle within a session.)
+//  4. Stream chain (optional): if an expected prev_digest is supplied, the
+//     payload must chain onto it, so a suppressed window is detectable.
+//
+// The same gates 0-4 also verify the COSE_Sign1 envelope (see cose.go); only the
+// signed structure differs.
 //
 // This package is dependency-free (Go stdlib only): it includes a tiny CBOR
 // reader for the exact, fixed payload schema (see ../common/he_payload.h).
@@ -135,7 +142,8 @@ var (
 	errBadPubKey = errors.New("public key is not on the P-256 curve")
 )
 
-// VerifyBundle runs all three gates and returns the decoded predicate.
+// VerifyBundle runs the gates (0: optional pin, 1: signature, 2: freshness,
+// 3: anti-replay, 4: optional stream chain) and returns the decoded predicate.
 func VerifyBundle(b Bundle, opt Options) VerifyResult {
 	payload, err := hex.DecodeString(b.Payload)
 	if err != nil {

@@ -18,8 +18,10 @@ add_executable (he_host host/he_host.c)
 target_include_directories (he_host PRIVATE ta/include PRIVATE host)
 target_link_libraries (he_host PRIVATE teec)
 install (TARGETS he_host DESTINATION ${CMAKE_INSTALL_BINDIR})
-# a sample 3.1 kHz alarm clip so he_host has audio to attest in the guest
-install (FILES host/clip.pcm DESTINATION ${CMAKE_INSTALL_BINDIR})
+# optional: a sample clip so he_host has audio to attest in the guest. Copy one
+# into host/ yourself (e.g. cp test/fixtures/alarm_short.pcm .../host/clip.pcm) —
+# stage_optee.sh does not stage it, so keep this OPTIONAL or the build fails.
+install (FILES host/clip.pcm DESTINATION ${CMAKE_INSTALL_BINDIR} OPTIONAL)
 ```
 
 The `ta/include` path carries `remote_attestation_ta.h` (the

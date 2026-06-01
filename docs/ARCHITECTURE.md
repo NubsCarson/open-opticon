@@ -55,7 +55,8 @@ A transcript *is* the surveillance payload; "consent" is unverifiable. An
 event/occupancy predicate delivers the safety utility while being structurally
 incapable of being a wiretap — and the published firmware hash proves no
 speech-emitting code path exists. The detector
-(`src/common/he_detector.c`) is integer-only (Q15 Goertzel + energy/ZCR VAD),
+(`src/common/he_detector.c`) is integer-only (a probe-band Q15 Goertzel + an
+energy-floor VAD),
 no float, no allocation, no libc beyond `<string.h>`, so it is small and safe
 inside a TA and is the *same source* the host tests run.
 

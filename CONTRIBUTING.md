@@ -8,7 +8,7 @@ is "clean, tested, honestly scoped."
 Everything host-runnable is gated by one command — no Docker, no Arm hardware:
 
 ```sh
-make test          # C unit tests + Go unit tests + e2e pipeline + tamper self-test
+make test          # C + Go units, audio/vision/chain/COSE/witness e2e, tamper self-test
 ```
 
 Requirements: `gcc`, `go` (>=1.23), `openssl`, `python3`. CI runs exactly this

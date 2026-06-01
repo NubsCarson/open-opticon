@@ -10,9 +10,9 @@ After the existing command defines (`...GET_CBOR_EVIDENCE`, `...GENERATE_KEYPAIR
 ```c
 /*
  * Sign an arbitrary message with the attestation key (ECDSA-P256/SHA-256).
- * [in]  memref[0]  message
- * [out] memref[1]  signature (>=64 bytes; 64-byte r||s on return)
- * [in]  memref[2]  (optional) packed key PubX||PubY||blob
+ * [in]      memref[0]  message
+ * [out/inout] memref[1]  signature (INOUT or OUTPUT; >=64 bytes; 64-byte r||s on return)
+ * [in]      memref[2]  (optional) packed key: PubX(32)||PubY(32)||blob(N)
  */
 #define PTA_REMOTE_ATTESTATION_SIGN_DATA 0x3
 ```
