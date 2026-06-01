@@ -148,7 +148,7 @@ func TestVerifyPSATokenRejectsTamper(t *testing.T) {
 // parser directly since the signature gate sits in front of it on the full path.
 func TestParsePSAClaimsRejectsHugeComponentArray(t *testing.T) {
 	var b []byte
-	b = append(b, cbHead(5, 1)...)        // claims map(1)
+	b = append(b, cbHead(5, 1)...)           // claims map(1)
 	b = append(b, cbUint(psaKeySoftware)...) // key 2399
 	b = append(b, cbHead(4, 1_000_000)...)   // array claiming 1e6 components, buffer is tiny
 	if _, err := parsePSAClaims(b); err == nil {
