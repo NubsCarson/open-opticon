@@ -78,6 +78,7 @@ src/verifier/    Go (stdlib only) verifier:
                    cmd/he-verify   - verify a bundle (raw or --cose), or a --quorum of provers
                    cmd/he-dump     - decode a bundle to readable fields (no verify) — audit aid
                    cmd/he-attest-verify - verify a PSA attestation token (EAT) offline
+                   cmd/he-receipt  - emit/verify portable "restraint receipts" (VoxTerm bridge)
                    cmd/he-log      - operate/prove/verify the transparency log
                    cmd/he-logd     - HTTP log server (checkpoints + consistency proofs)
                    cmd/he-witness  - witness daemon: consistency-check + cosign, refuse forks
@@ -116,7 +117,8 @@ docs/            ARCHITECTURE, THREAT_MODEL, RUNBOOK, HARDWARE, ROADMAP,
 [Use cases](docs/USE_CASES.md) · [Why a TEE? (vs ZK/FHE)](docs/WHY_TEE.md) ·
 [Architecture](docs/ARCHITECTURE.md) · [Threat model & scope](docs/THREAT_MODEL.md) ·
 [Runbook](docs/RUNBOOK.md) · [Hardware & device](docs/HARDWARE.md) ·
-[Reproducible builds](docs/REPRODUCIBLE.md) · [Roadmap](docs/ROADMAP.md) ·
+[Reproducible builds](docs/REPRODUCIBLE.md) · [Integrations (VoxTerm bridge)](docs/INTEGRATIONS.md) ·
+[Roadmap](docs/ROADMAP.md) ·
 [Sample attestation (QEMU)](docs/SAMPLE_ATTESTATION.md) ·
 [ZK proof of the detector](zk/README.md) · [On-chain verification](onchain/README.md)
 

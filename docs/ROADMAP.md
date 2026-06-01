@@ -156,12 +156,19 @@ but the right place for the verifier).
 
 ## Ecosystem / collaborations
 - **VoxTerm** ([dmarzzz/VoxTerm](https://github.com/dmarzzz/VoxTerm)) is a local-first
-  voice-transcription app whose privacy pitch is "nothing sent to a server, no
-  audio stored." Today that's a *trust* claim. open-opticon is the layer that
-  could make it a *provable* one: attest the transcription pipeline's firmware
-  and emit only signed, bound outputs, so VoxTerm could prove — not just assert —
-  that it didn't exfiltrate or retain audio. Natural collaboration; keep the
-  projects separate, bridge at the attestation boundary (don't merge codebases).
+  voice-transcription app whose pitch is "nothing sent to a server, no audio
+  stored" — today a *trust* claim. ✅ A portable bridge now exists: **restraint
+  receipts** (`src/verifier/receipt.go`, `he-receipt`, `make voxterm-e2e`) let a
+  transcription session emit signed, hash-chained, transparency-loggable records
+  binding {input_hash processed-then-discarded, output_hash, retained=0} per batch
+  — verifiable, gap-detecting, witness-cosignable, anchorable, with no codebase
+  merge (VoxTerm's existing `--hivemind-sink-url` is the seam). The signing key is
+  whatever hardware root the platform offers (OP-TEE/CAAM on Arm, Secure Enclave on
+  Apple, TPM on PC — the verifier is root-agnostic). HONEST SCOPE: this is
+  accountability (tamper-evident, gap-free, signed input→output), not a hardware
+  confidentiality proof — "which code ran / no covert exfil" still needs firmware
+  measurement (a TEE) and/or reproducible builds + open source. See
+  [`INTEGRATIONS.md`](INTEGRATIONS.md).
 
 ## Ops
 - **Reproducible builds:** host artifacts are byte-reproducible today

@@ -232,6 +232,13 @@ func SignCheckpoint(origin string, size int, root [32]byte, key *ecdsa.PrivateKe
 	return signNote(CheckpointBody(origin, size, root), key)
 }
 
+// SignNote signs an arbitrary canonical note body with a P-256 key (64-byte
+// r||s) — the one signing primitive, exported for other signed-note producers
+// (e.g. restraint receipts). Verify with VerifyCheckpointSig.
+func SignNote(body []byte, key *ecdsa.PrivateKey) ([]byte, error) {
+	return signNote(body, key)
+}
+
 // VerifyCheckpointSig reports whether sig (64-byte r||s) is a valid signature by
 // the key (pubX,pubY) over the checkpoint body — i.e. the log operator (or any
 // note signer) genuinely signed these exact bytes. Reuses the single ECDSA path.
