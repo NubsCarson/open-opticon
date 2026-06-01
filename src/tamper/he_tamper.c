@@ -26,10 +26,12 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <poll.h>
+#include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -45,7 +47,10 @@ static const char *key_file = NULL;
 static const char *flag_file = "/var/lib/honest-ear/tamper.tripped";
 static const char *exec_cmd = NULL; /* e.g. "he_host --trip" to latch the TA flag */
 
-/* Best-effort secure erase: overwrite with random, fsync, then unlink. */
+/* Best-effort secure erase: overwrite with random, fsync, then unlink.
+ * Returns 0 only if the file was (a) absent already, or (b) sized, overwritten,
+ * and unlinked without error; -1 on ANY failure so the caller never reports a
+ * destroyed key it did not actually destroy. */
 static int secure_erase(const char *path)
 {
     FILE *f = fopen(path, "r+b");
@@ -53,9 +58,15 @@ static int secure_erase(const char *path)
         /* nothing to erase is not a failure */
         return (errno == ENOENT) ? 0 : -1;
     }
-    fseek(f, 0, SEEK_END);
+    if (fseek(f, 0, SEEK_END) != 0) {
+        fclose(f);
+        return -1;
+    }
     long n = ftell(f);
-    fseek(f, 0, SEEK_SET);
+    if (n < 0 || fseek(f, 0, SEEK_SET) != 0) {
+        fclose(f);
+        return -1;
+    }
     FILE *r = fopen("/dev/urandom", "rb");
     for (long i = 0; i < n; i++) {
         int c = r ? fgetc(r) : (int)(i * 1103515245u);
@@ -82,30 +93,74 @@ static void write_flag(void)
     fclose(f);
 }
 
-static void breach_action(const char *why)
+/* True if the persistent tamper marker already exists (a prior-boot breach). */
+static int flag_present(void)
 {
+    return access(flag_file, F_OK) == 0;
+}
+
+/* Run the breach response. Returns 0 if the key was made unavailable (erased,
+ * or no key file was configured), -1 if a key file was configured but its erase
+ * FAILED — in which case the key may still be usable and the caller must treat
+ * the device as NOT reliably dead. The flag is always written regardless, as the
+ * second backstop (the TA refuses to attest when latched). */
+static int breach_action(const char *why)
+{
+    /* Make the breach atomic w.r.t. stop signals: a SIGTERM/SIGINT must not kill
+     * us mid-erase and leave the key half-overwritten with the flag unwritten. */
+    sigset_t block, old;
+    sigemptyset(&block);
+    sigaddset(&block, SIGTERM);
+    sigaddset(&block, SIGINT);
+    sigprocmask(SIG_BLOCK, &block, &old);
+
     fprintf(stderr,
             "\n================ TAMPER DETECTED ================\n"
             "  cause: %s\n"
             "  destroying device key material and tripping flag.\n"
             "=================================================\n\n",
             why);
+
+    int erased = 0; /* -1 only if we tried and failed */
     if (key_file) {
         if (secure_erase(key_file) == 0)
             fprintf(stderr, "[tamper] key material erased: %s\n", key_file);
-        else
-            fprintf(stderr, "[tamper] key erase issue (%s): %s\n", key_file,
-                    strerror(errno));
+        else {
+            erased = -1;
+            fprintf(stderr,
+                    "[tamper] CRITICAL: key erase FAILED (%s): %s — key may "
+                    "still be usable; relying on the tamper flag + hardware "
+                    "backstop.\n",
+                    key_file, strerror(errno));
+        }
     }
     write_flag();
+
+    /* The irreversible local actions (erase + flag) are done; restore the signal
+     * mask before the external hook so its child process has normal signal
+     * disposition (a blocked mask would be inherited across system()'s exec). */
+    sigprocmask(SIG_SETMASK, &old, NULL);
+
     if (exec_cmd) {
         fprintf(stderr, "[tamper] running breach hook: %s\n", exec_cmd);
         int rc = system(exec_cmd);
-        if (rc != 0)
-            fprintf(stderr, "[tamper] breach hook exit code %d\n", rc);
+        if (rc == -1)
+            fprintf(stderr, "[tamper] breach hook failed to run: %s\n",
+                    strerror(errno));
+        else if (WIFSIGNALED(rc))
+            fprintf(stderr, "[tamper] breach hook killed by signal %d\n",
+                    WTERMSIG(rc));
+        else if (WIFEXITED(rc) && WEXITSTATUS(rc) != 0)
+            fprintf(stderr, "[tamper] breach hook exit status %d\n",
+                    WEXITSTATUS(rc));
     }
-    fprintf(stderr, "[tamper] device is now cryptographically dead until "
-                    "re-provisioned.\n");
+    if (erased == 0)
+        fprintf(stderr, "[tamper] device is now cryptographically dead until "
+                        "re-provisioned.\n");
+    else
+        fprintf(stderr, "[tamper] WARNING: device NOT confirmed dead — manual "
+                        "key revocation required.\n");
+    return erased;
 }
 
 #ifdef HE_HAVE_GPIO
@@ -138,16 +193,26 @@ static int watch_gpio(const char *chip, unsigned int line, int active_low,
     }
     close(cfd);
 
+    /* A tamper flag from a PRIOR boot means the device was already breached; a
+     * fresh "closed" reading must not silently re-arm it. Honor the latch first. */
+    if (flag_present()) {
+        int st = breach_action("persistent tamper flag set (prior-boot breach)");
+        if (!loop) {
+            close(req.fd);
+            return st == 0 ? 0 : 1;
+        }
+    }
+
     /* Read the current level; the loop should be CLOSED (logical 1) at start. */
     struct gpio_v2_line_values vals;
     memset(&vals, 0, sizeof(vals));
     vals.mask = 1;
     if (ioctl(req.fd, GPIO_V2_LINE_GET_VALUES_IOCTL, &vals) == 0) {
         if ((vals.bits & 1) == 0) {
-            breach_action("tamper loop already OPEN at startup");
+            int st = breach_action("tamper loop already OPEN at startup");
             if (!loop) {
                 close(req.fd);
-                return 0;
+                return st == 0 ? 0 : 1;
             }
         } else {
             fprintf(stderr, "[tamper] armed: loop closed, watching line %u\n",
@@ -167,15 +232,26 @@ static int watch_gpio(const char *chip, unsigned int line, int active_low,
         ssize_t rd = read(req.fd, &ev, sizeof(ev));
         if (rd != sizeof(ev))
             continue;
-        /* Any edge -> re-read level; logical 0 means the loop is broken. */
+        /* Trust the LATCHED edge: a falling edge means the loop opened, even if a
+         * cut-and-bridge attacker re-closed it before we could re-read the level
+         * (a re-read alone is a TOCTOU that misses a transient open). */
+        if (ev.id == GPIO_V2_LINE_EVENT_FALLING_EDGE) {
+            int st = breach_action("tamper loop OPENED (falling edge)");
+            if (!loop) {
+                close(req.fd);
+                return st == 0 ? 0 : 1;
+            }
+            continue;
+        }
+        /* Belt-and-suspenders: also breach if the line currently reads open. */
         memset(&vals, 0, sizeof(vals));
         vals.mask = 1;
         if (ioctl(req.fd, GPIO_V2_LINE_GET_VALUES_IOCTL, &vals) == 0 &&
             (vals.bits & 1) == 0) {
-            breach_action("tamper loop OPENED");
+            int st = breach_action("tamper loop OPEN");
             if (!loop) {
                 close(req.fd);
-                return 0;
+                return st == 0 ? 0 : 1;
             }
         }
     }
@@ -223,10 +299,8 @@ int main(int argc, char **argv)
         }
     }
 
-    if (simulate) {
-        breach_action("--simulate");
-        return 0;
-    }
+    if (simulate)
+        return breach_action("--simulate") == 0 ? 0 : 1;
 
 #ifdef HE_HAVE_GPIO
     fprintf(stderr, "[tamper] watching %s line %u (active_low=%d)\n", chip,
