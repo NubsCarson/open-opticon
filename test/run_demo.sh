@@ -36,7 +36,9 @@ echo
 b "1. TEE ATTESTATION (in-enclave detector, host sim)"
 "$ROOT/sim/bin/he-attest-sim" "$CLIP" "$NONCE" 1 > /tmp/he-demo-bundle.json
 tee_event=$(python3 -c "import json;print(json.load(open('/tmp/he-demo-bundle.json'))['event'])")
-tee_ih=$(python3 -c "import json;print(json.load(open('/tmp/he-demo-bundle.json'))['payload'][-64:])")
+# input_hash is CBOR key 9 (bstr32, header 095820); locate it explicitly rather
+# than slicing the tail, since key 10 (prev_digest) now follows it.
+tee_ih=$(python3 -c "import json;p=json.load(open('/tmp/he-demo-bundle.json'))['payload'];i=p.index('095820')+6;print(p[i:i+64])")
 if /tmp/he-verify-demo --nonce "$NONCE" /tmp/he-demo-bundle.json >/dev/null 2>&1; then
     echo "   he-verify: PASS (signature + freshness + anti-replay)"
 else

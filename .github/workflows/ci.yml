@@ -33,6 +33,11 @@ jobs:
         run: |
           bash tools/build_wasm.sh
           node test/wasm_verify_test.js
+      - name: Cross-root demo (TEE + ZK + audio binding agree)
+        # `make demo` exits non-zero if the three roots disagree or aren't bound to
+        # the same audio — guards the showcase against payload-format drift (the
+        # forge leg auto-skips when Foundry is absent in this job).
+        run: make demo
 
   # Continuous reproducibility: rebuild the host artifacts in two separate trees
   # and fail if they are not byte-identical, then publish the SHA-256 measurement
