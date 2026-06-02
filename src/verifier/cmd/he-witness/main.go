@@ -218,11 +218,19 @@ func parsePeers(args []string) []peer {
 		}
 	}
 	var peers []peer
+	seen := map[string]bool{}
 	for _, s := range specs {
 		f := strings.Split(s, ",")
 		if len(f) != 4 {
 			cli.Die("--peer must be name,url,pubXhex,pubYhex (got %q)", s)
 		}
+		if f[0] == "" {
+			cli.Die("--peer name must not be empty")
+		}
+		if seen[f[0]] { // distinct names so each peer gets its own /health entry
+			cli.Die("duplicate --peer name %q", f[0])
+		}
+		seen[f[0]] = true
 		px, err := hex.DecodeString(f[2])
 		if err != nil {
 			cli.Die("bad peer %q pub_x: %v", f[0], err)

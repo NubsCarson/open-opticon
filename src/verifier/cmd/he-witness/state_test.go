@@ -94,3 +94,64 @@ func TestDaemonHealthAndCosignatureTransitions(t *testing.T) {
 		t.Errorf("cosignature after fork = %d, want 200 (last good kept)", code)
 	}
 }
+
+// peerServer stands up a mock peer witness serving /cosignature for the given
+// checkpoint (origin,size,root) signed by peerKey — what checkPeers consumes.
+func peerServer(t *testing.T, origin string, size int, root [32]byte, peerKey *ecdsa.PrivateKey) *httptest.Server {
+	t.Helper()
+	body := verifier.CheckpointBody(origin, size, root)
+	sig, err := verifier.CosignCheckpoint(body, peerKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	px, py := verifier.PubXY(peerKey)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/cosignature", func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"witness": "peer", "witness_pub_x": hex.EncodeToString(px),
+			"witness_pub_y": hex.EncodeToString(py), "cosignature": hex.EncodeToString(sig),
+			"checkpoint_body": string(body),
+		})
+	})
+	return httptest.NewServer(mux)
+}
+
+// The daemon's continuous cross-check: an AGREEing peer leaves /health healthy;
+// a peer holding a DIVERGENT root at the same size latches equivocation_detected.
+func TestDaemonPeerCrossCheck(t *testing.T) {
+	origin := "honest-ear.log/v1"
+	root := logOf("a", "b", "c").Root()
+	peerKey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	px, py := verifier.PubXY(peerKey)
+
+	// Our view = size 3, the genuine root. Peer agrees.
+	ours := &witnessState{Origin: origin, Size: 3, Root: hex.EncodeToString(root[:])}
+	agree := peerServer(t, origin, 3, root, peerKey)
+	defer agree.Close()
+	d := &daemon{cfg: config{name: "w1", origin: origin}, // nil client -> checkPeers defaults one
+		peers: []peer{{name: "peer", url: agree.URL, pubX: px, pubY: py}},
+		st:    ours, healthOK: true}
+	d.checkPeers()
+	code, body := callJSON(t, d.handleHealth)
+	if body["equivocation_detected"] != false {
+		t.Errorf("agreeing peer flagged equivocation: %+v", body)
+	}
+	if ps, _ := body["peers"].(map[string]any); ps == nil || ps["peer"] == nil {
+		t.Errorf("peer status missing from /health: %+v", body)
+	}
+	_ = code
+
+	// Now a peer holding a DIFFERENT root at the same size -> equivocation latched.
+	forkRoot := logOf("a", "b", "X").Root()
+	fork := peerServer(t, origin, 3, forkRoot, peerKey)
+	defer fork.Close()
+	d.peers = []peer{{name: "peer", url: fork.URL, pubX: px, pubY: py}}
+	d.checkPeers()
+	code2, body2 := callJSON(t, d.handleHealth)
+	if body2["equivocation_detected"] != true {
+		t.Errorf("divergent peer did NOT latch equivocation: %+v", body2)
+	}
+	if body2["ok"] != false || code2 != 503 {
+		t.Errorf("equivocation should make /health unhealthy: code=%d body=%+v", code2, body2)
+	}
+}

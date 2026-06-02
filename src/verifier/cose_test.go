@@ -1,6 +1,7 @@
 package verifier
 
 import (
+	"bytes"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -130,5 +131,27 @@ func TestSkipValueDepthCapRejectsDeepNesting(t *testing.T) {
 	shallow := &cborReader{b: []byte{0xc6, 0x82, 0x01, 0x62, 'h', 'i'}}
 	if err := shallow.skipValue(); err != nil {
 		t.Fatalf("shallow nested CBOR wrongly rejected: %v", err)
+	}
+}
+
+// bstrHead must use the smallest correct CBOR head at each size class and never
+// truncate the length (the >=64KiB 4-byte form was the fix).
+func TestBstrHeadNoTruncation(t *testing.T) {
+	cases := []struct {
+		n    int
+		want []byte
+	}{
+		{0, []byte{0x40}},
+		{23, []byte{0x57}},
+		{24, []byte{0x58, 24}},
+		{255, []byte{0x58, 255}},
+		{256, []byte{0x59, 0x01, 0x00}},
+		{65535, []byte{0x59, 0xff, 0xff}},
+		{65536, []byte{0x5a, 0x00, 0x01, 0x00, 0x00}}, // was silently truncated before
+	}
+	for _, c := range cases {
+		if got := bstrHead(c.n); !bytes.Equal(got, c.want) {
+			t.Errorf("bstrHead(%d) = %x, want %x", c.n, got, c.want)
+		}
 	}
 }

@@ -14,16 +14,18 @@ import (
 // coseProtected is the COSE protected-header bstr: {1: -7} = alg ES256.
 var coseProtected = []byte{0x43, 0xa1, 0x01, 0x26}
 
-// bstrHead returns the CBOR byte-string head for length n (smallest form). COSE
-// payloads here are well under 64KiB, so the 2- and 3-byte forms suffice.
+// bstrHead returns the CBOR byte-string head for length n (smallest form),
+// covering 1/2/4-byte arguments so it never silently truncates a large payload.
 func bstrHead(n int) []byte {
 	switch {
 	case n < 24:
 		return []byte{byte(0x40 | n)}
 	case n < 256:
 		return []byte{0x58, byte(n)}
-	default:
+	case n < 65536:
 		return []byte{0x59, byte(n >> 8), byte(n)}
+	default:
+		return []byte{0x5a, byte(n >> 24), byte(n >> 16), byte(n >> 8), byte(n)}
 	}
 }
 
