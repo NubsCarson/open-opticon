@@ -2,11 +2,18 @@ package main
 
 import (
 	"bytes"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	verifier "honest-ear/verifier"
 )
 
 // These exercise the /listen input-validation early-returns, which run before
@@ -49,4 +56,128 @@ func TestListenValidation(t *testing.T) {
 			}
 		})
 	}
+}
+
+// goldenAlarm is the canonical bound-output payload (nonce AABB, event 2 =
+// alarm_tone) — the same vector the verifier package tests use.
+func goldenAlarm(t *testing.T) []byte {
+	t.Helper()
+	const c32 = "1111111111111111111111111111111111111111111111111111111111111111"
+	const i32 = "2222222222222222222222222222222222222222222222222222222222222222"
+	const p32 = "3333333333333333333333333333333333333333333333333333333333333333"
+	b, err := hex.DecodeString("ab" + "0001" + "0142aabb" + "0202" + "03f4" + "0401" +
+		"050a" + "0618a0" + "0707" + "085820" + c32 + "095820" + i32 + "0a5820" + p32)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
+}
+
+// mintReq signs payload with a fresh P-256 key and returns the /verify request
+// JSON (nonce + the bound-output bundle). The handler pins no key, so a
+// self-consistent signature clears the signature + freshness gates.
+func mintReq(t *testing.T, payload []byte, nonceHex string) []byte {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := sha256.Sum256(payload)
+	r, s, err := ecdsa.Sign(rand.Reader, key, h[:])
+	if err != nil {
+		t.Fatal(err)
+	}
+	sig := make([]byte, 64)
+	r.FillBytes(sig[:32])
+	s.FillBytes(sig[32:])
+	pad := func(b []byte) []byte { o := make([]byte, 32); copy(o[32-len(b):], b); return o }
+	req := verifyReq{Nonce: nonceHex, Bundle: verifier.Bundle{
+		Schema:  "honest-ear/bound-output/v1",
+		Payload: hex.EncodeToString(payload),
+		Sig:     hex.EncodeToString(sig),
+		PubX:    hex.EncodeToString(pad(key.PublicKey.X.Bytes())),
+		PubY:    hex.EncodeToString(pad(key.PublicKey.Y.Bytes())),
+	}}
+	body, err := json.Marshal(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return body
+}
+
+func postVerify(t *testing.T, body []byte) (int, result) {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	verifyHandler(rec, httptest.NewRequest(http.MethodPost, "/verify", bytes.NewReader(body)))
+	var res result
+	if rec.Code == http.StatusOK {
+		if err := json.Unmarshal(rec.Body.Bytes(), &res); err != nil {
+			t.Fatalf("bad JSON: %v", err)
+		}
+	}
+	return rec.Code, res
+}
+
+func TestVerifyHandler(t *testing.T) {
+	// GET is rejected before any parsing.
+	rec := httptest.NewRecorder()
+	verifyHandler(rec, httptest.NewRequest(http.MethodGet, "/verify", nil))
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Errorf("GET status = %d, want 405", rec.Code)
+	}
+
+	// Malformed JSON and bad nonce hex fail closed with a clear reason.
+	if _, res := postVerify(t, []byte("not json")); res.Verified || !strings.Contains(res.Reason, "bad bundle") {
+		t.Errorf("bad JSON: verified=%v reason=%q", res.Verified, res.Reason)
+	}
+	badNonce := mintReq(t, goldenAlarm(t), "zz")
+	if _, res := postVerify(t, badNonce); res.Verified || !strings.Contains(res.Reason, "bad nonce hex") {
+		t.Errorf("bad nonce: verified=%v reason=%q", res.Verified, res.Reason)
+	}
+
+	// A valid signed bundle whose nonce matches the payload verifies, and
+	// fillVerified populates the predicate (success branch, previously untested).
+	if _, res := postVerify(t, mintReq(t, goldenAlarm(t), "aabb")); !res.Verified || res.Event != "alarm_tone" {
+		t.Errorf("valid bundle: verified=%v event=%q reason=%q", res.Verified, res.Event, res.Reason)
+	}
+
+	// Flip one payload byte -> the signature no longer matches -> rejected, and no
+	// predicate is shown (the live "tamper test" path).
+	p := goldenAlarm(t)
+	p[5] ^= 0xff
+	if _, res := postVerify(t, mintReqKeepSig(t, p, "aabb")); res.Verified || res.Event != "" {
+		t.Errorf("tampered payload accepted: verified=%v event=%q", res.Verified, res.Event)
+	}
+}
+
+// mintReqKeepSig signs the ORIGINAL golden payload but ships a tampered payload —
+// i.e. the signature is over different bytes than presented, so verification must
+// fail (mirrors the browser flipping a byte after the device signed).
+func mintReqKeepSig(t *testing.T, tamperedPayload []byte, nonceHex string) []byte {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := sha256.Sum256(goldenAlarm(t)) // sign the GOOD payload
+	r, s, err := ecdsa.Sign(rand.Reader, key, h[:])
+	if err != nil {
+		t.Fatal(err)
+	}
+	sig := make([]byte, 64)
+	r.FillBytes(sig[:32])
+	s.FillBytes(sig[32:])
+	pad := func(b []byte) []byte { o := make([]byte, 32); copy(o[32-len(b):], b); return o }
+	req := verifyReq{Nonce: nonceHex, Bundle: verifier.Bundle{
+		Schema:  "honest-ear/bound-output/v1",
+		Payload: hex.EncodeToString(tamperedPayload), // ...but present the BAD payload
+		Sig:     hex.EncodeToString(sig),
+		PubX:    hex.EncodeToString(pad(key.PublicKey.X.Bytes())),
+		PubY:    hex.EncodeToString(pad(key.PublicKey.Y.Bytes())),
+	}}
+	body, err := json.Marshal(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return body
 }
