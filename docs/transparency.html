@@ -151,7 +151,7 @@
          and <span class="mono">latestRoot()</span> on the anchor via a public RPC and compares them to the
          transparency-log checkpoint committed in this repo. If they match, the public ledger agrees with
          the log's published root.</p>
-      <div class="kv">
+      <div class="kv" role="status" aria-live="polite" aria-atomic="true">
         <div class="k">latestSize</div><div class="v" id="liveSize"><span class="pend">reading…</span></div>
         <div class="k">latestRoot</div><div class="v" id="liveRoot"><span class="pend">reading…</span></div>
         <div class="k">vs. committed</div><div class="v" id="liveMatch"><span class="pend">checking against checkpoint_fixture.json (size 5)…</span></div>
@@ -326,9 +326,18 @@ async function readAnchor() {
       const rootOk = rootNorm.toLowerCase() === COMMITTED_ROOT.toLowerCase();
       if (sizeOk && rootOk) {
         elMatch.innerHTML = '<span class="ok">✓ matches the committed checkpoint (size 5, root 0xd3fb…4462)</span>';
-      } else {
+      } else if (size > COMMITTED_SIZE) {
+        // Strictly grown past the committed size: benign — the repo fixture is just an older snapshot.
         elMatch.innerHTML = '<span class="pend">live anchor has advanced beyond the committed checkpoint' +
           ' (size ' + size + ') — the repo fixture is a snapshot; check Etherscan for current state.</span>';
+      } else if (size === COMMITTED_SIZE) {
+        // SAME size, DIFFERENT root = equivocation/fork — exactly what this dashboard exists to surface. NOT benign.
+        elMatch.innerHTML = '<span class="bad">✗ root MISMATCH at the committed size (' + size + ') —' +
+          ' the public ledger\'s root disagrees with the committed root. Do not trust; cross-check on Etherscan.</span>';
+      } else {
+        // Live size is BELOW the committed checkpoint: a rollback/reset (or a contract returning 0). NOT benign.
+        elMatch.innerHTML = '<span class="bad">✗ live size (' + size + ') is BELOW the committed checkpoint (' +
+          COMMITTED_SIZE + ') — possible rollback/reset. Cross-check on Etherscan.</span>';
       }
       elSrc.innerHTML = "read via " + rpc.replace("https://", "") +
         ' · <a class="lnk" href="https://sepolia.etherscan.io/address/' + ANCHOR + '#readContract">cross-check on Etherscan</a>';
