@@ -22,8 +22,9 @@ QUORUM="${QUORUM:-0x05DAa5dc9C21f4d17e930a158A3fc636de5D1815}" # audio+nonce-bou
 command -v cast >/dev/null || { echo "need Foundry's 'cast' (https://getfoundry.sh)"; exit 1; }
 
 get() { python3 -c "import json;print(json.load(open('$FIX'))['$1'])"; }
+expect() { python3 -c "import json;print(json.load(open('$FIX'))['expect']['$1'])"; }
 seal=$(get seal); journal=$(get journal); payload=$(get payload); sig=$(get sig)
-want_ev=$(get expect | python3 -c "import sys,ast;print(ast.literal_eval(sys.stdin.read())['event'])")
+want_ev=$(expect event); want_pres=$(expect presence)
 
 echo "calling HonestEarQuorum.verdict() at $QUORUM on $RPC ..."
 out=$(cast call "$QUORUM" "verdict(bytes,bytes,bytes,bytes)(uint32,uint32)" \
@@ -38,9 +39,10 @@ echo "  presence = $pres"
 echo
 
 # Fail loudly if the live chain didn't return the expected verdict — a silent wrong
-# answer would defeat the whole "check, don't trust" point.
-if [ "$ev" != "$want_ev" ]; then
-  echo "MISMATCH: live verdict event=$ev, expected $want_ev" >&2
+# answer would defeat the whole "check, don't trust" point. Guard the FULL (event,
+# presence) tuple the banner + README advertise, not just the event.
+if [ "$ev" != "$want_ev" ] || [ "$pres" != "$want_pres" ]; then
+  echo "MISMATCH: live (event,presence)=($ev,$pres), expected ($want_ev,$want_pres)" >&2
   exit 1
 fi
 
