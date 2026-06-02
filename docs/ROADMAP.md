@@ -109,8 +109,13 @@ From this PoC to a defensible product, in order of trust-impact.
   one it last cosigned, and **refuses to cosign a forked or rewound history**
   (pinning the log key). A 2-of-3 witness quorum verifies and a fork is refused
   end-to-end in `make witness-e2e` (plus deterministic httptest unit tests).
-  Remaining: running these witnesses as genuinely separate, gossiping operators
-  across the network (deployment, not protocol).
+  ✅ Witnesses now also **cross-check each other**: `he-witness compare` fetches a
+  peer witness's published cosignature, verifies it under the peer's pinned key,
+  and flags equivocation (a divergent root at the same size) — a bounded one-shot
+  1:1 check (proven in `make witness-e2e` + `TestCrossCheck`). Remaining: a true
+  gossiping mesh — peer discovery, N-peer fan-out, and continuous in-daemon
+  cross-checking across genuinely separate network operators (deployment + a
+  larger protocol step, not this 1:1 slice).
 - **Sign endorsements as CoRIM.** Provision Veraison with a COSE-signed CoRIM and
   log the signed CoRIM as the transparency-log entry, so endorser authenticity
   is covered end-to-end.

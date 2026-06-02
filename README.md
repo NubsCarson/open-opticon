@@ -82,7 +82,7 @@ src/verifier/    Go (stdlib only) verifier:
                    cmd/he-receipt  - emit/verify portable "restraint receipts" (VoxTerm bridge)
                    cmd/he-log      - operate/prove/verify the transparency log
                    cmd/he-logd     - HTTP log server (checkpoints + consistency proofs)
-                   cmd/he-witness  - witness daemon: consistency-check + cosign, refuse forks
+                   cmd/he-witness  - witness daemon: consistency-check + cosign, refuse forks, cross-check peers
                    cmd/he-challenge - live nonce server + mobile verifier page (/v)
                    cmd/he-consent  - Track-6: k-of-n threshold reveal + consent-gated disclosure
                    cmd/he-gui      - browser click-to-listen web UI
