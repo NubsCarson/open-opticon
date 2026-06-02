@@ -80,5 +80,21 @@ else
 fi
 
 echo
+echo "== standards-aligned COSE_Sign1 endorsement (ES256) =="
+"$W/he-log" endorse --cose --key "$EPRIV" --endorser "acme-provisioning" --device-x "$DX" --device-y "$DY" > "$W/cose.json" 2>/dev/null
+HASCOSE=$(python3 -c "import json;print('1' if json.load(open('$W/cose.json')).get('cose') else '0')")
+[ "$HASCOSE" = "1" ] && ok "COSE_Sign1 endorsement emitted" || bad "no cose field emitted"
+if "$W/he-log" endorse-verify --cose --file "$W/cose.json" --endorser-x "$EX" --endorser-y "$EY" >/dev/null 2>&1; then
+  ok "COSE endorsement verifies under the pinned endorser key"
+else
+  bad "genuine COSE endorsement rejected"
+fi
+if "$W/he-log" endorse-verify --cose --file "$W/cose.json" --endorser-x "$DX" --endorser-y "$DY" >/dev/null 2>&1; then
+  bad "COSE endorsement verified under a wrong endorser key"
+else
+  ok "wrong endorser key rejected (COSE)"
+fi
+
+echo
 echo "== summary: $pass passed, $fail failed =="
 [ "$fail" -eq 0 ] || exit 1

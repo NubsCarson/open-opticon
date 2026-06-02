@@ -4,64 +4,21 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/hex"
 	"testing"
 )
-
-// bstrHead returns the CBOR byte-string head for length n (smallest form).
-func bstrHead(n int) []byte {
-	switch {
-	case n < 24:
-		return []byte{byte(0x40 | n)}
-	case n < 256:
-		return []byte{0x58, byte(n)}
-	default:
-		return []byte{0x59, byte(n >> 8), byte(n)}
-	}
-}
-
-var coseProtected = []byte{0x43, 0xa1, 0x01, 0x26} // bstr {1:-7} (ES256)
-
-// coseSigStructure mirrors he_cose_sig_structure (the bytes that get signed).
-func coseSigStructure(payload []byte) []byte {
-	s := []byte{0x84}
-	s = append(s, coseContext...)
-	s = append(s, coseProtected...)
-	s = append(s, 0x40) // external_aad
-	s = append(s, bstrHead(len(payload))...)
-	s = append(s, payload...)
-	return s
-}
-
-// coseMessage mirrors he_cose_sign1 (the COSE_Sign1 wire bytes).
-func coseMessage(payload, sig []byte) []byte {
-	m := []byte{0xd2, 0x84}
-	m = append(m, coseProtected...)
-	m = append(m, 0xa0) // unprotected {}
-	m = append(m, bstrHead(len(payload))...)
-	m = append(m, payload...)
-	m = append(m, bstrHead(64)...)
-	m = append(m, sig...)
-	return m
-}
 
 // signCOSE signs the COSE Sig_structure over `payload` with key and returns the
 // on-the-wire COSEBundle.
 func signCOSE(t *testing.T, payload []byte, key *ecdsa.PrivateKey) COSEBundle {
 	t.Helper()
-	ss := coseSigStructure(payload)
-	h := sha256.Sum256(ss)
-	r, s, err := ecdsa.Sign(rand.Reader, key, h[:])
+	msg, err := SignCOSESign1(payload, key)
 	if err != nil {
 		t.Fatal(err)
 	}
-	sig := make([]byte, 64)
-	r.FillBytes(sig[:32])
-	s.FillBytes(sig[32:])
 	return COSEBundle{
 		Schema: "honest-ear/cose-sign1/v1",
-		COSE:   hex.EncodeToString(coseMessage(payload, sig)),
+		COSE:   hex.EncodeToString(msg),
 		PubX:   hex.EncodeToString(leftPad(key.PublicKey.X.Bytes(), 32)),
 		PubY:   hex.EncodeToString(leftPad(key.PublicKey.Y.Bytes(), 32)),
 	}

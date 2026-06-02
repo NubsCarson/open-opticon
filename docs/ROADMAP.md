@@ -124,10 +124,16 @@ From this PoC to a defensible product, in order of trust-impact.
   and a verifier confirms BOTH the endorser signature (`he-log endorse-verify`
   under the pinned endorser key) AND log inclusion (`he-log verify`) — separating
   WHO vouched from the operator who merely appends. `make endorse-e2e` +
-  `TestSignedEndorsement`. Remaining: the IETF-CoRIM / COSE-CBOR wire format and a
-  Veraison-provisioned, manufacturer-rooted endorser (the endorser here is
-  self-provisioned P-256 — the role separation is real, a public trust anchor is
-  future/needs-hardware).
+  `TestSignedEndorsement`. ✅ Also available standards-aligned: `endorse --cose`
+  wraps the body in a tagged COSE_Sign1 (ES256) via a promoted PRODUCTION COSE
+  encoder (`cose_encode.go` `SignCOSESign1`, sharing the one Sig_structure builder
+  with verification — removed the prior test-only COSE encoder duplication);
+  `endorse-verify --cose` / `VerifyCOSEEndorsement` check it, so standard RATS/COSE
+  tooling can consume the endorsement (`TestCOSEEndorsement`). Remaining: the full
+  IETF-CoRIM tag structure (CoMID/CoSWID triples, profile) — a large spec, NOT the
+  COSE envelope above — and a Veraison-provisioned, manufacturer-rooted endorser
+  (the endorser here is self-provisioned P-256; the role separation + COSE wire are
+  real, a public trust anchor is future/needs-hardware).
 
 ## On-chain hardening
 The `onchain/` layer is a PoC public-verification leg (its honest scope is in

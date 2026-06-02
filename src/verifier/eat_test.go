@@ -5,7 +5,6 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
-	"crypto/sha256"
 	"testing"
 )
 
@@ -54,18 +53,16 @@ func psaClaims(profile string, nonce, instanceID, implID, measurement, signerID 
 }
 
 // mintToken builds a COSE_Sign1 (ES256) over the given claims payload, signed by
-// key — i.e. a faithful PSA attestation token for testing the verifier.
+// key — i.e. a faithful PSA attestation token for testing the verifier. Uses the
+// production COSE encoder (SignCOSESign1), so the test mints exactly what the
+// verifier accepts.
 func mintToken(t *testing.T, payload []byte, key *ecdsa.PrivateKey) []byte {
 	t.Helper()
-	h := sha256.Sum256(coseSigStructure(payload))
-	r, s, err := ecdsa.Sign(rand.Reader, key, h[:])
+	msg, err := SignCOSESign1(payload, key)
 	if err != nil {
 		t.Fatal(err)
 	}
-	sig := make([]byte, 64)
-	r.FillBytes(sig[:32])
-	s.FillBytes(sig[32:])
-	return coseMessage(payload, sig)
+	return msg
 }
 
 func TestVerifyPSATokenHappyPath(t *testing.T) {

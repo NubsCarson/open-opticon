@@ -61,6 +61,7 @@ type endorsement struct {
 	EndorserPubX string `json:"endorser_pub_x"`
 	EndorserPubY string `json:"endorser_pub_y"`
 	EntryHex     string `json:"entry_hex"`
+	COSE         string `json:"cose,omitempty"` // COSE_Sign1 (ES256) hex, when --cose
 }
 
 // consistencyBundle proves the current tree is an append-only extension of an
@@ -157,8 +158,8 @@ commands (subcommand first, then flags):
   cosign --checkpoint <body> --key <privHex> --witness NAME   witness-cosign a checkpoint
   cosign-verify --checkpoint <body> --cosigs <c.json> --enrolled name:x:y --witness-threshold k
   verify --proof <proof.json>                        check an inclusion-proof bundle
-  endorse --key <endorserPrivHex> --endorser NAME --device-x X --device-y Y   signed endorsement
-  endorse-verify --file <e.json> --endorser-x X --endorser-y Y   check the endorser signature
+  endorse [--cose] --key <endorserPrivHex> --endorser NAME --device-x X --device-y Y   signed endorsement
+  endorse-verify [--cose] --file <e.json> --endorser-x X --endorser-y Y   check the endorser signature
 
 State is a JSON file (--log, default he-log.json). Stdlib only.`
 
@@ -187,6 +188,7 @@ func main() {
 	endorserX := flag.String("endorser-x", "", "pinned endorser pub X (hex), for endorse-verify")
 	endorserY := flag.String("endorser-y", "", "pinned endorser pub Y (hex), for endorse-verify")
 	filePath := flag.String("file", "", "signed endorsement JSON, for endorse-verify")
+	coseFlag := flag.Bool("cose", false, "emit/verify a COSE_Sign1 (ES256) endorsement, for endorse/endorse-verify")
 	var enrolledWitnesses witnessList
 	flag.Var(&enrolledWitnesses, "enrolled", "enrolled witness as name:pubXhex:pubYhex (repeatable, for cosign-verify)")
 	flag.CommandLine.Parse(os.Args[2:]) // subcommand-first; flags follow it
@@ -401,11 +403,19 @@ func main() {
 			cli.Die("%v", err)
 		}
 		ex, ey := verifier.PubXY(key)
-		out, _ := json.MarshalIndent(endorsement{
+		e := endorsement{
 			Endorser: *endorser, Body: string(body), Sig: hex.EncodeToString(sig),
 			EndorserPubX: hex.EncodeToString(ex), EndorserPubY: hex.EncodeToString(ey),
 			EntryHex: hex.EncodeToString(body),
-		}, "", "  ")
+		}
+		if *coseFlag {
+			cose, err := verifier.SignCOSEEndorsement(*endorser, mustHex(*deviceX, "device-x"), mustHex(*deviceY, "device-y"), key)
+			if err != nil {
+				cli.Die("%v", err)
+			}
+			e.COSE = hex.EncodeToString(cose)
+		}
+		out, _ := json.MarshalIndent(e, "", "  ")
 		fmt.Println(string(out))
 
 	case "endorse-verify":
@@ -422,15 +432,28 @@ func main() {
 		if err := json.Unmarshal(raw, &e); err != nil {
 			cli.Die("parsing endorsement: %v", err)
 		}
-		body := []byte(e.Body)
-		if !verifier.VerifyCheckpointSig(body, mustHex(e.Sig, "endorser_sig"),
-			mustHex(*endorserX, "endorser-x"), mustHex(*endorserY, "endorser-y")) {
-			fmt.Printf("%s  endorsement signature does not verify under the pinned endorser key\n", cli.Fail())
-			os.Exit(1)
-		}
-		name, dx, dy, err := verifier.ParseEndorsement(body)
-		if err != nil {
-			cli.Die("%v", err)
+		var name string
+		var dx, dy []byte
+		if *coseFlag {
+			// COSE_Sign1 path: verify the ES256 signature over the wrapped body.
+			n, x, y, err := verifier.VerifyCOSEEndorsement(mustHex(e.COSE, "cose"),
+				mustHex(*endorserX, "endorser-x"), mustHex(*endorserY, "endorser-y"))
+			if err != nil {
+				fmt.Printf("%s  COSE endorsement does not verify under the pinned endorser key: %v\n", cli.Fail(), err)
+				os.Exit(1)
+			}
+			name, dx, dy = n, x, y
+		} else {
+			body := []byte(e.Body)
+			if !verifier.VerifyCheckpointSig(body, mustHex(e.Sig, "endorser_sig"),
+				mustHex(*endorserX, "endorser-x"), mustHex(*endorserY, "endorser-y")) {
+				fmt.Printf("%s  endorsement signature does not verify under the pinned endorser key\n", cli.Fail())
+				os.Exit(1)
+			}
+			var err error
+			if name, dx, dy, err = verifier.ParseEndorsement(body); err != nil {
+				cli.Die("%v", err)
+			}
 		}
 		fmt.Printf("%s  endorser %q vouches for device pub_x=%x pub_y=%x\n", cli.Pass(), name, dx, dy)
 

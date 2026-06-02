@@ -307,6 +307,32 @@ func ParseEndorsement(body []byte) (endorser string, devicePubX, devicePubY []by
 	return string(lines[1]), x, y, nil
 }
 
+// SignCOSEEndorsement wraps an EndorsementBody in a tagged COSE_Sign1 (ES256)
+// signed by the endorser, so standard RATS/COSE tooling can consume it. The
+// payload is the exact EndorsementBody bytes; reuses the one COSE encoder.
+func SignCOSEEndorsement(endorser string, devicePubX, devicePubY []byte, key *ecdsa.PrivateKey) ([]byte, error) {
+	body, err := EndorsementBody(endorser, devicePubX, devicePubY)
+	if err != nil {
+		return nil, err
+	}
+	return SignCOSESign1(body, key)
+}
+
+// VerifyCOSEEndorsement verifies a COSE_Sign1-wrapped endorsement under the
+// pinned endorser key and returns the inner fields. Reuses the same COSE parse +
+// Sig_structure + ECDSA path as VerifyCOSEBundle (parseCOSESign1 already requires
+// ES256); verify first, then trust the returned device key.
+func VerifyCOSEEndorsement(cose, endorserPubX, endorserPubY []byte) (endorser string, devicePubX, devicePubY []byte, err error) {
+	protBstr, payload, payloadBstr, sig, perr := parseCOSESign1(cose)
+	if perr != nil {
+		return "", nil, nil, fmt.Errorf("cose: %w", perr)
+	}
+	if verr := verifySig(coseSigStruct(protBstr, payloadBstr), sig, endorserPubX, endorserPubY); verr != nil {
+		return "", nil, nil, fmt.Errorf("endorser signature: %w", verr)
+	}
+	return ParseEndorsement(payload)
+}
+
 // CheckLoggedEndorsement is the verifier-side gate: it confirms an endorsement
 // (e.g. pub_x||pub_y of a trusted device key, or an EndorsementBody) is included
 // in a checkpoint that the log operator actually signed. Reuses verifySig for the

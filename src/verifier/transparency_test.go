@@ -274,3 +274,34 @@ func TestSignedEndorsement(t *testing.T) {
 		t.Fatalf("signed endorsement not confirmed as logged: %v", err)
 	}
 }
+
+// A COSE_Sign1-wrapped endorsement verifies under the endorser key and yields the
+// inner device key; a wrong key or tampered message is rejected. Reuses the one
+// COSE encode/verify path (SignCOSESign1 / parseCOSESign1).
+func TestCOSEEndorsement(t *testing.T) {
+	endorser, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	epx, epy := PubXY(endorser)
+	device, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	dpx, dpy := PubXY(device)
+
+	cose, err := SignCOSEEndorsement("acme-provisioning", dpx, dpy, endorser)
+	if err != nil {
+		t.Fatal(err)
+	}
+	name, gx, gy, err := VerifyCOSEEndorsement(cose, epx, epy)
+	if err != nil || name != "acme-provisioning" || !bytes.Equal(gx, dpx) || !bytes.Equal(gy, dpy) {
+		t.Fatalf("verify mismatch: %q %x %x %v", name, gx, gy, err)
+	}
+	// Wrong endorser key must fail.
+	other, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	ox, oy := PubXY(other)
+	if _, _, _, err := VerifyCOSEEndorsement(cose, ox, oy); err == nil {
+		t.Error("COSE endorsement verified under a wrong endorser key")
+	}
+	// A tampered byte in the COSE message must fail.
+	bad := append([]byte(nil), cose...)
+	bad[len(bad)-1] ^= 0xff // flip a signature byte
+	if _, _, _, err := VerifyCOSEEndorsement(bad, epx, epy); err == nil {
+		t.Error("tampered COSE endorsement verified")
+	}
+}
