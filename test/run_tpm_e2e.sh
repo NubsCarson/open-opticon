@@ -3,8 +3,8 @@
 # Heterogeneous-root demo: a TPM-resident NIST P-256 key signs an Honest Ear
 # artifact that the EXISTING stdlib-only verifier accepts — with the private key
 # generated INSIDE the TPM and never exported. This substantiates the project's
-# "TPM on PC (the verifier is root-agnostic)" claim with genuinely different
-# silicon than the OP-TEE/QEMU test key.
+# "TPM on PC (the verifier is root-agnostic)" claim with a genuinely different
+# keystore/root than the OP-TEE/QEMU test key (a SOFTWARE TPM here — see below).
 #
 # It runs against a SOFTWARE TPM (swtpm) so it needs no real-TPM access and never
 # touches /dev/tpm0; on a box with a real TPM, set
@@ -14,8 +14,9 @@
 #
 # HONEST SCOPE: the TPM did NOT observe the audio. There is no measured-boot/PCR
 # binding of the detector to this key. This demonstrates the verifier's
-# ROOT-AGNOSTIC signing capability with independent silicon (private key
-# TPM-resident); it is NOT a second WITNESS of the event, and is strictly weaker
+# ROOT-AGNOSTIC signing capability with an independent root (private key
+# TPM-resident; swtpm here, a real TPM on hardware); it is NOT a second WITNESS
+# of the event, and is strictly weaker
 # than the OP-TEE Tier-1 attest+bind+verify (which alone ties a key to in-enclave
 # processing). It does not add a new "proven" hardware property.
 set -u
@@ -145,8 +146,8 @@ fi
 
 echo
 echo "  HONEST SCOPE: this shows the verifier is root-agnostic — a TPM-resident key"
-echo "  (independent silicon, private half never exported) signs an artifact the"
-echo "  unmodified verifier accepts. The TPM did NOT observe the audio; this is a"
+echo "  (independent root, private half never exported; swtpm here) signs an artifact"
+echo "  the unmodified verifier accepts. The TPM did NOT observe the audio; this is a"
 echo "  signing-root demonstration, NOT a second witness, and is weaker than the"
 echo "  OP-TEE Tier-1 attest+bind."
 echo

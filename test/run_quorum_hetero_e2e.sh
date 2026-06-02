@@ -6,7 +6,9 @@
 # bound-output payload (same nonce, same event), and `he-verify --quorum 2`
 # accepts only because two DISTINCT enrolled roots independently verify and agree.
 # This is the first end-to-end exercise of the k-of-n heterogeneous-root path with
-# real, different silicon rather than synthetic in-process unit-test keys.
+# two genuinely independent signing roots (a sim/embedded key + a swtpm-resident
+# key) rather than synthetic in-process unit-test keys. NOTE: swtpm is a SOFTWARE
+# TPM emulator — these are independent software roots, not separate hardware.
 #
 # HONEST SCOPE: this proves two INDEPENDENT SIGNING ROOTS agree on a fresh bound
 # verdict. It does NOT prove two independent WITNESSES of the audio — the TPM did
@@ -59,7 +61,7 @@ PAYLOAD=$(python3 -c "import json;print(json.load(open('$W/simbundle.json'))['pa
 [ -n "$SX" ] && [ -n "$PAYLOAD" ] && ok "sim root signed (event bound to nonce $NONCE)" || bad "sim bundle"
 
 echo
-echo "== root B: a TPM-resident P-256 key signs the SAME payload (independent silicon) =="
+echo "== root B: a TPM-resident P-256 key signs the SAME payload (independent root) =="
 tpm2_createprimary -C o -g sha256 -G ecc256 -c "$W/p.ctx" >/dev/null 2>&1
 tpm2_create -C "$W/p.ctx" -g sha256 -G "ecc256:ecdsa-sha256" -u "$W/k.pub" -r "$W/k.priv" -c "$W/k.ctx" >/dev/null 2>&1
 tpm2_flushcontext -t >/dev/null 2>&1

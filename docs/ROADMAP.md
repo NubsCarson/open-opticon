@@ -259,10 +259,11 @@ but the right place for the verifier).
   key generated INSIDE a software TPM (swtpm; private half never exported) signs
   an artifact the *unmodified* verifier accepts after enrolling only its public
   X/Y — concrete proof the verifier is root-agnostic, and substantiates the "TPM
-  on PC" claim with genuinely different silicon. HONEST SCOPE: the TPM did not
-  observe the audio (no PCR/measured-boot binding) — a signing-root demonstration,
-  NOT a second witness; weaker than the OP-TEE Tier-1 attest+bind. See
-  [`HARDWARE.md`](HARDWARE.md).
+  on PC" claim with a genuinely different keystore/root than the QEMU test key
+  (swtpm here — a SOFTWARE TPM, not separate hardware). HONEST SCOPE: the TPM did
+  not observe the audio (no PCR/measured-boot binding) — a signing-root
+  demonstration, NOT a second witness; weaker than the OP-TEE Tier-1 attest+bind.
+  Also exercised in the quorum (`make quorum-hetero-e2e`). See [`HARDWARE.md`](HARDWARE.md).
 
 ## Ops
 - **Reproducible builds:** host artifacts are byte-reproducible today
