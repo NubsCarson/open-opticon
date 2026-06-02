@@ -85,11 +85,22 @@ is intentionally out of scope of this artifact.
   **terminates** (total messages are O(edges), not exponential). A fork detected
   anywhere spreads to every connected node in the pinned mesh
   (`TestDaemonRelayIsTransitiveOncePerNode`). **Limitation (honest):** the single
-  `d.proof` slot means a node propagates only the *first* distinct fork it adopts — the
-  503 equivocation alarm is set unconditionally and is permanent, so the safety verdict
-  ("this log is dishonest") is unaffected, but *collecting every distinct proof at
-  every node* (multi-proof forensics) is part of the deferred robustness frontier below
-  (it would key `d.proof` by a canonical proof hash).
+  `d.proof` flood slot means a node *propagates* only the *first* distinct fork it
+  adopts; the 503 equivocation alarm is set unconditionally and is permanent, so the
+  safety verdict ("this log is dishonest") is unaffected. This is a *propagation* limit,
+  not a forensic one — see "Retain it" next. What stays deferred (below) is *flooding
+  additional forks across the mesh* beyond the first, which would change the validated
+  flood-termination invariant (the single-slot seen-set).
+
+- **Retain it (local forensics)** ✅ — separate from the single-slot flood, a witness
+  **keeps every distinct fork it verifies** in a local set, deduped by a canonical
+  order-independent `proofKey` (a hash of the two checkpoint *bodies*, not the
+  non-deterministic cosignatures) and bounded at `maxRetainedProofs = 64`. The full set
+  is served at `GET /equivocation-proofs` (`{count, proofs}`), so a node is a complete
+  forensic record of the forks it has seen even though it only re-floods the first
+  (`TestDaemonRetainsDistinctProofs`). A relying party can pull-and-verify a peer's
+  current proof in one step with
+  `he-witness fetch-proof --peer-url URL --a-pub-x/-y --b-pub-x/-y [--origin O]`.
 
 - **Catch up (pull anti-entropy)** ✅ — the push flood is best-effort, so a node that
   was offline or transiently unreachable would miss it. On each tick, a node that holds

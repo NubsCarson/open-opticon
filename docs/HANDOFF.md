@@ -33,9 +33,20 @@ program's five questions, each backed by a real artifact:
 - **Transparency + on-chain** — RFC 6962/9162 log with witness cosigning; a ZK
   proof of the detector and a dual-root quorum **live on Ethereum Sepolia**
   (addresses in [`../onchain/README.md`](../onchain/README.md)).
+- **Witness equivocation, transferable** — when independent witnesses cosign two
+  **same-size** checkpoints with **different roots**, that pair is a self-verifying
+  fork proof a relying party checks *offline* under keys it pins itself (the witness
+  is never trusted). `he-witness` serves it (`/equivocation-proof`; the full forensic
+  set of distinct forks at `/equivocation-proofs`) and gossips it to pinned peers
+  (one-hop relay → terminating transitive flood → pull anti-entropy). Confirm a fork
+  with `he-witness verify-equivocation` / `fetch-proof` or the in-browser card in
+  [`verify.html`](verify.html). Cross-mesh propagation past the first fork, eclipse
+  resistance, and peer discovery stay frontier
+  ([`DESIGN_WITNESS_GOSSIP.md`](DESIGN_WITNESS_GOSSIP.md)).
 
 Everything above is gated by CI (host tests, reproducible build, on-chain verify,
-C↔Rust port equivalence, fuzz, TPM root). `make test` runs the host suite.
+C↔Rust port equivalence, fuzz, TPM root). `make test` runs the host suite;
+`make verify-all` maps every claim to a command + honest tier ([`VERIFY.md`](VERIFY.md)).
 
 ## What needs hardware (speced, not built — honest scope)
 
@@ -58,6 +69,8 @@ the secure-world TA must own the I2C path to the SE or the binding breaks.
 
 ```sh
 make test          # the full host suite (no hardware, no network)
+make verify-all    # every laptop check, PASS/SKIP per claim — see docs/VERIFY.md
+make witness-e2e   # log witnesses: cosign quorum, fork refusal, transferable equivocation proof
 make voxterm-demo  # the restraint-receipt bridge, narrated
 make consent-e2e   # Track-6 threshold reveal + consent-gated disclosure
 make tpm-e2e       # heterogeneous TPM root (needs swtpm + tpm2-tools)

@@ -82,7 +82,8 @@ src/verifier/    Go (stdlib only) verifier:
                    cmd/he-receipt  - emit/verify portable "restraint receipts" (VoxTerm bridge)
                    cmd/he-log      - operate/prove/verify the transparency log + signed endorsements
                    cmd/he-logd     - HTTP log server (checkpoints + consistency proofs)
-                   cmd/he-witness  - witness daemon: consistency-check + cosign, refuse forks, cross-check peers
+                   cmd/he-witness  - witness daemon: consistency-check + cosign, refuse forks, cross-check peers;
+                                     verify-equivocation / fetch-proof for the transferable fork proof
                    cmd/he-challenge - live nonce server + mobile verifier page (/v)
                    cmd/he-consent  - Track-6: k-of-n threshold reveal + consent-gated disclosure
                    cmd/he-gui      - browser click-to-listen web UI
@@ -112,7 +113,7 @@ tools/           stage_optee.sh   - copy overlay sources into an optee-ra checko
                  render_video.py  - render the walkthrough from captured output
 docs/            ARCHITECTURE, THREAT_MODEL, RUNBOOK, HARDWARE, ROADMAP,
                  REPRODUCIBLE, USE_CASES, WHY_TEE, INTEGRATIONS, T3,
-                 PI_ST_ELEMENT, SAMPLE_ATTESTATION
+                 PI_ST_ELEMENT, SAMPLE_ATTESTATION, DESIGN_WITNESS_GOSSIP
 ```
 
 ## Docs
@@ -122,6 +123,7 @@ docs/            ARCHITECTURE, THREAT_MODEL, RUNBOOK, HARDWARE, ROADMAP,
 [Runbook](docs/RUNBOOK.md) · [Hardware & device](docs/HARDWARE.md) ·
 [Reproducible builds](docs/REPRODUCIBLE.md) · [Integrations (VoxTerm bridge)](docs/INTEGRATIONS.md) ·
 [Credible-sensors Track 3](docs/T3.md) · [Track 3 handoff](docs/HANDOFF.md) · [Pi + ST secure element (design)](docs/PI_ST_ELEMENT.md) ·
+[Witness gossip & equivocation proof (design)](docs/DESIGN_WITNESS_GOSSIP.md) ·
 [Roadmap](docs/ROADMAP.md) ·
 [Sample attestation (QEMU)](docs/SAMPLE_ATTESTATION.md) ·
 [ZK proof of the detector](zk/README.md) · [On-chain verification](onchain/README.md)
@@ -250,6 +252,15 @@ make repro        # prove the host build is byte-identical across two trees
 - **Transparency log** — append-only Merkle log of device endorsements with
   inclusion + consistency proofs and a signed checkpoint, so trust in a key
   can't be equivocated (`he-log`; CT/RFC-6962 model).
+- **Transferable equivocation proof** — distinct from the CT property above:
+  when a witness detects a **same-size** fork it serves a self-contained proof
+  (two checkpoints with different roots, each cosigned by an independent witness).
+  Any relying party fetches and verifies it *offline* under the two witness keys
+  *it* pins — the witness is never trusted — in the CLI (`he-witness fetch-proof`
+  / `verify-equivocation`) or in-browser ([`verify.html`](docs/verify.html)); a
+  detecting daemon also relays it to its pinned peers. A full p2p gossip overlay
+  (discovery, eclipse resistance) stays frontier — see
+  [`docs/DESIGN_WITNESS_GOSSIP.md`](docs/DESIGN_WITNESS_GOSSIP.md).
 - **Multi-prover quorum** — require *k* of *n* independent roots (e.g. the
   OP-TEE device + a second-vendor TEE + a TPM quote) to agree, so one broken
   enclave can't forge a verdict (`he-verify --quorum`).

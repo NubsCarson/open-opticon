@@ -21,6 +21,8 @@ secure element) · **F** = frontier / not built. Full scope: [THREAT_MODEL.md](T
 | TEE + ZK + device signature agree, bound to the same audio + nonce | `make demo`; on a local EVM `cd onchain && forge test` | L |
 | The same dual-root quorum returns the agreed verdict on a public chain | `VERIFY_SEPOLIA=1 bash onchain/call-sepolia.sh` (live Sepolia, view-only) | L |
 | The transparency log is append-only; a fork/rewind is refused by witnesses | `make witness-e2e` | L |
+| A detected same-size fork becomes a *transferable* proof anyone verifies offline under two pinned witness keys (the witness is never trusted) | `make witness-e2e` (the `verify-equivocation` leg); or `he-witness fetch-proof …` then `he-witness verify-equivocation …` | L |
+| …and the same equivocation proof verifies in-browser, no server | `bash tools/build_wasm.sh && node test/wasm_verify_test.js` (the `heVerifyEquivocation` cases); open [`verify.html`](verify.html) | L |
 | A genuinely independent (TPM) key signs and the verifier accepts it (root-agnostic) | `make tpm-e2e` (software TPM) | L |
 | Two independent signing roots (sim P-256 + a swtpm-resident key) agree in a k-of-n quorum | `make quorum-hetero-e2e` (software TPM) | L |
 | Audio + vision verdicts can be co-attested to one challenge nonce | `make multimodal-e2e` | L |
