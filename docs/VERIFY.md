@@ -15,6 +15,7 @@ secure element) · **F** = frontier / not built. Full scope: [THREAT_MODEL.md](T
 | The browser verifier matches the CLI (same code, no server) | `bash tools/build_wasm.sh && node test/wasm_verify_test.js`; open [`verify.html`](verify.html) | L |
 | Streaming hash-chain detects a suppressed window | `make chain-e2e` | L |
 | COSE_Sign1 (RFC 9052) envelope verifies end to end | `make cose-e2e` | L |
+| A PSA attestation token (EAT) verifies offline: sig + profile + freshness + reference measurement | `make eat-e2e` | L |
 | The published C detector and the Rust zk port give bit-identical verdicts | `make port-diff` | L |
 | The host build is byte-reproducible across independent trees | `make repro` (CI also attaches SLSA provenance to the manifest) | L |
 | TEE + ZK + device signature agree, bound to the same audio + nonce | `make demo`; on a local EVM `cd onchain && forge test` | L |

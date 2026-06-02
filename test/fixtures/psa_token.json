@@ -1,0 +1,8 @@
+{
+  "nonce": "cafef00dcafef00d",
+  "note": "deterministic PSA EAT token (FAKE 0x11.. key) for run_eat_e2e.sh; regen: see eat_test.go history",
+  "pin_x": "0217e617f0b6443928278f96999e69a23a4f2c152bdf6d6cdf66e5b80282d4ed",
+  "pin_y": "194a7debcb97712d2dda3ca85aa8765a56f45fc758599652f2897c65306e5794",
+  "ref": "abababababababababababababababababababababababababababababababab",
+  "token": "d28443a10126a0589ea51901097818687474703a2f2f61726d2e636f6d2f7073612f322e302e300a48cafef00dcafef00d1901004d696e7374616e63652d3030303119095c5071656d752d6f707465652d72612d303119095f81a3016450526f54025820abababababababababababababababababababababababababababababababab055820cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd5840b1cd428ea6807eb30e80a307b569f7e679d6b23060ab63f9c5b2d939a2e50b70d509d3ff4ed86f61e8fd0dacdfe8f18641074792d38247a1fdc8034d402e0b84"
+}

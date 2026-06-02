@@ -10,6 +10,7 @@
 #   make multimodal-e2e - audio + vision verdicts co-attested to one nonce
 #   make consent-e2e - Track-6 threshold reveal + consent-gated window disclosure
 #   make endorse-e2e - signed endorsements: endorser authenticity + log inclusion
+#   make eat-e2e    - PSA attestation-token (EAT) offline verify vs a committed fixture
 #   make tpm-e2e    - heterogeneous root: a TPM-resident key signs (needs swtpm+tpm2-tools)
 #   make quorum-hetero-e2e - sim + TPM roots agree via he-verify --quorum (needs swtpm)
 #   make voxterm-e2e - portable restraint receipts (VoxTerm bridge): see docs/INTEGRATIONS.md
@@ -26,9 +27,9 @@
 
 VERIFIER = src/verifier
 
-.PHONY: help test units sim verifier-test e2e vision-e2e chain-e2e cose-e2e witness-e2e voxterm-e2e multimodal-e2e consent-e2e endorse-e2e tpm-e2e quorum-hetero-e2e voxterm-demo verify-all port-diff demo tamper-test gui sites wasm fuzz repro cross clean
+.PHONY: help test units sim verifier-test e2e vision-e2e chain-e2e cose-e2e witness-e2e voxterm-e2e multimodal-e2e consent-e2e endorse-e2e eat-e2e tpm-e2e quorum-hetero-e2e voxterm-demo verify-all port-diff demo tamper-test gui sites wasm fuzz repro cross clean
 
-test: units verifier-test e2e vision-e2e chain-e2e cose-e2e witness-e2e voxterm-e2e multimodal-e2e consent-e2e endorse-e2e tamper-test
+test: units verifier-test e2e vision-e2e chain-e2e cose-e2e witness-e2e voxterm-e2e multimodal-e2e consent-e2e endorse-e2e eat-e2e tamper-test
 	@echo ""
 	@echo "==================================================="
 	@echo " ALL HOST TESTS PASSED"
@@ -90,6 +91,11 @@ consent-e2e:
 # is logged, and a verifier confirms both endorser authenticity + log inclusion.
 endorse-e2e:
 	bash test/run_endorse_e2e.sh
+
+# PSA attestation-token (EAT) offline verify: he-attest-verify against a committed
+# faithful token fixture; happy path + wrong-nonce/key/ref + tamper negatives.
+eat-e2e:
+	bash test/run_eat_e2e.sh
 
 # Skeptic's entry point: run every laptop-runnable, no-r0vm check and print
 # PASS/SKIP per check (host suite, port-diff, repro, demo, wasm, TPM, on-chain).
