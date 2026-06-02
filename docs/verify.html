@@ -222,6 +222,38 @@
         </div>
       </div>
     </div>
+
+    <div class="card" style="margin-top:28px">
+      <label class="fld" for="equivProof">Equivocation proof (JSON — from a witness's <span class="mono">/equivocation-proof</span>)</label>
+      <textarea id="equivProof" spellcheck="false" autocomplete="off" rows="6"
+        placeholder='{"schema":"honest-ear/equivocation-proof/v1","a":{ ... },"b":{ ... }}'></textarea>
+      <div class="row2">
+        <div><label class="fld" for="eqAX">Pinned witness A pub X (hex)</label>
+          <input type="text" id="eqAX" spellcheck="false" autocomplete="off"></div>
+        <div><label class="fld" for="eqAY">Pinned witness A pub Y (hex)</label>
+          <input type="text" id="eqAY" spellcheck="false" autocomplete="off"></div>
+      </div>
+      <div class="row2">
+        <div><label class="fld" for="eqBX">Pinned witness B pub X (hex)</label>
+          <input type="text" id="eqBX" spellcheck="false" autocomplete="off"></div>
+        <div><label class="fld" for="eqBY">Pinned witness B pub Y (hex)</label>
+          <input type="text" id="eqBY" spellcheck="false" autocomplete="off"></div>
+      </div>
+      <div class="actions">
+        <button class="btn primary" id="equivBtn" disabled>Verify equivocation proof</button>
+      </div>
+      <div class="verdict" id="equivVerdict" role="status" aria-live="polite" aria-atomic="true" style="margin-top:16px">
+        <div class="banner"><span class="pdot" style="background:var(--muted2)"></span>
+          <span id="equivText">paste a proof + the two pinned witness keys</span></div>
+        <div class="reason" id="equivReason"></div>
+      </div>
+      <p class="small" style="margin-top:12px">A transferable equivocation proof is two checkpoints a log
+        signed at the <b>same size</b> with <b>different roots</b>, each cosigned by an independent witness.
+        A PASS here means — verified entirely in this tab, under the two keys <b>you</b> pin — the log
+        equivocated. You must independently trust those two witness keys; the keys embedded in the proof are
+        never trusted. Get a proof from <span class="mono">he-witness</span>'s <span class="mono">/equivocation-proof</span>
+        endpoint.</p>
+    </div>
   </div>
 </section>
 
@@ -406,10 +438,42 @@ function tamperByte() {
   doVerify();
 }
 
+function setEquiv(kind, title, reason) {
+  const v = $("equivVerdict");
+  v.className = "verdict " + kind;
+  $("equivText").textContent = title;
+  $("equivReason").textContent = reason || "";
+}
+
+function doVerifyEquivocation() {
+  if (typeof heVerifyEquivocation !== "function") {
+    setEquiv("fail", "VERIFIER NOT READY", "the WebAssembly module is still loading");
+    return;
+  }
+  const keys = {
+    aPubX: $("eqAX").value.trim(), aPubY: $("eqAY").value.trim(),
+    bPubX: $("eqBX").value.trim(), bPubY: $("eqBY").value.trim()
+  };
+  let res;
+  try {
+    res = heVerifyEquivocation($("equivProof").value, keys);
+  } catch (e) {
+    setEquiv("fail", "ERROR", String(e));
+    return;
+  }
+  if (res.ok) {
+    setEquiv("pass", "EQUIVOCATION PROVEN", res.reason +
+      "  (witnesses: " + (res.witnessA || "?") + ", " + (res.witnessB || "?") + ")");
+  } else {
+    setEquiv("fail", "NOT A VALID PROOF", res.reason);
+  }
+}
+
 $("verifyBtn").addEventListener("click", doVerify);
 $("tamperBtn").addEventListener("click", tamperByte);
 $("resetBtn").addEventListener("click", () => { loadSample(); doVerify(); });
 $("coseBtn").addEventListener("click", () => { loadSampleCOSE(); doVerify(); });
+$("equivBtn").addEventListener("click", doVerifyEquivocation);
 
 loadSample();
 
@@ -431,6 +495,7 @@ async function boot() {
     statusText.textContent = "verifier ready — runs entirely in this tab (" +
       (bytes.byteLength / 1048576).toFixed(1) + " MB wasm)";
     $("verifyBtn").disabled = false;
+    $("equivBtn").disabled = false;
     doVerify(); // show the sample verifying immediately
   } catch (e) {
     statusText.textContent = "could not load verifier: " + e.message +

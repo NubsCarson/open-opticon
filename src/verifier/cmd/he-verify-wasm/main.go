@@ -210,10 +210,69 @@ func fiveAnswers(p *verifier.Predicate) []any {
 	}
 }
 
+// heVerifyEquivocation(proofJSON string, keys object) -> {ok, reason, witnessA,
+// witnessB}. Verifies a transferable equivocation proof (honest-ear/equivocation-
+// proof/v1, served by he-witness /equivocation-proof) entirely in the browser, under
+// the two witness keys the CALLER PINS (keys.aPubX/aPubY/bPubX/bPubY hex) — never the
+// self-reported keys in the proof. Mirrors `he-witness verify-equivocation`: a true
+// result is offline-verifiable evidence the log equivocated.
+func heVerifyEquivocation(this js.Value, args []js.Value) any {
+	if len(args) < 2 || args[0].Type() != js.TypeString {
+		return fail("usage: heVerifyEquivocation(proofJSON, {aPubX,aPubY,bPubX,bPubY})")
+	}
+	var p struct {
+		Schema string `json:"schema"`
+		A      struct {
+			Witness        string `json:"witness"`
+			CheckpointBody string `json:"checkpoint_body"`
+			Cosignature    string `json:"cosignature"`
+		} `json:"a"`
+		B struct {
+			Witness        string `json:"witness"`
+			CheckpointBody string `json:"checkpoint_body"`
+			Cosignature    string `json:"cosignature"`
+		} `json:"b"`
+	}
+	if err := json.Unmarshal([]byte(args[0].String()), &p); err != nil {
+		return fail("invalid proof JSON: " + err.Error())
+	}
+	keys := args[1]
+	pin := func(name string) ([]byte, error) { return hex.DecodeString(getString(keys, name)) }
+	aX, err := pin("aPubX")
+	if err != nil {
+		return fail("bad aPubX hex: " + err.Error())
+	}
+	aY, err := pin("aPubY")
+	if err != nil {
+		return fail("bad aPubY hex: " + err.Error())
+	}
+	bX, err := pin("bPubX")
+	if err != nil {
+		return fail("bad bPubX hex: " + err.Error())
+	}
+	bY, err := pin("bPubY")
+	if err != nil {
+		return fail("bad bPubY hex: " + err.Error())
+	}
+	cosigA, err := hex.DecodeString(p.A.Cosignature)
+	if err != nil {
+		return fail("bad A cosignature hex: " + err.Error())
+	}
+	cosigB, err := hex.DecodeString(p.B.Cosignature)
+	if err != nil {
+		return fail("bad B cosignature hex: " + err.Error())
+	}
+	ok, reason := verifier.VerifyEquivocation(
+		[]byte(p.A.CheckpointBody), cosigA, aX, aY,
+		[]byte(p.B.CheckpointBody), cosigB, bX, bY)
+	return map[string]any{"ok": ok, "reason": reason, "witnessA": p.A.Witness, "witnessB": p.B.Witness}
+}
+
 func main() {
 	js.Global().Set("heVerify", js.FuncOf(heVerify))
+	js.Global().Set("heVerifyEquivocation", js.FuncOf(heVerifyEquivocation))
 	if c := js.Global().Get("console"); c.Type() == js.TypeObject {
-		c.Call("log", "honest-ear verifier (wasm) ready — heVerify(bundleJSON, {nonce})")
+		c.Call("log", "honest-ear verifier (wasm) ready — heVerify(bundleJSON, {nonce}); heVerifyEquivocation(proofJSON, {aPubX,...})")
 	}
-	select {} // keep the Go runtime alive so heVerify stays callable
+	select {} // keep the Go runtime alive so the exports stay callable
 }

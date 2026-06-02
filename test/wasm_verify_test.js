@@ -34,6 +34,36 @@ const COSE_BUNDLE = {
   pub_y: "e04b65e92456d9888b52b379bdfbd51ee869ef1f0fc65b6659695b6cce081723",
 };
 
+// A real transferable equivocation proof (two pinned witnesses cosigning conflicting
+// roots at the SAME size 5) + the two PINNED witness keys — generated offline via the
+// verifier package (CheckpointBody/CosignCheckpoint). The wasm must verify it under
+// the pinned keys, and reject it under a substituted key.
+const EQUIV_PROOF = {
+  schema: "honest-ear/equivocation-proof/v1",
+  a: {
+    witness: "wa",
+    checkpoint_body: "honest-ear.log/v1\n5\nEQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\n",
+    cosignature:
+      "e6419adef8305fb4d0d284fee225e307070fc42307feca49f9696a871e71ebfb83767b6673d7f77b3f9b4d65e1fe207182da72bf54e67a990e74458a13b699b4",
+    witness_pub_x: "172060cc5df900f5d12278121c4c77451eff1aac0b74ec2863e948e75f9397ce",
+    witness_pub_y: "c672cdd561634d90c20accadd6f862254b3a05b60f8f7d2e4480ce2d4ee514fa",
+  },
+  b: {
+    witness: "wb",
+    checkpoint_body: "honest-ear.log/v1\n5\nIgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\n",
+    cosignature:
+      "3dc5618943b1b12e3a54e74b1dbe230a1f7466697fbcd7b4c18ec05c5ba7d6c4dd1873466514094cbd73a63d4c3c4fc285fc02520c4a91a75d65de9fac8d355d",
+    witness_pub_x: "0886d3d3ad4148dacc8b852afa88a8d4da4682ee96c375854127d06fced819d3",
+    witness_pub_y: "7f41fece5e390beba718edc80bbcb6d3c06cdaee94558dbf9bd9237dfdc25148",
+  },
+};
+const EQUIV_KEYS = {
+  aPubX: "172060cc5df900f5d12278121c4c77451eff1aac0b74ec2863e948e75f9397ce",
+  aPubY: "c672cdd561634d90c20accadd6f862254b3a05b60f8f7d2e4480ce2d4ee514fa",
+  bPubX: "0886d3d3ad4148dacc8b852afa88a8d4da4682ee96c375854127d06fced819d3",
+  bPubY: "7f41fece5e390beba718edc80bbcb6d3c06cdaee94558dbf9bd9237dfdc25148",
+};
+
 let failures = 0;
 function check(name, cond) {
   if (cond) {
@@ -115,6 +145,19 @@ function check(name, cond) {
   tc.cose = tc.cose.slice(0, 40) + ((parseInt(tc.cose[40], 16) ^ 0xf).toString(16)) + tc.cose.slice(41);
   r = H(JSON.stringify(tc), { nonce: NONCE, lastCounter: 0 });
   check("tampered COSE fails", r.ok === false);
+
+  // Equivocation proof: verified in-browser under the two PINNED witness keys.
+  const E = globalThis.heVerifyEquivocation;
+  check("heVerifyEquivocation is registered", typeof E === "function");
+  let e = E(JSON.stringify(EQUIV_PROOF), EQUIV_KEYS);
+  check("valid equivocation proof verifies", e.ok === true);
+  check("proof names both witnesses", e.witnessA === "wa" && e.witnessB === "wb");
+  // A WRONG pinned key (A pinned to B's key) must NOT verify.
+  e = E(JSON.stringify(EQUIV_PROOF), Object.assign({}, EQUIV_KEYS, { aPubX: EQUIV_KEYS.bPubX }));
+  check("wrong pinned key fails", e.ok === false);
+  // Garbage proof JSON -> error, not a crash.
+  e = E("{not json", EQUIV_KEYS);
+  check("bad proof JSON handled", e.ok === false);
 
   console.log(failures === 0 ? "wasm_verify_test: all passed" : `wasm_verify_test: ${failures} FAILURE(S)`);
   process.exit(failures === 0 ? 0 : 1);
