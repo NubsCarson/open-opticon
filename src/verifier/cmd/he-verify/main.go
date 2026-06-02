@@ -179,20 +179,18 @@ func runQuorum(nonce []byte, k int, rootSpecs rootList, lastCounter uint64) {
 		roots = append(roots, verifier.Prover{Name: parts[0], PubX: px, PubY: py})
 	}
 
-	var bundles []verifier.Bundle
+	// Read each prover's bundle as raw JSON; VerifyQuorumJSON accepts both the raw
+	// bound-output envelope and a COSE_Sign1 one, per prover.
+	var inputs [][]byte
 	for _, path := range flag.Args() {
 		raw, err := os.ReadFile(path)
 		if err != nil {
 			cli.Die("reading %s: %v", path, err)
 		}
-		b, err := parseBundle(raw)
-		if err != nil {
-			cli.Die("%s: %v", path, err)
-		}
-		bundles = append(bundles, b)
+		inputs = append(inputs, raw)
 	}
 
-	res := verifier.VerifyQuorum(bundles, verifier.QuorumOptions{
+	res := verifier.VerifyQuorumJSON(inputs, verifier.QuorumOptions{
 		ExpectedNonce: nonce, Roots: roots, Threshold: k, LastCounter: lastCounter,
 	})
 	if !res.OK {
@@ -209,19 +207,15 @@ func runQuorum(nonce []byte, k int, rootSpecs rootList, lastCounter uint64) {
 // bound to the SAME nonce — the cross-modal sibling of the quorum. Unlike the
 // quorum it does NOT require the modalities to agree on an event.
 func runCoAttest(opt verifier.Options, k int) {
-	var bundles []verifier.Bundle
+	var inputs [][]byte
 	for _, path := range flag.Args() {
 		raw, err := os.ReadFile(path)
 		if err != nil {
 			cli.Die("reading %s: %v", path, err)
 		}
-		b, err := parseBundle(raw)
-		if err != nil {
-			cli.Die("%s: %v", path, err)
-		}
-		bundles = append(bundles, b)
+		inputs = append(inputs, raw)
 	}
-	res := verifier.VerifyCoAttestation(bundles, opt, k)
+	res := verifier.VerifyCoAttestationJSON(inputs, opt, k)
 	if !res.OK {
 		fmt.Printf("%s  co-attestation not reached: %s\n", cli.Fail(), res.Reason)
 		os.Exit(1)

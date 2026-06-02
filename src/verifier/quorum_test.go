@@ -4,8 +4,67 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
 	"testing"
 )
+
+// coseBundleJSON builds a COSE_Sign1 bundle (signed over the Sig_structure) as the
+// on-wire JSON the quorum/co-attest JSON paths consume.
+func coseBundleJSON(t *testing.T, payload []byte, key *ecdsa.PrivateKey) []byte {
+	t.Helper()
+	msg, err := SignCOSESign1(payload, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := json.Marshal(COSEBundle{
+		Schema: "honest-ear/cose-sign1/v1", COSE: hex.EncodeToString(msg),
+		PubX: hex.EncodeToString(leftPad(key.PublicKey.X.Bytes(), 32)),
+		PubY: hex.EncodeToString(leftPad(key.PublicKey.Y.Bytes(), 32)),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
+}
+
+// A quorum can mix envelopes: one prover submits a raw bundle, another a COSE_Sign1
+// bundle, and the JSON path dispatches each to its correct verifier (COSE signs the
+// Sig_structure, not the raw payload) — so a COSE-emitting fleet IS quorum-verifiable.
+func TestQuorumJSONAcceptsCOSE(t *testing.T) {
+	ra, ka := newProver(t, "tee-optee")
+	rb, kb := newProver(t, "tee-second-vendor")
+	roots := []Prover{ra, rb}
+	rawA, err := json.Marshal(signWith(t, golden, ka))
+	if err != nil {
+		t.Fatal(err)
+	}
+	coseB := coseBundleJSON(t, golden, kb)
+	res := VerifyQuorumJSON([][]byte{rawA, coseB}, QuorumOptions{
+		ExpectedNonce: mustHex("aabb"), Roots: roots, Threshold: 2, LastCounter: 6,
+	})
+	if !res.OK {
+		t.Fatalf("mixed raw+COSE quorum failed: %s", res.Reason)
+	}
+	if res.Event != "alarm_tone" || len(res.PassedRoots) != 2 {
+		t.Errorf("res = %+v", res)
+	}
+}
+
+// Co-attestation likewise accepts a COSE modality alongside a raw one.
+func TestCoAttestationJSONAcceptsCOSE(t *testing.T) {
+	_, k := newProver(t, "device")
+	opt := Options{ExpectedNonce: mustHex("aabb"), LastCounter: 6}
+	audioRaw, err := json.Marshal(signWith(t, golden, k))
+	if err != nil {
+		t.Fatal(err)
+	}
+	visionCOSE := coseBundleJSON(t, goldenVision, k) // distinct input_hash
+	res := VerifyCoAttestationJSON([][]byte{audioRaw, visionCOSE}, opt, 2)
+	if !res.OK || len(res.Modalities) != 2 {
+		t.Fatalf("raw+COSE co-attestation failed: ok=%v mods=%v reason=%s", res.OK, res.Modalities, res.Reason)
+	}
+}
 
 // goldenNone is the golden payload with the event class changed to "none" (0)
 // instead of "alarm_tone" (2): byte pair 0202 -> 0200. Used to test that
