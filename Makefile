@@ -24,7 +24,7 @@
 
 VERIFIER = src/verifier
 
-.PHONY: test units sim verifier-test e2e vision-e2e chain-e2e cose-e2e witness-e2e voxterm-e2e multimodal-e2e consent-e2e tpm-e2e voxterm-demo verify-all port-diff demo tamper-test gui sites wasm fuzz repro cross clean
+.PHONY: help test units sim verifier-test e2e vision-e2e chain-e2e cose-e2e witness-e2e voxterm-e2e multimodal-e2e consent-e2e tpm-e2e voxterm-demo verify-all port-diff demo tamper-test gui sites wasm fuzz repro cross clean
 
 test: units verifier-test e2e vision-e2e chain-e2e cose-e2e witness-e2e voxterm-e2e multimodal-e2e consent-e2e tamper-test
 	@echo ""
@@ -90,6 +90,10 @@ consent-e2e:
 # meta-target; CI runs these individually).
 verify-all:
 	bash tools/verify_all.sh
+
+# Print the target list from this file's header.
+help:
+	@grep -E '^#   make ' $(MAKEFILE_LIST) | sed 's/^#   //'
 
 # Heterogeneous-root demo: a TPM-resident P-256 key (private half never leaves the
 # TPM) signs an artifact the unmodified verifier accepts — shows the verifier is
