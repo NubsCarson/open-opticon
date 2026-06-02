@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/rand"
 	"math/big"
+	mrand "math/rand"
 	"testing"
 )
 
@@ -279,3 +280,70 @@ func leftPadTo(b []byte, n int) []byte {
 }
 
 func bigToBytes(x *big.Int) []byte { return x.Bytes() }
+
+// Property test: across randomized (k,n), EVERY k-subset of the shares
+// reconstructs the secret and a sampling of (k-1)-subsets does not — far stronger
+// than the fixed (3,6)+one-subset fuzz above. Deterministically seeded for
+// reproducibility (math/rand is fine here: this is test-data selection, not the
+// secret — secrets/coeffs still come from crypto/rand inside ShamirSplit).
+func TestShamirSubsetProperty(t *testing.T) {
+	rng := mrand.New(mrand.NewSource(1))
+	combos := func(n, k int) [][]int { // all k-index subsets of 0..n-1
+		var out [][]int
+		idx := make([]int, k)
+		var rec func(start, d int)
+		rec = func(start, d int) {
+			if d == k {
+				cp := append([]int(nil), idx...)
+				out = append(out, cp)
+				return
+			}
+			for i := start; i < n; i++ {
+				idx[d] = i
+				rec(i+1, d+1)
+			}
+		}
+		rec(0, 0)
+		return out
+	}
+	for iter := 0; iter < 40; iter++ {
+		k := 2 + rng.Intn(4) // 2..5
+		n := k + rng.Intn(4) // k..k+3
+		secret := make([]byte, 32)
+		if _, err := rand.Read(secret); err != nil {
+			t.Fatal(err)
+		}
+		shares, err := ShamirSplit(secret, k, n)
+		if err != nil {
+			t.Fatalf("split (k=%d,n=%d): %v", k, n, err)
+		}
+		// EVERY k-subset must reconstruct exactly.
+		for _, c := range combos(n, k) {
+			sub := make([]Share, k)
+			for i, j := range c {
+				sub[i] = shares[j]
+			}
+			got, err := ShamirCombine(sub)
+			if err != nil {
+				t.Fatalf("combine k-subset %v: %v", c, err)
+			}
+			if !bytes.Equal(leftPadTo(got, 32), secret) {
+				t.Fatalf("k=%d n=%d subset %v: reconstruction mismatch", k, n, c)
+			}
+		}
+		// A sample of (k-1)-subsets must NOT reconstruct the secret.
+		if k-1 >= 2 {
+			km1 := combos(n, k-1)
+			for s := 0; s < len(km1) && s < 5; s++ {
+				sub := make([]Share, k-1)
+				for i, j := range km1[s] {
+					sub[i] = shares[j]
+				}
+				got, _ := ShamirCombine(sub)
+				if bytes.Equal(leftPadTo(got, 32), secret) {
+					t.Errorf("k=%d n=%d: a (k-1)-subset %v reconstructed the secret", k, n, km1[s])
+				}
+			}
+		}
+	}
+}

@@ -10,6 +10,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -180,4 +182,29 @@ func mintReqKeepSig(t *testing.T, tamperedPayload []byte, nonceHex string) []byt
 		t.Fatal(err)
 	}
 	return body
+}
+
+// process() is the live "listen" path: it mints a fresh nonce, execs he-attest-sim
+// over the PCM, and verifies the returned bound output (the part verifyHandler
+// can't cover because it needs the sim). Skips cleanly if the prebuilt sim binary
+// is absent (e.g. an offline checkout that didn't `make sim`).
+func TestProcessE2E(t *testing.T) {
+	sim := filepath.Join("..", "..", "..", "..", "sim", "bin", "he-attest-sim")
+	if _, err := os.Stat(sim); err != nil {
+		t.Skip("he-attest-sim not built (run `make sim`); skipping the exec path")
+	}
+	pcm, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "test", "fixtures", "alarm.pcm"))
+	if err != nil {
+		t.Skipf("alarm fixture missing: %v", err)
+	}
+	r := process(sim, pcm)
+	if !r.Verified || r.Event != "alarm_tone" {
+		t.Fatalf("alarm clip: verified=%v event=%q reason=%q", r.Verified, r.Event, r.Reason)
+	}
+	// The server-minted counter must strictly advance across calls (the atomic
+	// counter + LastCounter=ctr-1 anti-replay wiring), and each still verifies.
+	r2 := process(sim, pcm)
+	if !r2.Verified || r2.Counter <= r.Counter {
+		t.Errorf("counter did not advance: %d -> %d (verified=%v)", r.Counter, r2.Counter, r2.Verified)
+	}
 }
