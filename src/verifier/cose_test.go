@@ -153,3 +153,25 @@ func TestParseCOSERejectsTrailingBytes(t *testing.T) {
 		t.Error("trailing bytes accepted; must fail")
 	}
 }
+
+// A maliciously deep CBOR nesting (a long run of tag bytes) must be REJECTED by
+// the recursion cap, not crash the process via stack exhaustion. skipValue is the
+// recursive trust-boundary parser reached from VerifyCOSEBundle / VerifyPSAToken.
+func TestSkipValueDepthCapRejectsDeepNesting(t *testing.T) {
+	// 0xc6 = CBOR tag (major 6); each byte recurses one frame in skipValue.
+	deep := make([]byte, maxCBORDepth+50)
+	for i := range deep {
+		deep[i] = 0xc6
+	}
+	deep[len(deep)-1] = 0x00 // innermost: a uint(0)
+	r := &cborReader{b: deep}
+	if err := r.skipValue(); err == nil {
+		t.Fatal("deeply nested CBOR was accepted; recursion is unbounded (DoS)")
+	}
+	// A legitimately shallow item still skips cleanly (cap doesn't over-reject):
+	// tag -> array(2) of [uint(1), tstr("hi")].
+	shallow := &cborReader{b: []byte{0xc6, 0x82, 0x01, 0x62, 'h', 'i'}}
+	if err := shallow.skipValue(); err != nil {
+		t.Fatalf("shallow nested CBOR wrongly rejected: %v", err)
+	}
+}

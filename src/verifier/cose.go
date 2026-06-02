@@ -170,6 +170,13 @@ func requireES256(protected []byte) error {
 // skipValue advances past one complete CBOR data item (any type). Used to skip
 // header fields/values we do not interpret. Recursive for arrays/maps/tags.
 func (r *cborReader) skipValue() error {
+	// Bound recursion: a deeply nested item (array/map/tag) from untrusted input
+	// must not exhaust the stack — reject it instead (anti-DoS at the trust boundary).
+	if r.depth >= maxCBORDepth {
+		return errors.New("CBOR nesting too deep")
+	}
+	r.depth++
+	defer func() { r.depth-- }()
 	major, n, err := r.readHead()
 	if err != nil {
 		return err

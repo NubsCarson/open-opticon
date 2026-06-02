@@ -257,9 +257,16 @@ func verifySig(payload, sig, px, py []byte) error {
 // ---- minimal CBOR reader for the fixed payload schema ----
 
 type cborReader struct {
-	b   []byte
-	pos int
+	b     []byte
+	pos   int
+	depth int // current CBOR nesting depth, bounded by maxCBORDepth (anti-DoS)
 }
+
+// maxCBORDepth caps recursion in skipValue so a maliciously deep nesting (e.g. a
+// long run of CBOR tag bytes) cannot exhaust the stack. Real COSE/EAT/payload
+// structures here nest only a handful of levels; 64 is far above any legitimate
+// input and far below a stack-exhausting one.
+const maxCBORDepth = 64
 
 func (r *cborReader) byte() (byte, error) {
 	if r.pos >= len(r.b) {
