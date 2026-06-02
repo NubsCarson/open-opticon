@@ -510,14 +510,16 @@ func runServe(args []string) {
 		cli.Die("%v", err)
 	}
 	d := &daemon{cfg: cfg, client: cli.HTTPClient(), peers: parsePeers(args), st: st}
-	d.once()       // poll immediately so /cosignature is populated before first tick
-	d.checkPeers() // and cross-check pinned peers before serving /health
+	d.once()           // poll immediately so /cosignature is populated before first tick
+	d.checkPeers()     // and cross-check pinned peers before serving /health
+	d.pullPeerProofs() // pull-based anti-entropy: catch up on a fork we missed while down
 	go func() {
 		t := time.NewTicker(interval)
 		defer t.Stop()
 		for range t.C {
 			d.once()
 			d.checkPeers()
+			d.pullPeerProofs()
 		}
 	}()
 
@@ -757,63 +759,100 @@ func (d *daemon) handleEquivocationIntake(w http.ResponseWriter, r *http.Request
 		cli.WriteJSON(w, 400, map[string]string{"error": "bad proof: " + err.Error()})
 		return
 	}
+	if ok, reason := d.tryAdopt(&p); ok {
+		cli.WriteJSON(w, 200, map[string]string{"adopted": reason})
+	} else {
+		cli.WriteJSON(w, 400, map[string]string{"error": reason})
+	}
+}
+
+// tryAdopt is the shared verify+adopt path for an equivocation proof, reached BOTH
+// from the push intake (handleEquivocationIntake) and the pull anti-entropy
+// (pullPeerProofs). It verifies each half under OUR pinned key for that witness name
+// (NEVER the self-reported key), scopes the proof to the log we watch, and on success
+// latches the (monotonic, permanent) equivocation alarm. On the FIRST adoption it also
+// re-pushes to our pinned peers (transitive flood). Returns (false, reason) on any
+// rejection so callers can surface or ignore it.
+func (d *daemon) tryAdopt(p *equivProof) (bool, string) {
 	aX, aY, okA := d.pinnedKey(p.A.Witness)
 	bX, bY, okB := d.pinnedKey(p.B.Witness)
 	if !okA || !okB {
-		cli.WriteJSON(w, 400, map[string]string{"error": "proof names a witness we have not pinned; cannot verify"})
-		return
+		return false, "proof names a witness we have not pinned; cannot verify"
 	}
 	cosigA, err1 := hex.DecodeString(p.A.Cosignature)
 	cosigB, err2 := hex.DecodeString(p.B.Cosignature)
 	if err1 != nil || err2 != nil {
-		cli.WriteJSON(w, 400, map[string]string{"error": "bad cosignature hex"})
-		return
+		return false, "bad cosignature hex"
 	}
 	ok, reason := verifier.VerifyEquivocation(
 		[]byte(p.A.CheckpointBody), cosigA, aX, aY,
 		[]byte(p.B.CheckpointBody), cosigB, bX, bY)
 	if !ok {
-		cli.WriteJSON(w, 400, map[string]string{"error": "proof does not verify under our pinned keys: " + reason})
-		return
+		return false, "proof does not verify under our pinned keys: " + reason
 	}
-	// Scope the proof to the log WE watch (mirroring poll + checkPeers, which both
-	// bind origin to cfg.origin). VerifyEquivocation only proves the two halves share
-	// SOME common origin — without this, a genuine equivocation of a DIFFERENT log
-	// (feasible if pinned peers reuse keys across logs) would falsely latch us to 503.
-	// Both halves share an origin, so checking A alone is sufficient.
+	// Scope to the log WE watch (mirroring poll + checkPeers): VerifyEquivocation only
+	// proves the two halves share SOME common origin, so without this a genuine
+	// equivocation of a DIFFERENT log (if pinned peers reuse keys across logs) would
+	// falsely latch us. Both halves share an origin, so checking A alone suffices.
 	if porg, _, _, perr := verifier.ParseCheckpoint([]byte(p.A.CheckpointBody)); perr != nil || porg != d.cfg.origin {
-		cli.WriteJSON(w, 400, map[string]string{"error": "proof origin is not the log we watch"})
-		return
+		return false, "proof origin is not the log we watch"
 	}
 	d.mu.Lock()
-	first := d.proof == nil // first time we've seen this fork -> we'll re-push it onward
+	first := d.proof == nil // first time we've seen this fork -> re-push it onward
 	if first {
-		d.proof = &p
+		d.proof = p
 	}
-	d.equivocation = true // a verified relayed proof latches us too
+	d.equivocation = true // a verified proof latches us, however it arrived
 	d.healthOK = false
 	client := d.client
 	d.mu.Unlock()
 
-	// Transitive flooding (best-effort, OUTSIDE the lock): on the FIRST adoption,
-	// re-push to our own pinned peers so the proof spreads across the pinned mesh.
-	// The `d.proof != nil` latch is the dedup/seen-set, so every node re-pushes AT
-	// MOST ONCE — the flood terminates (a node that already has the proof returns 200
-	// but does not re-push, so cycles can't loop). The single slot means a node only
-	// propagates the FIRST distinct fork it adopts, but the 503 alarm below is
-	// unconditional + permanent so the safety verdict is unaffected. This is basic
-	// gossip within the pinned set; anti-entropy (an offline node catching up),
-	// eclipse resistance, and discovery stay frontier (docs/DESIGN_WITNESS_GOSSIP.md).
+	// Transitive flooding (best-effort, OUTSIDE the lock): on FIRST adoption, re-push to
+	// our pinned peers. The d.proof latch is the seen-set, so every node re-pushes AT
+	// MOST ONCE — the flood terminates (O(edges), no loop). The single slot means a node
+	// propagates only the FIRST distinct fork it adopts; the 503 alarm above is
+	// unconditional + permanent, so the safety verdict is unaffected. Together with
+	// pullPeerProofs (pull-based anti-entropy) a node also catches up on a fork it missed
+	// while offline. Eclipse resistance + discovery stay frontier
+	// (docs/DESIGN_WITNESS_GOSSIP.md).
 	if first {
 		if client == nil {
 			client = cli.HTTPClient()
 		}
-		body, _ := json.Marshal(&p)
+		body, _ := json.Marshal(p)
 		for _, peer := range d.peers {
 			pushProof(client, peer.url+"/equivocation-intake", body)
 		}
 	}
-	cli.WriteJSON(w, 200, map[string]string{"adopted": reason})
+	return true, reason
+}
+
+// pullPeerProofs is pull-based anti-entropy: if we hold NO proof yet, GET each pinned
+// peer's /equivocation-proof and adopt the first valid one (verified under OUR pinned
+// keys via tryAdopt). This catches a witness up on a fork it missed while offline or
+// transiently unreachable during the best-effort push flood. The whole replicated
+// state is a single proof, so a per-tick pull is COMPLETE reconciliation — not a
+// sketch of real large-state anti-entropy.
+func (d *daemon) pullPeerProofs() {
+	d.mu.Lock()
+	have := d.proof != nil
+	client := d.client
+	d.mu.Unlock()
+	if have || len(d.peers) == 0 {
+		return
+	}
+	if client == nil {
+		client = cli.HTTPClient()
+	}
+	for _, p := range d.peers {
+		var pr equivProof
+		if err := getJSON(client, p.url+"/equivocation-proof", &pr); err != nil {
+			continue // 404 (peer has none) or unreachable -> skip
+		}
+		if ok, _ := d.tryAdopt(&pr); ok {
+			return // adopted (and re-pushed onward by tryAdopt)
+		}
+	}
 }
 
 // pushProof POSTs a freshly-assembled proof to a pinned peer's intake (best-effort,

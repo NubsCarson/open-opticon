@@ -1,13 +1,14 @@
 # Design: witness-to-witness gossip (frontier — design, not built)
 
-> Status: the **transferable fork proof** below is **SHIPPED** — produce + verify +
-> relay with **transitive flooding** (each node re-pushes once; the `d.proof` latch is
-> the seen-set, so the flood terminates) across the pinned mesh. Only the
-> **robustness** layer (anti-entropy so an offline node catches up; eclipse
-> resistance) and **discovery / membership** remain design-only and are honestly
-> frontier. This doc scopes the difference: the parts that were clean buildable slices
-> (built) vs the parts that would be a stub if rushed (not built). A planning artifact,
-> not a claim that a robust mesh exists.
+> Status: the **transferable fork proof** below is **SHIPPED** end-to-end — produce +
+> verify + relay with **transitive flooding** (each node re-pushes once; the `d.proof`
+> latch is the seen-set, so it terminates) + **pull-based anti-entropy** (a node that
+> was offline during the flood catches up by GET-ing peers' proofs on its next tick).
+> What remains is **eclipse resistance** (an inherent limit of *any* pinned-trust model,
+> not a feature to build) and **discovery / membership** (genuine frontier;
+> trust-on-first-use is rejected because it weakens the guarantee). This doc scopes the
+> difference: the parts that were clean buildable slices (built) vs the parts that are
+> a stub-if-rushed or an inherent trust-model limit (not built). A planning artifact.
 
 ## What ships today
 
@@ -90,31 +91,35 @@ is intentionally out of scope of this artifact.
   every node* (multi-proof forensics) is part of the deferred robustness frontier below
   (it would key `d.proof` by a canonical proof hash).
 
-Strictly within the already-pinned set; **best-effort flood, no robustness layer** —
-see below.
+- **Catch up (pull anti-entropy)** ✅ — the push flood is best-effort, so a node that
+  was offline or transiently unreachable would miss it. On each tick, a node that holds
+  NO proof also GETs each pinned peer's `/equivocation-proof` and adopts the first valid
+  one (same `tryAdopt` path — verified under our pinned keys, origin-scoped). Because the
+  entire replicated state is a *single* proof, a per-tick pull is **complete**
+  reconciliation, not a sketch (`TestDaemonPullsProofFromPeer`).
+
+Strictly within the already-pinned set.
 
 ## What stays frontier (would be a stub if rushed)
 
-- **Robustness under partial connectivity / churn / adversary** — push-pull
-  anti-entropy (an offline node catching up after the flood), retry/backoff, and
-  eclipse-resistance. The best-effort flood above does NOT do these; a small version
-  *would* fake the hard parts (the failure modes are the point). This is the real
-  distributed-systems build, separable from the basic flooding already shipped.
-- **Membership beyond a pinned list** — any discovery mechanism must preserve "every
-  counted witness is an independently pinned key," so this is a governance/enrollment
+- **Eclipse resistance** — an adversary who controls *all* of a node's pinned peers can
+  hide a fork from it. This is NOT a feature to build: it is an inherent property of any
+  pinned-trust model (you trust your pins). The honest mitigation is operational — pin
+  several independent peers — and it is a documented limitation, not a TODO.
+- **Membership / discovery beyond a pinned list** — any discovery mechanism must preserve
+  "every counted witness is an independently pinned key," so it is a governance/enrollment
   design question, not just code. Trust-on-first-use is explicitly **rejected** (it
-  weakens the guarantee, per the tension above).
+  weakens the guarantee, per the tension above). Genuine frontier.
 - **Gossiping the full log (not just checkpoints/proofs)** — bandwidth/storage model
   for replicating entries, out of scope for an anti-equivocation mesh.
 
 ## Recommendation
 
-The **transferable fork proof** is **done** — produce, offline verify, and relay with
-terminating transitive flooding across the pinned mesh. What remains is genuinely
-frontier: the **robustness layer** (anti-entropy so an offline node catches up after
-the flood; retry/backoff; eclipse-resistance) and **discovery / membership** (which
-must preserve "every counted witness is an independently pinned key" —
-trust-on-first-use is rejected). Both are separable from the shipped flooding; defer
-them until a concrete multi-operator deployment exists to design them against. Until
-then they stay honestly listed as frontier in [`ROADMAP.md`](ROADMAP.md), not
-half-built.
+The **transferable fork proof** is **done** end-to-end — produce, offline verify,
+relay with terminating transitive flooding, and pull-based anti-entropy so an offline
+node catches up. What's left is not a clean slice: **eclipse resistance** is an inherent
+limit of the pinned-trust model (mitigated operationally by pinning several independent
+peers, not by code), and **discovery / membership** is genuine governance frontier
+(trust-on-first-use is rejected). Defer discovery until a concrete multi-operator
+deployment exists to design it against; until then it stays honestly listed as frontier
+in [`ROADMAP.md`](ROADMAP.md), not half-built.

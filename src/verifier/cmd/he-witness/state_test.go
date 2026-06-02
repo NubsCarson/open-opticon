@@ -357,3 +357,70 @@ func TestDaemonRelayIsTransitiveOncePerNode(t *testing.T) {
 		t.Errorf("re-pushed on a duplicate adoption: %d -> %d (must dedup once-per-node)", after1, pushes.Load())
 	}
 }
+
+// Pull-based anti-entropy: a daemon with NO proof catches up by GET-ing a pinned
+// peer's /equivocation-proof and adopting it (verified under OUR pinned keys). A
+// foreign-origin proof is pulled but NOT adopted; a daemon that already holds a proof
+// does not pull/overwrite.
+func TestDaemonPullsProofFromPeer(t *testing.T) {
+	origin := "honest-ear.log/v1"
+	waKey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	wbKey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	waX, waY := verifier.PubXY(waKey)
+	wbX, wbY := verifier.PubXY(wbKey)
+	ck := func(k *ecdsa.PrivateKey, name, org string, root [32]byte) equivCkpt {
+		body := verifier.CheckpointBody(org, 3, root)
+		sig, err := verifier.CosignCheckpoint(body, k)
+		if err != nil {
+			t.Fatal(err)
+		}
+		px, py := verifier.PubXY(k)
+		return equivCkpt{Witness: name, CheckpointBody: string(body), Cosignature: hex.EncodeToString(sig),
+			WitnessPubX: hex.EncodeToString(px), WitnessPubY: hex.EncodeToString(py)}
+	}
+	serveProof := func(p equivProof) *httptest.Server {
+		mux := http.NewServeMux()
+		mux.HandleFunc("/equivocation-proof", func(w http.ResponseWriter, _ *http.Request) {
+			_ = json.NewEncoder(w).Encode(p)
+		})
+		// /equivocation-intake exists so a re-push on adoption doesn't error noisily.
+		mux.HandleFunc("/equivocation-intake", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(200) })
+		return httptest.NewServer(mux)
+	}
+	mkdaemon := func(url string) *daemon {
+		return &daemon{cfg: config{name: "wc", origin: origin},
+			peers: []peer{{name: "wa", url: url, pubX: waX, pubY: waY}, {name: "wb", url: url, pubX: wbX, pubY: wbY}},
+			st:    &witnessState{Origin: origin}, healthOK: true}
+	}
+
+	// A peer serving a valid SAME-origin proof -> pull, adopt, latch.
+	good := serveProof(equivProof{Schema: equivProofSchema,
+		A: ck(waKey, "wa", origin, logOf("a", "b", "c").Root()),
+		B: ck(wbKey, "wb", origin, logOf("a", "b", "X").Root())})
+	defer good.Close()
+	d := mkdaemon(good.URL)
+	d.pullPeerProofs()
+	if d.proof == nil || !d.equivocation || d.healthOK {
+		t.Errorf("did not pull+adopt a peer's proof: proof=%v equiv=%v healthOK=%v", d.proof != nil, d.equivocation, d.healthOK)
+	}
+
+	// A peer serving a FOREIGN-origin proof -> pulled but NOT adopted (origin scoping).
+	bad := serveProof(equivProof{Schema: equivProofSchema,
+		A: ck(waKey, "wa", "evil.other/v1", logOf("a", "b", "c").Root()),
+		B: ck(wbKey, "wb", "evil.other/v1", logOf("a", "b", "X").Root())})
+	defer bad.Close()
+	d2 := mkdaemon(bad.URL)
+	d2.pullPeerProofs()
+	if d2.proof != nil || d2.equivocation {
+		t.Error("adopted a foreign-origin proof via pull (origin scoping failed)")
+	}
+
+	// A daemon that ALREADY holds a proof must not pull/overwrite.
+	d3 := mkdaemon(good.URL)
+	existing := &equivProof{Schema: "preexisting"}
+	d3.proof = existing
+	d3.pullPeerProofs()
+	if d3.proof != existing {
+		t.Error("pull overwrote an existing proof")
+	}
+}

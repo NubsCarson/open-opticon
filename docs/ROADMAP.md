@@ -135,10 +135,14 @@ From this PoC to a defensible product, in order of trust-impact.
   **relays** the proof to its pinned peers (`POST /equivocation-intake`), which
   re-verify it under THEIR own pinned keys (origin-scoped to the log they watch) before
   latching — and re-push on first adoption, so the proof **transitively floods** the
-  pinned mesh, terminating via the `d.proof` once-per-node latch (`make witness-e2e`,
-  `VerifyEquivocation`, `TestDaemonAdoptsRelayedProof`, `TestDaemonRelayIsTransitiveOncePerNode`).
-  Only the robustness layer (anti-entropy, eclipse resistance) + discovery/membership
-  stay frontier, scoped in [`DESIGN_WITNESS_GOSSIP.md`](DESIGN_WITNESS_GOSSIP.md).
+  pinned mesh, terminating via the `d.proof` once-per-node latch; a node offline during
+  the flood **catches up via pull-based anti-entropy** (GET each peer's
+  `/equivocation-proof` on the tick — complete, since the state is one proof)
+  (`make witness-e2e`, `VerifyEquivocation`, `TestDaemonAdoptsRelayedProof`,
+  `TestDaemonRelayIsTransitiveOncePerNode`, `TestDaemonPullsProofFromPeer`). What's left
+  is not a clean slice: eclipse resistance (an inherent pinned-trust limit, mitigated by
+  pinning several independent peers) + discovery/membership (governance frontier) —
+  scoped in [`DESIGN_WITNESS_GOSSIP.md`](DESIGN_WITNESS_GOSSIP.md).
 - **Sign endorsements (endorser authenticity).** ✅ A first slice: an ENDORSER
   signs a canonical endorsement body (`EndorsementBody`/`ParseEndorsement` +
   the shared `SignNote`/`VerifyCheckpointSig`), the SAME signed body is logged,
