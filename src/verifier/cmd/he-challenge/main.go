@@ -458,6 +458,7 @@ h1{font-size:1.05rem;color:var(--dim);font-weight:600;letter-spacing:.02em;margi
 #why{color:var(--dim);font-size:.92rem;margin:14px auto 0;max-width:34ch}
 .spin{width:44px;height:44px;border-radius:50%;border:4px solid #26262b;
 border-top-color:var(--b);animation:s 1s linear infinite;display:inline-block}@keyframes s{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.spin{animation:none}}
 .scope{display:none;margin:22px auto 6px;max-width:40ch;color:var(--dim);font-size:.86rem}
 #answers{display:none;margin-top:18px;text-align:left}
 .qa{background:var(--card);border:1px solid var(--line);border-radius:11px;padding:15px 16px;margin-bottom:12px}
@@ -485,8 +486,9 @@ pre .k{color:var(--dim2)}
 <div class="wrap">
 <h1>open-opticon · live verification</h1>
 <noscript><div id="sub">This live verifier needs JavaScript enabled to poll the result.</div></noscript>
+<div id="live" role="status" aria-live="polite" aria-atomic="true">
 <div id="card"><div class="spin"></div></div>
-<div id="sub">waiting for the device to prove itself…</div>
+<div id="sub">waiting for the device to prove itself…</div></div>
 <div id="why"></div>
 <div class="scope" id="scope">✓ a key the device controls signed this exact verdict, live, for your one-time
 challenge — it was not replayed or altered. tap any answer to see the proof and its limits.</div>

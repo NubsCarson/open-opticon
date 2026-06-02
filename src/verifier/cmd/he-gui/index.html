@@ -42,6 +42,7 @@
   body.live .orb svg{stroke:var(--accent)}
   body.live .pulse{animation:pulse 2.2s ease-out infinite}
   @keyframes pulse{0%{inset:40px;opacity:.5}100%{inset:-6px;opacity:0}}
+  @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 
   .hint{margin-top:18px; color:var(--dim); font-size:14px; height:20px; letter-spacing:.2px}
 
@@ -107,7 +108,7 @@
     <div class="hint" id="hint">Tap to listen</div>
     <div class="meter" id="meter"></div>
 
-    <section class="card" id="card">
+    <section class="card" id="card" role="status" aria-live="polite" aria-atomic="true">
       <div class="verdict" id="verdict">Ready</div>
       <div class="pill" id="pill"><span class="dot"></span><span id="pilltext">verified</span></div>
       <div class="leak">Audio captured → analyzed → <b>discarded</b>. Only the result above left the device.</div>

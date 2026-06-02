@@ -24,6 +24,7 @@
   }
   *{box-sizing:border-box}
   html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
+  @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{animation:none!important;transition:none!important}}
   body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans);
     font-size:16px;line-height:1.6;letter-spacing:-0.011em;
     -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
@@ -204,7 +205,7 @@
            byte so you can watch the signature gate reject it.</p>
       </div>
       <div>
-        <div class="verdict" id="verdict">
+        <div class="verdict" id="verdict" role="status" aria-live="polite" aria-atomic="true">
           <div class="banner"><span class="pdot" style="background:var(--muted2)"></span>
             <span id="verdictText">awaiting input…</span></div>
           <div class="reason" id="verdictReason"></div>
