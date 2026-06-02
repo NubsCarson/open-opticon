@@ -19,6 +19,9 @@ LOG="$W/log.json"
 LOGD_PID=""
 W2D_PID=""
 W1D_PID=""
+LOGDF_PID=""
+W2F_PID=""
+W1F_PID=""
 pass=0; fail=0
 ok()  { printf '  \033[1;32mok\033[0m:   %s\n' "$1"; pass=$((pass+1)); }
 bad() { printf '  \033[1;31mFAIL\033[0m: %s\n' "$1"; fail=$((fail+1)); }
@@ -26,6 +29,9 @@ cleanup() {
   [ -n "$LOGD_PID" ] && kill "$LOGD_PID" 2>/dev/null
   [ -n "$W2D_PID" ] && kill "$W2D_PID" 2>/dev/null
   [ -n "$W1D_PID" ] && kill "$W1D_PID" 2>/dev/null
+  [ -n "$LOGDF_PID" ] && kill "$LOGDF_PID" 2>/dev/null
+  [ -n "$W2F_PID" ] && kill "$W2F_PID" 2>/dev/null
+  [ -n "$W1F_PID" ] && kill "$W1F_PID" 2>/dev/null
   rm -rf "$W"
 }
 trap cleanup EXIT
@@ -149,6 +155,58 @@ else
 fi
 kill "$W1D_PID" 2>/dev/null; W1D_PID=""
 kill "$W2D_PID" 2>/dev/null; W2D_PID=""
+
+echo
+echo "== split view: a TRANSFERABLE equivocation proof =="
+# The SAME operator key serves a DIFFERENT root at the same size to a different
+# witness. A forked log (size 3, divergent final leaf) signed by the SAME log key on
+# a 2nd he-logd; w2 watches IT, w1 watches the honest log and pins w2. w1's daemon
+# detects the same-size split and assembles a proof anyone can verify OFFLINE.
+LOGF="$W/forklog.json"
+for e in 11aa22bb 33cc44dd deadbeef; do "$W/he-log" add --log "$LOGF" "$e" >/dev/null; done
+PORT4=$((PORT + 3)); URL4="http://127.0.0.1:$PORT4"
+"$W/he-logd" --addr "127.0.0.1:$PORT4" --log "$LOGF" --key "$LOG_PRIV" --origin "$ORIGIN" >/dev/null 2>&1 &
+LOGDF_PID=$!
+for _ in $(seq 1 100); do curl -fsS "$URL4/checkpoint" >/dev/null 2>&1 && break; sleep 0.1; done
+
+PORT6=$((PORT + 5)); URL6="http://127.0.0.1:$PORT6"
+"$W/he-witness" serve --addr "127.0.0.1:$PORT6" --name w2 --key "$W2_PRIV" \
+  --log-url "$URL4" --log-pub-x "$LOG_X" --log-pub-y "$LOG_Y" --origin "$ORIGIN" \
+  --state "$W/w2fork.json" --poll 1 >/dev/null 2>&1 &
+W2F_PID=$!
+for _ in $(seq 1 100); do curl -fsS "$URL6/cosignature" >/dev/null 2>&1 && break; sleep 0.1; done
+
+PORT5=$((PORT + 4)); URL5="http://127.0.0.1:$PORT5"
+"$W/he-witness" serve --addr "127.0.0.1:$PORT5" --name w1 --key "$W1_PRIV" \
+  --log-url "$URL" --log-pub-x "$LOG_X" --log-pub-y "$LOG_Y" --origin "$ORIGIN" \
+  --state "$W/w1fork.json" --poll 1 --peer "w2,$URL6,$W2_X,$W2_Y" >/dev/null 2>&1 &
+W1F_PID=$!
+proof=""
+for _ in $(seq 1 100); do
+  if curl -fsS "$URL5/equivocation-proof" -o "$W/proof.json" 2>/dev/null \
+     && python3 -c "import json;exit(0 if json.load(open('$W/proof.json')).get('schema') else 1)" 2>/dev/null; then proof=1; break; fi
+  sleep 0.1
+done
+[ -n "$proof" ] && ok "w1 daemon served a transferable equivocation proof at /equivocation-proof" \
+  || bad "no equivocation proof was served"
+
+# Anyone verifies it OFFLINE under the two PINNED witness keys (no trust in w1).
+if [ -n "$proof" ] && "$W/he-witness" verify-equivocation --file "$W/proof.json" \
+     --a-pub-x "$W1_X" --a-pub-y "$W1_Y" --b-pub-x "$W2_X" --b-pub-y "$W2_Y" >/dev/null 2>&1; then
+  ok "the proof verifies under the two pinned witness keys (log convicted of equivocating)"
+else
+  bad "the equivocation proof did not verify under the pinned keys"
+fi
+# A WRONG pinned key must NOT verify (a producer can't substitute a key it controls).
+if [ -n "$proof" ] && "$W/he-witness" verify-equivocation --file "$W/proof.json" \
+     --a-pub-x "$W3_X" --a-pub-y "$W3_Y" --b-pub-x "$W2_X" --b-pub-y "$W2_Y" >/dev/null 2>&1; then
+  bad "the proof verified under a WRONG pinned key"
+else
+  ok "the proof rejects a wrong pinned key"
+fi
+kill "$W1F_PID" 2>/dev/null; W1F_PID=""
+kill "$W2F_PID" 2>/dev/null; W2F_PID=""
+kill "$LOGDF_PID" 2>/dev/null; LOGDF_PID=""
 
 echo
 echo "== the log FORKS: witnesses refuse the divergent history =="

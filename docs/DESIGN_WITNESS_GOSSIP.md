@@ -1,9 +1,10 @@
 # Design: witness-to-witness gossip (frontier — design, not built)
 
-> Status: **design only.** Nothing here is implemented. This scopes the next slice
-> of the transparency-witness story honestly — including the one part that is a
-> clean, buildable-now slice and the part that is genuinely frontier and would be a
-> stub if rushed. It is a planning artifact, not a claim of capability.
+> Status: the **transferable fork proof** below is now **SHIPPED** (produce +
+> verify — see "The clean slice" section); the gossip **mesh / discovery** remain
+> design-only and are honestly frontier. This doc scopes the difference: the part
+> that was a clean buildable slice (built) vs the part that would be a stub if
+> rushed (not built). A planning artifact, not a claim that the mesh exists.
 
 ## What ships today
 
@@ -41,30 +42,36 @@ the quorum — i.e. discovery doesn't just add convenience, it can **weaken** th
 property. So a mesh here must gossip **among an enrolled, pinned set**, never
 bootstrap trust from the network.
 
-## The clean, buildable-now slice: a transferable fork proof
+## The clean slice: a transferable fork proof (SHIPPED — produce + verify)
 
-The high-value piece that needs **no new trust model and no new crypto** is making a
-detected fork into a **portable fraud proof** anyone can verify independently.
+The high-value piece needs **no new trust model and no new crypto**: make a detected
+fork into a **portable fraud proof** anyone can verify independently. When
+`checkPeers` latches a **same-size** split, the daemon holds two checkpoint bodies at
+that size with **different roots**, each cosigned by a distinct **pinned witness**
+(its own cosigned view + the divergent peer's). That pair *is* a self-contained proof.
 
-When `checkPeers` latches `equivocation_detected`, the daemon already holds two
-checkpoint bodies for the **same size** signed under the **same pinned log key** with
-**different roots**. That pair *is* a self-contained proof of equivocation. The slice:
+Built and gated (`make witness-e2e`, `TestVerifyEquivocation`,
+`TestDaemonServesEquivocationProof`):
 
-- **Expose it:** add `GET /equivocation-proof` returning
-  `{size, checkpoint_a:{body,sig}, checkpoint_b:{body,sig}, log_pub_x/y}`.
-- **Verify it:** a function (reusing the existing `verifySig` + checkpoint-body parse)
-  that accepts the proof **iff** both signatures verify under the pinned log key, both
-  are at the same size, and the roots differ. A CLI verb
-  (`he-witness verify-equivocation --file proof.json --log-pub-x/-y`) and a unit test
-  mirroring `TestDaemonPeerCrossCheck`.
-- **Relay it:** on latching, a daemon POSTs the proof to its pinned peers'
-  `/equivocation-proof` intake; a peer that verifies it latches too. This is
-  propagation **without** discovery — strictly within the already-pinned set.
+- **Expose it** ✅ — `GET /equivocation-proof` returns `{schema, a, b}`, each side
+  `{witness, checkpoint_body, cosignature, witness_pub_x/y}` (404 until detected).
+- **Verify it** ✅ — `verifier.VerifyEquivocation(...)` accepts **iff** both
+  cosignatures verify under the **caller-PINNED** witness keys (never the
+  self-reported ones), same origin+size, different roots. CLI:
+  `he-witness verify-equivocation --file proof.json --a-pub-x/-y --b-pub-x/-y`,
+  so anyone — not just the detecting witness — can confirm the log equivocated.
 
-Why this is a clean slice, not a stub: it is deterministic, fully testable offline
-(two conflicting signed checkpoints → one boolean), reuses the project's single
-ECDSA path, and strengthens a property that already exists. It is the
-"fork is now *transferable evidence*, not just a local 503" upgrade.
+Scope note (honest): the proof binds each half to a **pinned witness** cosignature
+(the C2SP witness-cosigning model), so it proves *two independent pinned witnesses
+saw conflicting roots* → the log equivocated. It covers the **same-size** split; the
+inconsistent-extension case (different sizes) needs a failing consistency proof and
+is intentionally out of scope of this artifact.
+
+**Still to build (the next sub-slice, not a stub):** *relay* — on latching, a daemon
+POSTs the proof to its pinned peers' intake so a peer that verifies it latches too.
+Propagation **without** discovery, strictly within the already-pinned set. Deferred
+only because it adds an intake endpoint with its own auth surface; produce+verify is
+complete and valuable standalone (the detecting witness already holds both halves).
 
 ## What stays frontier (would be a stub if rushed)
 
@@ -80,9 +87,8 @@ ECDSA path, and strengthens a property that already exists. It is the
 
 ## Recommendation
 
-Build the **transferable fork proof** slice (intake + verify + relay among pinned
-peers) when the witness layer is next touched — it is small, testable, and turns the
-existing local equivocation latch into shareable evidence. Defer epidemic gossip and
-discovery until there is a concrete multi-operator deployment to design them against;
-until then they remain honestly listed as frontier in [`ROADMAP.md`](ROADMAP.md), not
-half-built.
+The **transferable fork proof** (produce + verify) is **done** — the local
+equivocation latch is now shareable, offline-verifiable evidence. The next sub-slice
+is *relay among pinned peers*; after that, defer epidemic gossip and discovery until
+there is a concrete multi-operator deployment to design them against. Until then they
+remain honestly listed as frontier in [`ROADMAP.md`](ROADMAP.md), not half-built.

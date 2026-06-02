@@ -373,6 +373,47 @@ func CosignCheckpoint(cpBody []byte, key *ecdsa.PrivateKey) ([]byte, error) {
 	return signNote(cpBody, key)
 }
 
+// VerifyEquivocation reports whether two cosigned checkpoints are transferable
+// evidence that a log equivocated: SAME origin and SAME size but DIFFERENT roots,
+// each validly cosigned under the witness key the caller PINNED (aX/aY for the
+// first, bX/bY for the second). Because each half is bound to an independently
+// pinned witness, a true result convicts the log of showing conflicting roots
+// without the verifier having to trust whoever produced the proof — it only trusts
+// the two witness keys it pinned. (Pin two DISTINCT witnesses for "the log
+// equivocated"; the same key twice still proves one witness cosigned conflicting
+// roots, which is itself misbehavior.)
+//
+// Scope: this is the same-size split-view case. The inconsistent-extension case (a
+// peer ahead whose tree does not append-only-extend ours) is also equivocation but
+// its evidence is a FAILING consistency proof, not a two-checkpoint pair, so it is
+// intentionally out of scope here and reported false with a reason.
+func VerifyEquivocation(bodyA, cosigA, aX, aY, bodyB, cosigB, bX, bY []byte) (bool, string) {
+	if !VerifyCheckpointSig(bodyA, cosigA, aX, aY) {
+		return false, "checkpoint A cosignature does not verify under the pinned A key"
+	}
+	if !VerifyCheckpointSig(bodyB, cosigB, bX, bY) {
+		return false, "checkpoint B cosignature does not verify under the pinned B key"
+	}
+	oA, sA, rA, err := ParseCheckpoint(bodyA)
+	if err != nil {
+		return false, "parse checkpoint A: " + err.Error()
+	}
+	oB, sB, rB, err := ParseCheckpoint(bodyB)
+	if err != nil {
+		return false, "parse checkpoint B: " + err.Error()
+	}
+	if oA != oB {
+		return false, fmt.Sprintf("different origins (%q vs %q) — not the same log", oA, oB)
+	}
+	if sA != sB {
+		return false, fmt.Sprintf("different sizes (%d vs %d) — not a same-size split view", sA, sB)
+	}
+	if rA == rB {
+		return false, "identical roots — the witnesses agree, no equivocation"
+	}
+	return true, fmt.Sprintf("log %q equivocated at size %d: root %x… vs %x…", oA, sA, rA[:4], rB[:4])
+}
+
 // VerifyCheckpointWitnesses returns the names of distinct ENROLLED witnesses
 // whose cosignature over cpBody is valid (deduped by name). A cosignature only
 // counts if its (name, public key) matches an enrolled witness — otherwise a

@@ -305,3 +305,54 @@ func TestCOSEEndorsement(t *testing.T) {
 		t.Error("tampered COSE endorsement verified")
 	}
 }
+
+// A transferable equivocation proof: two distinct pinned witnesses cosign
+// conflicting roots at the SAME size -> VerifyEquivocation accepts; the false /
+// substituted-key / tampered / agreeing / different-size cases all reject.
+func TestVerifyEquivocation(t *testing.T) {
+	wA, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	wB, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	aX, aY := PubXY(wA)
+	bX, bY := PubXY(wB)
+	const origin = "honest-ear.log/v1"
+
+	mk := func(k *ecdsa.PrivateKey, size int, root [32]byte) (body, sig []byte) {
+		body = CheckpointBody(origin, size, root)
+		s, err := CosignCheckpoint(body, k)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return body, s
+	}
+	rootX := [32]byte{0x11}
+	rootY := [32]byte{0x22}
+
+	// Valid: same size 5, conflicting roots, each under its pinned witness.
+	bodyA, cosigA := mk(wA, 5, rootX)
+	bodyB, cosigB := mk(wB, 5, rootY)
+	if ok, reason := VerifyEquivocation(bodyA, cosigA, aX, aY, bodyB, cosigB, bX, bY); !ok {
+		t.Fatalf("valid same-size split view rejected: %s", reason)
+	}
+
+	// Reject: identical roots (the witnesses agree — no equivocation).
+	bodyB2, cosigB2 := mk(wB, 5, rootX)
+	if ok, _ := VerifyEquivocation(bodyA, cosigA, aX, aY, bodyB2, cosigB2, bX, bY); ok {
+		t.Error("identical roots accepted as equivocation")
+	}
+	// Reject: different sizes (out of scope — that needs a consistency proof).
+	bodyB3, cosigB3 := mk(wB, 6, rootY)
+	if ok, _ := VerifyEquivocation(bodyA, cosigA, aX, aY, bodyB3, cosigB3, bX, bY); ok {
+		t.Error("different-size pair accepted")
+	}
+	// Reject: B checked under the WRONG pinned key (a producer can't substitute a
+	// key it controls for the pinned witness key).
+	if ok, _ := VerifyEquivocation(bodyA, cosigA, aX, aY, bodyB, cosigB, aX, aY); ok {
+		t.Error("B verified under the wrong pinned key")
+	}
+	// Reject: tampered checkpoint body (signature no longer matches).
+	tampered := append([]byte(nil), bodyB...)
+	tampered[len(tampered)-1] ^= 0xff
+	if ok, _ := VerifyEquivocation(bodyA, cosigA, aX, aY, tampered, cosigB, bX, bY); ok {
+		t.Error("tampered checkpoint body accepted")
+	}
+}

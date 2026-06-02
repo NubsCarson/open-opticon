@@ -128,8 +128,13 @@ From this PoC to a defensible product, in order of trust-impact.
   Remaining (genuinely future, not a clean slice now): peer DISCOVERY / a witness
   registry / trust-on-first-use (the guarantee needs pinned independent keys), and a
   true p2p gossip overlay (transitive flooding, peer-of-peer fan-out, NAT traversal).
-  The next slice that IS clean (a transferable fork proof + relay among pinned peers)
-  vs. what stays frontier is scoped in [`DESIGN_WITNESS_GOSSIP.md`](DESIGN_WITNESS_GOSSIP.md).
+  ✅ A first piece of that shipped: a TRANSFERABLE equivocation proof — on a same-size
+  split the daemon serves `/equivocation-proof` (its own + the divergent peer's
+  cosigned checkpoints), and `he-witness verify-equivocation` lets ANYONE confirm the
+  log equivocated offline under the two pinned witness keys (`make witness-e2e`,
+  `VerifyEquivocation`). The remaining sub-slice (relay among pinned peers) vs. the
+  genuine frontier (epidemic gossip, discovery) is scoped in
+  [`DESIGN_WITNESS_GOSSIP.md`](DESIGN_WITNESS_GOSSIP.md).
 - **Sign endorsements (endorser authenticity).** ✅ A first slice: an ENDORSER
   signs a canonical endorsement body (`EndorsementBody`/`ParseEndorsement` +
   the shared `SignNote`/`VerifyCheckpointSig`), the SAME signed body is logged,

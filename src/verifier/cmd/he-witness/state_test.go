@@ -155,3 +155,62 @@ func TestDaemonPeerCrossCheck(t *testing.T) {
 		t.Errorf("equivocation should make /health unhealthy: code=%d body=%+v", code2, body2)
 	}
 }
+
+// On a same-size split view, the daemon assembles a TRANSFERABLE proof from its own
+// cosigned view + the divergent peer's, served at /equivocation-proof (404 before),
+// and that proof verifies OFFLINE under the two pinned witness keys — so anyone, not
+// just this witness, can confirm the log equivocated.
+func TestDaemonServesEquivocationProof(t *testing.T) {
+	origin := "honest-ear.log/v1"
+	genuine := logOf("a", "b", "c").Root()
+	ourKey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	ourX, ourY := verifier.PubXY(ourKey)
+	ourBody := verifier.CheckpointBody(origin, 3, genuine)
+	ourCosig, err := verifier.CosignCheckpoint(ourBody, ourKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	peerKey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	px, py := verifier.PubXY(peerKey)
+
+	d := &daemon{
+		cfg: config{name: "w1", origin: origin},
+		st:  &witnessState{Origin: origin, Size: 3, Root: hex.EncodeToString(genuine[:])},
+		latest: &pollResult{Body: ourBody, Cosignature: verifier.Cosignature{
+			Witness: "w1", PubX: ourX, PubY: ourY, Sig: ourCosig,
+		}},
+		healthOK: true,
+	}
+
+	// Before any divergence: no proof.
+	rr := httptest.NewRecorder()
+	d.handleEquivocationProof(rr, httptest.NewRequest("GET", "/equivocation-proof", nil))
+	if rr.Code != 404 {
+		t.Fatalf("proof before divergence = %d, want 404", rr.Code)
+	}
+
+	// A peer holding a DIFFERENT root at the SAME size 3 -> proof gets assembled.
+	fork := peerServer(t, origin, 3, logOf("a", "b", "X").Root(), peerKey)
+	defer fork.Close()
+	d.peers = []peer{{name: "peer", url: fork.URL, pubX: px, pubY: py}}
+	d.checkPeers()
+
+	rr = httptest.NewRecorder()
+	d.handleEquivocationProof(rr, httptest.NewRequest("GET", "/equivocation-proof", nil))
+	if rr.Code != 200 {
+		t.Fatalf("proof after divergence = %d, want 200; body=%s", rr.Code, rr.Body.String())
+	}
+	var p equivProof
+	if err := json.Unmarshal(rr.Body.Bytes(), &p); err != nil {
+		t.Fatalf("proof json: %v", err)
+	}
+	// The served proof must verify OFFLINE under the two PINNED witness keys.
+	cosigA, _ := hex.DecodeString(p.A.Cosignature)
+	cosigB, _ := hex.DecodeString(p.B.Cosignature)
+	ok, reason := verifier.VerifyEquivocation(
+		[]byte(p.A.CheckpointBody), cosigA, ourX, ourY,
+		[]byte(p.B.CheckpointBody), cosigB, px, py)
+	if !ok {
+		t.Fatalf("served proof does not verify under the pinned keys: %s", reason)
+	}
+}

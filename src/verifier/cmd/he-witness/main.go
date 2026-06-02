@@ -78,13 +78,14 @@ type pollResult struct {
 	Cosignature verifier.Cosignature
 }
 
-const usage = "usage: he-witness <check|serve|compare> [flags]"
+const usage = "usage: he-witness <check|serve|compare|verify-equivocation> [flags]"
 
 // Per-subcommand usage, printed on `he-witness <sub> --help`.
 const (
-	usageCheck   = "usage: he-witness check --name N --key <privHex> --log-url URL --log-pub-x X --log-pub-y Y [--origin O] [--state f]"
-	usageServe   = "usage: he-witness serve --name N --key <privHex> --log-url URL --log-pub-x X --log-pub-y Y [--origin O] [--state f] [--addr :9101] [--poll secs] [--peer name,url,pubXhex,pubYhex ...]"
-	usageCompare = "usage: he-witness compare --peer-url URL --peer-name N --peer-pub-x X --peer-pub-y Y [--origin O] [--state f]"
+	usageCheck       = "usage: he-witness check --name N --key <privHex> --log-url URL --log-pub-x X --log-pub-y Y [--origin O] [--state f]"
+	usageServe       = "usage: he-witness serve --name N --key <privHex> --log-url URL --log-pub-x X --log-pub-y Y [--origin O] [--state f] [--addr :9101] [--poll secs] [--peer name,url,pubXhex,pubYhex ...]"
+	usageCompare     = "usage: he-witness compare --peer-url URL --peer-name N --peer-pub-x X --peer-pub-y Y [--origin O] [--state f]"
+	usageVerifyEquiv = "usage: he-witness verify-equivocation --file proof.json --a-pub-x X --a-pub-y Y --b-pub-x X --b-pub-y Y"
 )
 
 // helpRequested prints usage and returns true if args asks for help (-h/--help/help),
@@ -114,8 +115,10 @@ func main() {
 		runServe(os.Args[2:])
 	case "compare":
 		runCompare(os.Args[2:])
+	case "verify-equivocation":
+		runVerifyEquivocation(os.Args[2:])
 	default:
-		cli.Die("unknown subcommand %q (want check|serve|compare)", os.Args[1])
+		cli.Die("unknown subcommand %q (want check|serve|compare|verify-equivocation)", os.Args[1])
 	}
 }
 
@@ -286,6 +289,28 @@ type peerCosigResp struct {
 	CheckpointBody string `json:"checkpoint_body"`
 }
 
+const equivProofSchema = "honest-ear/equivocation-proof/v1"
+
+// equivCkpt is one cosigned checkpoint inside an equivProof.
+type equivCkpt struct {
+	Witness        string `json:"witness"`
+	CheckpointBody string `json:"checkpoint_body"`
+	Cosignature    string `json:"cosignature"`
+	WitnessPubX    string `json:"witness_pub_x"`
+	WitnessPubY    string `json:"witness_pub_y"`
+}
+
+// equivProof is TRANSFERABLE evidence the log equivocated: two checkpoints at the
+// same size with different roots, each cosigned by a distinct pinned witness (our
+// own cosigned view + a divergent peer's). Served at /equivocation-proof and
+// checked — by anyone, trusting only the two PINNED witness keys, not the producer
+// — via verifier.VerifyEquivocation / `he-witness verify-equivocation`.
+type equivProof struct {
+	Schema string    `json:"schema"`
+	A      equivCkpt `json:"a"`
+	B      equivCkpt `json:"b"`
+}
+
 // crossCheck is the pure decision: does a peer witness's checkpoint (already
 // sig-verified under the peer's pinned key and origin-checked) agree with our
 // view? peerProof is the log's consistency proof when the peer is ahead (nil if
@@ -409,6 +434,57 @@ func runCompare(args []string) {
 	}
 }
 
+// runVerifyEquivocation checks a transferable equivocation proof OFFLINE: it
+// verifies each checkpoint's cosignature under the witness key the caller PINS via
+// flags (NOT the self-reported key in the file), then confirms same-origin/size,
+// different-root. So anyone — not just the witness that produced it — can confirm
+// the log equivocated, trusting only the two pinned keys.
+func runVerifyEquivocation(args []string) {
+	if helpRequested(args, usageVerifyEquiv) {
+		return
+	}
+	m := flagMap(args)
+	need := func(k string) string {
+		v, ok := m[k]
+		if !ok || v == "" {
+			cli.Die("--%s is required", k)
+		}
+		return v
+	}
+	raw, err := os.ReadFile(need("file"))
+	if err != nil {
+		cli.Die("read proof: %v", err)
+	}
+	var p equivProof
+	if err := json.Unmarshal(raw, &p); err != nil {
+		cli.Die("parse proof JSON: %v", err)
+	}
+	hx := func(k string) []byte {
+		b, err := hex.DecodeString(need(k))
+		if err != nil {
+			cli.Die("bad --%s hex: %v", k, err)
+		}
+		return b
+	}
+	aX, aY, bX, bY := hx("a-pub-x"), hx("a-pub-y"), hx("b-pub-x"), hx("b-pub-y")
+	cosigA, err := hex.DecodeString(p.A.Cosignature)
+	if err != nil {
+		cli.Die("bad checkpoint A cosignature hex: %v", err)
+	}
+	cosigB, err := hex.DecodeString(p.B.Cosignature)
+	if err != nil {
+		cli.Die("bad checkpoint B cosignature hex: %v", err)
+	}
+	ok, reason := verifier.VerifyEquivocation(
+		[]byte(p.A.CheckpointBody), cosigA, aX, aY,
+		[]byte(p.B.CheckpointBody), cosigB, bX, bY)
+	if !ok {
+		cli.Die("%s  not a valid equivocation proof: %s", cli.Fail(), reason)
+	}
+	fmt.Printf("%s  %s\n", cli.Pass(), reason)
+	fmt.Printf("  witness A: %s\n  witness B: %s\n", p.A.Witness, p.B.Witness)
+}
+
 func runServe(args []string) {
 	if helpRequested(args, usageServe) {
 		return
@@ -446,6 +522,7 @@ func runServe(args []string) {
 
 	http.HandleFunc("/cosignature", d.handleCosignature)
 	http.HandleFunc("/health", d.handleHealth)
+	http.HandleFunc("/equivocation-proof", d.handleEquivocationProof)
 	fmt.Fprintf(os.Stderr, "he-witness %q: polling %s every %s, cross-checking %d peer(s), serving %s\n",
 		cfg.name, cfg.logURL, interval, len(d.peers), addr)
 	cli.Die("server exited: %v", cli.Serve(addr))
@@ -464,6 +541,10 @@ type daemon struct {
 	// error; equivocation is true if any peer's view diverged from ours.
 	peerStatus   map[string]string
 	equivocation bool
+	// proof is the transferable same-size split-view evidence (our cosigned view +
+	// the first divergent peer's), assembled once on detection; served at
+	// /equivocation-proof. nil until a same-size equivocation is seen.
+	proof *equivProof
 }
 
 // checkPeers cross-checks each pinned peer's published cosignature against our own
@@ -491,6 +572,7 @@ func (d *daemon) checkPeers() {
 
 	status := make(map[string]string, len(d.peers))
 	anyEquiv := false
+	var proofPeer *equivCkpt // the first same-size divergent peer -> B side of the proof
 	for _, p := range d.peers {
 		var pr peerCosigResp
 		if err := getJSON(client, p.url+"/cosignature", &pr); err != nil {
@@ -526,6 +608,18 @@ func (d *daemon) checkPeers() {
 		case crossEquivocation:
 			status[p.name] = "EQUIVOCATION: " + reason
 			anyEquiv = true
+			// Capture the first SAME-SIZE divergent peer as the B side of a
+			// transferable proof (the different-size / inconsistent-extension case
+			// needs a failing consistency proof, not a two-checkpoint pair).
+			if proofPeer == nil && psize == ourSize {
+				proofPeer = &equivCkpt{
+					Witness:        p.name,
+					CheckpointBody: pr.CheckpointBody,
+					Cosignature:    pr.Cosignature,
+					WitnessPubX:    hex.EncodeToString(p.pubX),
+					WitnessPubY:    hex.EncodeToString(p.pubY),
+				}
+			}
 		default:
 			status[p.name] = "inconclusive: " + reason
 		}
@@ -536,6 +630,22 @@ func (d *daemon) checkPeers() {
 	if anyEquiv {
 		d.equivocation = true // latch: once an equivocation is seen, stay alarmed
 		d.healthOK = false
+	}
+	// Assemble the transferable proof once, from our own cosigned view (A) + the
+	// divergent peer (B). Needs d.latest (our cosignature over OUR root at this size).
+	if proofPeer != nil && d.proof == nil && d.latest != nil {
+		c := d.latest.Cosignature
+		d.proof = &equivProof{
+			Schema: equivProofSchema,
+			A: equivCkpt{
+				Witness:        c.Witness,
+				CheckpointBody: string(d.latest.Body),
+				Cosignature:    hex.EncodeToString(c.Sig),
+				WitnessPubX:    hex.EncodeToString(c.PubX),
+				WitnessPubY:    hex.EncodeToString(c.PubY),
+			},
+			B: *proofPeer,
+		}
 	}
 	d.mu.Unlock()
 }
@@ -584,6 +694,19 @@ func (d *daemon) handleCosignature(w http.ResponseWriter, _ *http.Request) {
 		"cosignature":     hex.EncodeToString(c.Sig),
 		"checkpoint_body": string(d.latest.Body),
 	})
+}
+
+// handleEquivocationProof serves the transferable split-view proof once one is
+// detected (404 until then). Anyone can fetch it and verify it offline under the
+// two pinned witness keys via `he-witness verify-equivocation`.
+func (d *daemon) handleEquivocationProof(w http.ResponseWriter, _ *http.Request) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.proof == nil {
+		cli.WriteJSON(w, 404, map[string]string{"error": "no equivocation detected"})
+		return
+	}
+	cli.WriteJSON(w, 200, d.proof)
 }
 
 func (d *daemon) handleHealth(w http.ResponseWriter, _ *http.Request) {
