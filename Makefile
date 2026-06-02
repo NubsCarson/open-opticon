@@ -11,6 +11,7 @@
 #   make consent-e2e - Track-6 threshold reveal + consent-gated window disclosure
 #   make endorse-e2e - signed endorsements: endorser authenticity + log inclusion
 #   make tpm-e2e    - heterogeneous root: a TPM-resident key signs (needs swtpm+tpm2-tools)
+#   make quorum-hetero-e2e - sim + TPM roots agree via he-verify --quorum (needs swtpm)
 #   make voxterm-e2e - portable restraint receipts (VoxTerm bridge): see docs/INTEGRATIONS.md
 #   make voxterm-demo - narrated walkthrough of the restraint-receipt bridge
 #   make port-diff  - C detector == Rust zk port, differential test (needs cargo)
@@ -25,7 +26,7 @@
 
 VERIFIER = src/verifier
 
-.PHONY: help test units sim verifier-test e2e vision-e2e chain-e2e cose-e2e witness-e2e voxterm-e2e multimodal-e2e consent-e2e endorse-e2e tpm-e2e voxterm-demo verify-all port-diff demo tamper-test gui sites wasm fuzz repro cross clean
+.PHONY: help test units sim verifier-test e2e vision-e2e chain-e2e cose-e2e witness-e2e voxterm-e2e multimodal-e2e consent-e2e endorse-e2e tpm-e2e quorum-hetero-e2e voxterm-demo verify-all port-diff demo tamper-test gui sites wasm fuzz repro cross clean
 
 test: units verifier-test e2e vision-e2e chain-e2e cose-e2e witness-e2e voxterm-e2e multimodal-e2e consent-e2e endorse-e2e tamper-test
 	@echo ""
@@ -107,6 +108,13 @@ help:
 # default `test` aggregate (it has its own CI job) so offline boxes stay green.
 tpm-e2e:
 	bash test/run_tpm_e2e.sh
+
+# Heterogeneous-root QUORUM: a sim P-256 root AND a TPM-resident P-256 root both
+# sign the same bound output; `he-verify --quorum 2` accepts the two independent
+# roots. Needs swtpm + tpm2-tools; SELF-SKIPS if absent. Own CI job (like tpm-e2e),
+# not in the default aggregate.
+quorum-hetero-e2e:
+	bash test/run_quorum_hetero_e2e.sh
 
 # Narrated walkthrough of the restraint-receipt bridge (a readable demo of
 # voxterm-e2e: emit -> verify -> gap + tamper + retained negatives -> the

@@ -37,7 +37,8 @@ if command -v node >/dev/null 2>&1; then
 else SKIP "in-browser WASM verifier matches the CLI" "node not installed"; fi
 if command -v swtpm >/dev/null 2>&1 && command -v tpm2_sign >/dev/null 2>&1; then
   run "heterogeneous TPM root (in-TPM key, verifier accepts)" make tpm-e2e
-else SKIP "heterogeneous TPM root" "swtpm/tpm2-tools not installed"; fi
+  run "heterogeneous 2-of-2 quorum (sim + TPM roots agree)" make quorum-hetero-e2e
+else SKIP "heterogeneous TPM root + quorum" "swtpm/tpm2-tools not installed"; fi
 
 echo
 echo "On-chain (permissionless verification of the zk receipt + dual-root quorum):"

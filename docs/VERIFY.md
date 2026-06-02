@@ -21,6 +21,7 @@ secure element) · **F** = frontier / not built. Full scope: [THREAT_MODEL.md](T
 | The same dual-root quorum returns the agreed verdict on a public chain | `VERIFY_SEPOLIA=1 bash onchain/call-sepolia.sh` (live Sepolia, view-only) | L |
 | The transparency log is append-only; a fork/rewind is refused by witnesses | `make witness-e2e` | L |
 | A genuinely independent (TPM) key signs and the verifier accepts it (root-agnostic) | `make tpm-e2e` (software TPM) | L |
+| Two independent silicon roots (sim P-256 + TPM) agree in a k-of-n quorum | `make quorum-hetero-e2e` (software TPM) | L |
 | Audio + vision verdicts can be co-attested to one challenge nonce | `make multimodal-e2e` | L |
 | A full record reveals only with k-of-n agreement; one window discloses without the rest | `make consent-e2e` | L |
 | A transcription session can prove input-processed-then-discarded, retained:0 | `make voxterm-demo`; [`INTEGRATIONS.md`](INTEGRATIONS.md) | L |
