@@ -424,3 +424,28 @@ func TestDaemonPullsProofFromPeer(t *testing.T) {
 		t.Error("pull overwrote an existing proof")
 	}
 }
+
+// The equivocation alarm is PERMANENT: once latched, a later clean self-poll (which
+// sets healthOK=true) must NOT flip /health back to 200. Guards the HTTP gate against
+// once() clobbering the latch.
+func TestEquivocationLatchSurvivesCleanPoll(t *testing.T) {
+	logKey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	wKey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	logX, logY := verifier.PubXY(logKey)
+	fl := &fakeLog{log: logOf("a", "b", "c"), key: logKey, origin: "honest-ear.log/v1"}
+	srv := fl.server()
+	defer srv.Close()
+
+	// A prior equivocation has been detected and latched.
+	d := &daemon{cfg: config{name: "w1", origin: "honest-ear.log/v1", logURL: srv.URL,
+		key: wKey, logPubX: logX, logPubY: logY}, st: &witnessState{},
+		equivocation: true, healthOK: false}
+	if code, _ := callJSON(t, d.handleHealth); code != 503 {
+		t.Fatalf("latched equivocation should be 503, got %d", code)
+	}
+	// A clean self-poll succeeds (sets healthOK=true) but must NOT clear the alarm.
+	d.once()
+	if code, body := callJSON(t, d.handleHealth); code != 503 || body["ok"] != false {
+		t.Errorf("a clean poll cleared the equivocation latch: code=%d ok=%v (must stay 503)", code, body["ok"])
+	}
+}

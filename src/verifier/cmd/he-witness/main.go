@@ -867,13 +867,18 @@ func pushProof(client *http.Client, url string, body []byte) {
 func (d *daemon) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	// A latched equivocation is a PERMANENT alarm: force unhealthy regardless of
+	// d.healthOK, so a later clean self-poll (once() sets healthOK=true) can't flip the
+	// 503 gate back to 200 while the log is known to have equivocated. Makes the HTTP
+	// gate as monotonic as the d.equivocation latch itself.
+	healthy := d.healthOK && !d.equivocation
 	code := 200
-	if !d.healthOK {
+	if !healthy {
 		code = 503
 	}
 	out := map[string]any{
 		"witness":    d.cfg.name,
-		"ok":         d.healthOK,
+		"ok":         healthy,
 		"size":       d.st.Size,
 		"root":       d.st.Root,
 		"last_error": d.lastErr,
