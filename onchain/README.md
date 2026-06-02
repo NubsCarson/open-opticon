@@ -89,7 +89,8 @@ from rev `e47cf21`, before commit `25b89ff` added the streaming-hash-chain
 — the era-matched 10-map fixtures the contract was deployed against. The *current*
 11-map fixtures (`test/quorum_fixture.json`) drive the **local** `forge test` at
 today's schema and would revert `not a 10-map` against the frozen deploy; that gap
-(deployed bytecode vs current source) closes only on a redeploy.
+(deployed bytecode vs current source) closes only on a redeploy — the runbook for
+that (verified locally; needs only a funded key + your go) is [`REDEPLOY.md`](REDEPLOY.md).
 
 Verify it yourself (view-only, no funds): `bash onchain/call-sepolia.sh`.
 
