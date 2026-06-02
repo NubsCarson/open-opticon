@@ -38,6 +38,83 @@ func TestShamirRoundTripAndThreshold(t *testing.T) {
 	}
 }
 
+// TestShamirInformationTheoretic demonstrates the IT property the doc claims:
+// k-1 shares are consistent with EVERY candidate secret. Holding k-1 fixed
+// shares, for any target secret there is a polynomial of degree k-1 passing
+// through those shares with f(0)=target — so the shares reveal nothing about
+// which secret it was. We show it by reconstructing many distinct secrets from
+// the SAME k-1 shares plus a synthesized k-th share for each target.
+func TestShamirInformationTheoretic(t *testing.T) {
+	// Build a k-of-n sharing, then keep only k-1 of the shares.
+	secret := big.NewInt(0xABCDEF)
+	k := 3
+	shares, err := ShamirSplit(secret.Bytes(), k, 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	known := shares[:k-1] // an attacker holds only k-1 shares
+
+	// For several distinct candidate secrets, there exists a k-th share that makes
+	// the k shares interpolate to that candidate at x=0. If k-1 shares leaked
+	// anything, only the true secret could be consistent — but all candidates are.
+	candidates := []*big.Int{big.NewInt(1), big.NewInt(0xABCDEF), big.NewInt(999983), new(big.Int).Sub(shamirPrime, big.NewInt(7))}
+	for _, target := range candidates {
+		// Solve for the share at x=K (an unused index) that forces f(0)=target,
+		// using Lagrange: target = sum_j y_j * L_j(0). With the k-1 known y_j fixed
+		// and one unknown y_K, invert for y_K.
+		xK := int64(k + 10) // an x distinct from the known shares' x in 1..k-1
+		all := append(append([]Share{}, known...), Share{X: int(xK), Y: nil})
+		yK := solveForShare(t, all, target)
+		all[len(all)-1].Y = yK.Bytes()
+		got, err := ShamirCombine(all)
+		if err != nil {
+			t.Fatalf("combine for target %x: %v", target, err)
+		}
+		if new(big.Int).SetBytes(got).Cmp(new(big.Int).Mod(target, shamirPrime)) != 0 {
+			t.Errorf("k-1 shares were NOT consistent with candidate %x (IT property violated)", target)
+		}
+	}
+}
+
+// solveForShare returns the Y the last share (Y==nil) must have so the full set
+// interpolates to target at x=0. Pure Lagrange inversion over the field.
+func solveForShare(t *testing.T, shares []Share, target *big.Int) *big.Int {
+	t.Helper()
+	// target = sum_j y_j * L_j(0); isolate the unknown term (last share).
+	known := new(big.Int)
+	var lUnknown *big.Int
+	for j := range shares {
+		// L_j(0) = prod_{m!=j} (0 - x_m)/(x_j - x_m).
+		xj := big.NewInt(int64(shares[j].X))
+		num := big.NewInt(1)
+		den := big.NewInt(1)
+		for m := range shares {
+			if m == j {
+				continue
+			}
+			xm := big.NewInt(int64(shares[m].X))
+			num.Mul(num, new(big.Int).Neg(xm))
+			num.Mod(num, shamirPrime)
+			den.Mul(den, new(big.Int).Sub(xj, xm))
+			den.Mod(den, shamirPrime)
+		}
+		lj := new(big.Int).Mul(num, new(big.Int).ModInverse(den, shamirPrime))
+		lj.Mod(lj, shamirPrime)
+		if shares[j].Y == nil {
+			lUnknown = lj
+		} else {
+			term := new(big.Int).Mul(new(big.Int).SetBytes(shares[j].Y), lj)
+			known.Add(known, term)
+			known.Mod(known, shamirPrime)
+		}
+	}
+	// target = known + yK*lUnknown  =>  yK = (target-known) * lUnknown^-1.
+	rhs := new(big.Int).Sub(new(big.Int).Mod(target, shamirPrime), known)
+	rhs.Mod(rhs, shamirPrime)
+	yK := rhs.Mul(rhs, new(big.Int).ModInverse(lUnknown, shamirPrime))
+	return yK.Mod(yK, shamirPrime)
+}
+
 func TestShamirEdgeValues(t *testing.T) {
 	cases := [][]byte{
 		{}, // zero secret

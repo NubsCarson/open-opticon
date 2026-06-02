@@ -23,7 +23,7 @@ set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 V="$ROOT/src/verifier"
 
-need="swtpm swtpm_setup tpm2_createprimary tpm2_create tpm2_load tpm2_readpublic tpm2_sign openssl"
+need="swtpm swtpm_setup tpm2_getcap tpm2_createprimary tpm2_create tpm2_readpublic tpm2_sign openssl"
 for t in $need; do
   if ! command -v "$t" >/dev/null 2>&1; then
     echo "SKIP: heterogeneous-root TPM demo needs swtpm + tpm2-tools + openssl (missing: $t)"
@@ -88,7 +88,7 @@ printf 'transcript text' > "$W/t.txt"
 "$W/he-receipt" emit --session "tpm-demo" --batch 1 --audio "$W/a.pcm" --text "$W/t.txt" \
   --key "$THROWAWAY" > "$W/throwaway.json" 2>/dev/null
 python3 -c "import json;print(json.load(open('$W/throwaway.json'))['body'], end='')" > "$W/body.txt"
-[ -s "$W/body.txt" ] && ok "canonical receipt body produced" || bad "receipt body extraction"
+[ -s "$W/body.txt" ] && ok "canonical receipt body produced" || { bad "receipt body extraction"; echo "== summary: $pass passed, $fail failed =="; exit 1; }
 
 echo
 echo "== the TPM signs SHA-256(body); assemble a bundle the unmodified verifier eats =="

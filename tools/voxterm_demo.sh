@@ -75,16 +75,17 @@ fi
 
 echo
 echo "== negative 2: a tampered receipt is rejected =="
-# Flip one byte of the output_hash inside the receipt body -> signature breaks.
+# Flip one hex char of the output_hash inside the signed body -> the P-256
+# signature over the body no longer matches. The canonical ReceiptBody is seven
+# newline-delimited value lines (origin, session, batch, input_hash, output_hash,
+# retained, prev_digest); output_hash is line index 4.
 python3 - "$W/r3.json" "$W/r3_tampered.json" <<'PY'
 import json, sys
 r = json.load(open(sys.argv[1]))
-# Corrupt one hex char of the signed body (e.g. an output_hash digit).
-b = r["body"]
-i = b.find("output_hash")
-j = b.find("\n", i)
-k = j - 1  # last char of that line
-r["body"] = b[:k] + ("0" if b[k] != "0" else "1") + b[k+1:]
+lines = r["body"].split("\n")
+oh = lines[4]                       # the output_hash hex value
+lines[4] = oh[:-1] + ("0" if oh[-1] != "0" else "1")  # flip its last hex digit
+r["body"] = "\n".join(lines)
 json.dump(r, open(sys.argv[2], "w"))
 PY
 if "$W/he-receipt" verify --file "$W/r3_tampered.json" >/dev/null 2>&1; then

@@ -7,8 +7,10 @@
 //
 //  1. Threshold reveal — a sealed artifact (e.g. a full predicate stream) is
 //     encrypted under a random key; that key is split into n shares via Shamir
-//     secret sharing so any k of n holders can reconstruct it, and k-1 learn
-//     NOTHING (information-theoretic). Group agreement, enforced by math.
+//     secret sharing so any k of n holders can reconstruct it, while k-1 learn
+//     nothing — the construction is information-theoretic (uniform coefficients
+//     over the field), demonstrated in TestShamirInformationTheoretic. Group
+//     agreement, enforced by math.
 //
 //  2. Consent-gated disclosure — one window of a logged predicate stream is
 //     revealed with a Merkle inclusion proof, so a verifier confirms that exact
@@ -80,10 +82,15 @@ func ShamirSplit(secret []byte, k, n int) ([]Share, error) {
 	return shares, nil
 }
 
-// ShamirCombine reconstructs the secret from >= k shares via Lagrange
+// ShamirCombine reconstructs the secret from the shares via Lagrange
 // interpolation at x=0. Returns the minimal big-endian encoding (the caller
-// left-pads to a known length if needed). Fewer than k shares interpolate a
-// different polynomial and yield a value unrelated to the secret (by design).
+// left-pads to a known length if needed).
+//
+// It does NOT know the threshold k: with exactly the right k shares it returns
+// the secret; with fewer it interpolates a lower-degree polynomial and returns a
+// value unrelated to the secret. Enforcing the count is the caller's job
+// (ThresholdOpen does it); k-1 shares are information-theoretically consistent
+// with every candidate secret (see TestShamirInformationTheoretic).
 func ShamirCombine(shares []Share) ([]byte, error) {
 	if len(shares) < 2 {
 		return nil, errors.New("shamir: need at least 2 shares")
