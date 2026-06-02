@@ -84,6 +84,7 @@ src/verifier/    Go (stdlib only) verifier:
                    cmd/he-logd     - HTTP log server (checkpoints + consistency proofs)
                    cmd/he-witness  - witness daemon: consistency-check + cosign, refuse forks
                    cmd/he-challenge - live nonce server + mobile verifier page (/v)
+                   cmd/he-consent  - Track-6: k-of-n threshold reveal + consent-gated disclosure
                    cmd/he-gui      - browser click-to-listen web UI
                    cmd/he-verify-wasm - the verifier compiled to WASM for docs/verify.html
                    + unit tests, exhaustive log tests, and FuzzDecodePayload

@@ -224,6 +224,8 @@ but the right place for the verifier).
   HONEST SCOPE: these are mechanisms, not a solution to the joint-data
   conflicting-wishes problem (still open); share custody + key lifecycle are
   operational policy, not enforced in code. Tier-1, host-tested under `-race`.
+  Exposed as the `he-consent` CLI (seal/reveal + disclose/verify-disclosure) and
+  exercised end-to-end by `make consent-e2e`.
 - **Multi-modal co-attestation.** ✅ `VerifyCoAttestation` + `he-verify
   --co-attest k` (`make multimodal-e2e`): an AUDIO verdict and a VISION verdict,
   each a fresh signature bound to the SAME challenge nonce, accepted as a

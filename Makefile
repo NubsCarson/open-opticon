@@ -7,6 +7,7 @@
 #   make cose-e2e   - COSE_Sign1 (RFC 9052) envelope: emit (C) -> verify (Go)
 #   make witness-e2e - operating log witnesses: cosign quorum + fork refusal
 #   make multimodal-e2e - audio + vision verdicts co-attested to one nonce
+#   make consent-e2e - Track-6 threshold reveal + consent-gated window disclosure
 #   make tpm-e2e    - heterogeneous root: a TPM-resident key signs (needs swtpm+tpm2-tools)
 #   make voxterm-e2e - portable restraint receipts (VoxTerm bridge): see docs/INTEGRATIONS.md
 #   make voxterm-demo - narrated walkthrough of the restraint-receipt bridge
@@ -22,9 +23,9 @@
 
 VERIFIER = src/verifier
 
-.PHONY: test units sim verifier-test e2e vision-e2e chain-e2e cose-e2e witness-e2e voxterm-e2e multimodal-e2e tpm-e2e voxterm-demo port-diff demo tamper-test gui sites wasm fuzz repro cross clean
+.PHONY: test units sim verifier-test e2e vision-e2e chain-e2e cose-e2e witness-e2e voxterm-e2e multimodal-e2e consent-e2e tpm-e2e voxterm-demo port-diff demo tamper-test gui sites wasm fuzz repro cross clean
 
-test: units verifier-test e2e vision-e2e chain-e2e cose-e2e witness-e2e voxterm-e2e multimodal-e2e tamper-test
+test: units verifier-test e2e vision-e2e chain-e2e cose-e2e witness-e2e voxterm-e2e multimodal-e2e consent-e2e tamper-test
 	@echo ""
 	@echo "==================================================="
 	@echo " ALL HOST TESTS PASSED"
@@ -76,6 +77,11 @@ voxterm-e2e:
 # sibling of the quorum (same challenge, not same event).
 multimodal-e2e:
 	bash test/run_multimodal_e2e.sh
+
+# Track-6 consent mechanisms: k-of-n threshold reveal + consent-gated single-window
+# disclosure (he-consent, wrapping threshold.go).
+consent-e2e:
+	bash test/run_consent_e2e.sh
 
 # Heterogeneous-root demo: a TPM-resident P-256 key (private half never leaves the
 # TPM) signs an artifact the unmodified verifier accepts — shows the verifier is
