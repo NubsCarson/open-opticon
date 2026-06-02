@@ -449,3 +449,65 @@ func TestEquivocationLatchSurvivesCleanPoll(t *testing.T) {
 		t.Errorf("a clean poll cleared the equivocation latch: code=%d ok=%v (must stay 503)", code, body["ok"])
 	}
 }
+
+// Forensic retention: a witness keeps EVERY distinct fork it verifies (served at
+// /equivocation-proofs), deduped by canonical proof key — while the single
+// /equivocation-proof endpoint still serves one representative (unchanged).
+func TestDaemonRetainsDistinctProofs(t *testing.T) {
+	origin := "honest-ear.log/v1"
+	waKey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	wbKey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	waX, waY := verifier.PubXY(waKey)
+	wbX, wbY := verifier.PubXY(wbKey)
+	ck := func(k *ecdsa.PrivateKey, name string, size int, root [32]byte) equivCkpt {
+		body := verifier.CheckpointBody(origin, size, root)
+		sig, err := verifier.CosignCheckpoint(body, k)
+		if err != nil {
+			t.Fatal(err)
+		}
+		px, py := verifier.PubXY(k)
+		return equivCkpt{Witness: name, CheckpointBody: string(body), Cosignature: hex.EncodeToString(sig),
+			WitnessPubX: hex.EncodeToString(px), WitnessPubY: hex.EncodeToString(py)}
+	}
+	fork := func(size int, ra, rb [32]byte) equivProof {
+		return equivProof{Schema: equivProofSchema, A: ck(waKey, "wa", size, ra), B: ck(wbKey, "wb", size, rb)}
+	}
+	d := &daemon{cfg: config{name: "wc", origin: origin},
+		peers: []peer{{name: "wa", pubX: waX, pubY: waY}, {name: "wb", pubX: wbX, pubY: wbY}},
+		st:    &witnessState{Origin: origin}, healthOK: true}
+	post := func(p equivProof) int {
+		body, _ := json.Marshal(p)
+		rr := httptest.NewRecorder()
+		d.handleEquivocationIntake(rr, httptest.NewRequest("POST", "/equivocation-intake", bytes.NewReader(body)))
+		return rr.Code
+	}
+	// Two DISTINCT forks + a duplicate of the first.
+	if c := post(fork(3, [32]byte{0x11}, [32]byte{0x22})); c != 200 {
+		t.Fatalf("fork1 adopt = %d", c)
+	}
+	if c := post(fork(4, [32]byte{0x33}, [32]byte{0x44})); c != 200 {
+		t.Fatalf("fork2 adopt = %d", c)
+	}
+	if c := post(fork(3, [32]byte{0x11}, [32]byte{0x22})); c != 200 {
+		t.Fatalf("fork1 duplicate = %d", c)
+	}
+
+	rr := httptest.NewRecorder()
+	d.handleEquivocationProofs(rr, httptest.NewRequest("GET", "/equivocation-proofs", nil))
+	var resp struct {
+		Count  int               `json:"count"`
+		Proofs []json.RawMessage `json:"proofs"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Count != 2 || len(resp.Proofs) != 2 {
+		t.Errorf("forensic set = %d proofs, want 2 (distinct forks retained, duplicate deduped)", resp.Count)
+	}
+	// The single /equivocation-proof endpoint is unchanged (still serves one).
+	rr = httptest.NewRecorder()
+	d.handleEquivocationProof(rr, httptest.NewRequest("GET", "/equivocation-proof", nil))
+	if rr.Code != 200 {
+		t.Errorf("single-proof endpoint = %d, want 200 (unchanged)", rr.Code)
+	}
+}

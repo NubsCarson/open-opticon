@@ -35,6 +35,7 @@ package main
 import (
 	"bytes"
 	"crypto/ecdsa"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -582,6 +583,7 @@ func runServe(args []string) {
 	http.HandleFunc("/cosignature", d.handleCosignature)
 	http.HandleFunc("/health", d.handleHealth)
 	http.HandleFunc("/equivocation-proof", d.handleEquivocationProof)
+	http.HandleFunc("/equivocation-proofs", d.handleEquivocationProofs)
 	http.HandleFunc("/equivocation-intake", d.handleEquivocationIntake)
 	fmt.Fprintf(os.Stderr, "he-witness %q: polling %s every %s, cross-checking %d peer(s), serving %s\n",
 		cfg.name, cfg.logURL, interval, len(d.peers), addr)
@@ -603,8 +605,51 @@ type daemon struct {
 	equivocation bool
 	// proof is the transferable same-size split-view evidence (our cosigned view +
 	// the first divergent peer's), assembled once on detection; served at
-	// /equivocation-proof. nil until a same-size equivocation is seen.
+	// /equivocation-proof. nil until a same-size equivocation is seen. It is the
+	// representative that drives the flood + the single-proof endpoint (its semantics
+	// are unchanged — flood-once, monotonic alarm).
 	proof *equivProof
+	// proofs retains EVERY DISTINCT fork this witness has verified (by proofKey),
+	// bounded — forensic completeness, served at /equivocation-proofs. The flood +
+	// the single /equivocation-proof endpoint are unaffected (still the first proof);
+	// cross-mesh propagation of forks BEYOND the first stays deferred (it would change
+	// the validated flood-termination invariant — see docs/DESIGN_WITNESS_GOSSIP.md).
+	proofs    []*equivProof
+	seenProof map[string]bool
+}
+
+const maxRetainedProofs = 64
+
+// proofKey is a canonical, order-independent fingerprint of the FORK a proof attests
+// — the two conflicting checkpoint bodies (origin/size/root), NOT the cosignatures.
+// The fork is the same evidence however it was signed; cosignatures are excluded
+// because ECDSA signing is non-deterministic (re-signing the same checkpoint yields a
+// different signature), so keying on them would fail to dedup the same fork.
+func proofKey(p *equivProof) string {
+	a, b := p.A.CheckpointBody, p.B.CheckpointBody
+	if a > b {
+		a, b = b, a // order-independent: {A,B} and {B,A} key the same
+	}
+	h := sha256.Sum256([]byte(a + "||" + b))
+	return hex.EncodeToString(h[:])
+}
+
+// recordProofLocked retains p in the forensic set if it is a distinct fork and we are
+// under the cap. Caller holds d.mu. Purely additive — it does not touch d.proof, the
+// flood, or the alarm.
+func (d *daemon) recordProofLocked(p *equivProof) {
+	if p == nil {
+		return
+	}
+	if d.seenProof == nil {
+		d.seenProof = map[string]bool{}
+	}
+	k := proofKey(p)
+	if d.seenProof[k] || len(d.proofs) >= maxRetainedProofs {
+		return
+	}
+	d.seenProof[k] = true
+	d.proofs = append(d.proofs, p)
 }
 
 // checkPeers cross-checks each pinned peer's published cosignature against our own
@@ -708,6 +753,7 @@ func (d *daemon) checkPeers() {
 			B: *proofPeer,
 		}
 		fresh = d.proof
+		d.recordProofLocked(fresh) // retain it in the forensic set too
 	}
 	d.mu.Unlock()
 
@@ -779,6 +825,16 @@ func (d *daemon) handleEquivocationProof(w http.ResponseWriter, _ *http.Request)
 		return
 	}
 	cli.WriteJSON(w, 200, d.proof)
+}
+
+// handleEquivocationProofs serves EVERY distinct fork this witness has verified (the
+// forensic set), not just the representative — for collecting complete evidence when
+// a log equivocated in more than one way. Each is independently verifiable like the
+// single one. Returns count 0 (not 404) before any equivocation.
+func (d *daemon) handleEquivocationProofs(w http.ResponseWriter, _ *http.Request) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	cli.WriteJSON(w, 200, map[string]any{"count": len(d.proofs), "proofs": d.proofs})
 }
 
 // pinnedKey resolves a witness NAME to the key we PINNED for it — self (cfg.key) or
@@ -854,12 +910,13 @@ func (d *daemon) tryAdopt(p *equivProof) (bool, string) {
 		return false, "proof origin is not the log we watch"
 	}
 	d.mu.Lock()
-	first := d.proof == nil // first time we've seen this fork -> re-push it onward
+	first := d.proof == nil // first time we've seen ANY fork -> re-push it onward
 	if first {
 		d.proof = p
 	}
 	d.equivocation = true // a verified proof latches us, however it arrived
 	d.healthOK = false
+	d.recordProofLocked(p) // retain every DISTINCT verified fork (forensic set)
 	client := d.client
 	d.mu.Unlock()
 
