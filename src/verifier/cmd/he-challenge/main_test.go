@@ -9,6 +9,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -315,5 +317,82 @@ func TestProofClearedOnLaterFail(t *testing.T) {
 	}
 	if sess.proof != nil {
 		t.Error("stale proof left attached after a replay FAIL")
+	}
+}
+
+// The --sim "simulate a device" walk-up loop (handleSimulate): the homepage button
+// and the load-bearing way the /v flow reaches a real verdict in a browser with no
+// separate device. It signs THIS session's nonce via the host sim, computes the
+// next counter under the lock, and runs the same verify+record path. Hermetic:
+// skips cleanly if the prebuilt sim is absent (an offline checkout that didn't
+// `make sim`); no hardware, r0vm, or network.
+func TestSimulateWalkUpLoop(t *testing.T) {
+	sim := filepath.Join("..", "..", "..", "..", "sim", "bin", "he-attest-sim")
+	if _, err := os.Stat(sim); err != nil {
+		t.Skip("he-attest-sim not built (run `make sim`); skipping the --sim exec path")
+	}
+	clip, err := writeAlarmClip()
+	if err != nil {
+		t.Fatalf("writeAlarmClip: %v", err)
+	}
+	defer os.Remove(clip)
+
+	s := newServer()
+	s.simPath, s.clipPath = sim, clip
+	nonce := make([]byte, 32)
+	if _, err := rand.Read(nonce); err != nil {
+		t.Fatal(err)
+	}
+	s.sessions["sid"] = &session{nonce: nonce, createdAt: time.Now()}
+
+	simulate := func() map[string]any {
+		rr := httptest.NewRecorder()
+		s.handleSimulate(rr, httptest.NewRequest(http.MethodGet, "/simulate?session=sid", nil))
+		if rr.Code != 200 {
+			t.Fatalf("simulate code = %d, want 200; body=%s", rr.Code, rr.Body.String())
+		}
+		var m map[string]any
+		if err := json.Unmarshal(rr.Body.Bytes(), &m); err != nil {
+			t.Fatalf("simulate json: %v", err)
+		}
+		return m
+	}
+
+	// First simulate: the sim signs this session's nonce, the alarm clip classifies
+	// as alarm_tone, and the bundle verifies through the same gates as a real device.
+	m1 := simulate()
+	if m1["verdict"] != "PASS" || m1["event"] != "alarm_tone" {
+		t.Fatalf("first simulate = %+v, want PASS / alarm_tone", m1)
+	}
+	c1 := s.sessions["sid"].lastCounter
+	if c1 == 0 {
+		t.Error("counter did not advance after the first simulate (lastCounter+1 wiring)")
+	}
+
+	// Second simulate on the SAME session: ctr = lastCounter+1, must still PASS and
+	// the counter must strictly advance — the anti-replay gate through the sim path.
+	if m2 := simulate(); m2["verdict"] != "PASS" {
+		t.Fatalf("second simulate = %+v, want PASS", m2)
+	}
+	if c2 := s.sessions["sid"].lastCounter; c2 <= c1 {
+		t.Errorf("counter did not strictly advance across simulates: %d -> %d", c1, c2)
+	}
+}
+
+// handleSimulate must fail closed (500 + FAIL, not panic, not a false PASS) when the
+// sim binary can't be run — covers the exec-error branch hermetically (no sim needed).
+func TestSimulateExecFailureFailsClosed(t *testing.T) {
+	s := newServer()
+	s.simPath, s.clipPath = "/nonexistent/he-attest-sim", "/nonexistent.pcm"
+	s.sessions["sid"] = &session{nonce: []byte{1, 2, 3}, createdAt: time.Now()}
+	rr := httptest.NewRecorder()
+	s.handleSimulate(rr, httptest.NewRequest(http.MethodGet, "/simulate?session=sid", nil))
+	if rr.Code != 500 {
+		t.Fatalf("missing-sim code = %d, want 500", rr.Code)
+	}
+	var m map[string]string
+	_ = json.Unmarshal(rr.Body.Bytes(), &m)
+	if m["verdict"] != "FAIL" || !strings.Contains(m["reason"], "simulator failed") {
+		t.Errorf("exec failure = %+v, want FAIL / 'simulator failed'", m)
 	}
 }
