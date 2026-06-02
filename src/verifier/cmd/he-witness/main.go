@@ -786,12 +786,31 @@ func (d *daemon) handleEquivocationIntake(w http.ResponseWriter, r *http.Request
 		return
 	}
 	d.mu.Lock()
-	if d.proof == nil {
+	first := d.proof == nil // first time we've seen this fork -> we'll re-push it onward
+	if first {
 		d.proof = &p
 	}
 	d.equivocation = true // a verified relayed proof latches us too
 	d.healthOK = false
+	client := d.client
 	d.mu.Unlock()
+
+	// Transitive flooding (best-effort, OUTSIDE the lock): on the FIRST adoption,
+	// re-push to our own pinned peers so the proof spreads across the pinned mesh.
+	// The `d.proof != nil` latch is the dedup/seen-set, so every node re-pushes AT
+	// MOST ONCE — the flood terminates (a node that already has the proof returns 200
+	// but does not re-push, so cycles can't loop). This is basic gossip within the
+	// pinned set; anti-entropy (an offline node never catching up), eclipse resistance,
+	// and discovery stay frontier (docs/DESIGN_WITNESS_GOSSIP.md).
+	if first {
+		if client == nil {
+			client = cli.HTTPClient()
+		}
+		body, _ := json.Marshal(&p)
+		for _, peer := range d.peers {
+			pushProof(client, peer.url+"/equivocation-intake", body)
+		}
+	}
 	cli.WriteJSON(w, 200, map[string]string{"adopted": reason})
 }
 

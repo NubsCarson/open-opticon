@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 
 	verifier "honest-ear/verifier"
@@ -294,5 +295,65 @@ func TestDaemonAdoptsRelayedProof(t *testing.T) {
 	d4 := bothPinned() // watches "honest-ear.log/v1", not "evil.other/v1"
 	if code := post(d4, cross); code != 400 || d4.equivocation {
 		t.Errorf("cross-origin proof: code=%d equiv=%v, want 400 + no latch (origin scoping)", code, d4.equivocation)
+	}
+}
+
+// Transitive flooding: on the FIRST adoption a daemon re-pushes the proof to its
+// pinned peers (so the fork spreads across the mesh); a DUPLICATE adoption must NOT
+// re-push (the d.proof latch is the once-per-node dedup, so the flood terminates).
+func TestDaemonRelayIsTransitiveOncePerNode(t *testing.T) {
+	origin := "honest-ear.log/v1"
+	waKey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	wbKey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	waX, waY := verifier.PubXY(waKey)
+	wbX, wbY := verifier.PubXY(wbKey)
+	ck := func(k *ecdsa.PrivateKey, name string, root [32]byte) equivCkpt {
+		body := verifier.CheckpointBody(origin, 3, root)
+		sig, err := verifier.CosignCheckpoint(body, k)
+		if err != nil {
+			t.Fatal(err)
+		}
+		px, py := verifier.PubXY(k)
+		return equivCkpt{Witness: name, CheckpointBody: string(body), Cosignature: hex.EncodeToString(sig),
+			WitnessPubX: hex.EncodeToString(px), WitnessPubY: hex.EncodeToString(py)}
+	}
+	proof := equivProof{Schema: equivProofSchema,
+		A: ck(waKey, "wa", logOf("a", "b", "c").Root()),
+		B: ck(wbKey, "wb", logOf("a", "b", "X").Root())}
+
+	var pushes atomic.Int32
+	mock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			pushes.Add(1)
+		}
+		w.WriteHeader(200)
+	}))
+	defer mock.Close()
+
+	// C pins wa+wb (to VERIFY) with their URLs pointed at the mock, so a re-push lands
+	// there and we can count it.
+	d := &daemon{cfg: config{name: "wc", origin: origin}, client: mock.Client(),
+		peers: []peer{{name: "wa", url: mock.URL, pubX: waX, pubY: waY},
+			{name: "wb", url: mock.URL, pubX: wbX, pubY: wbY}},
+		st: &witnessState{Origin: origin}, healthOK: true}
+	post := func() int {
+		body, _ := json.Marshal(proof)
+		rr := httptest.NewRecorder()
+		d.handleEquivocationIntake(rr, httptest.NewRequest("POST", "/equivocation-intake", bytes.NewReader(body)))
+		return rr.Code
+	}
+
+	if code := post(); code != 200 {
+		t.Fatalf("first adopt = %d, want 200", code)
+	}
+	after1 := pushes.Load()
+	if after1 == 0 {
+		t.Error("first adoption did not re-push onward (transitive flood)")
+	}
+	if code := post(); code != 200 {
+		t.Fatalf("duplicate adopt = %d, want 200", code)
+	}
+	if pushes.Load() != after1 {
+		t.Errorf("re-pushed on a duplicate adoption: %d -> %d (must dedup once-per-node)", after1, pushes.Load())
 	}
 }

@@ -132,10 +132,12 @@ From this PoC to a defensible product, in order of trust-impact.
   split the daemon serves `/equivocation-proof` (its own + the divergent peer's
   cosigned checkpoints), and `he-witness verify-equivocation` lets ANYONE confirm the
   log equivocated offline under the two pinned witness keys. A detecting daemon also
-  **relays** the proof one-hop to its pinned peers (`POST /equivocation-intake`), which
-  re-verify it under THEIR own pinned keys before latching — so a fork propagates
-  within the pinned set (`make witness-e2e`, `VerifyEquivocation`,
-  `TestDaemonAdoptsRelayedProof`). Only epidemic re-flooding + discovery/membership
+  **relays** the proof to its pinned peers (`POST /equivocation-intake`), which
+  re-verify it under THEIR own pinned keys (origin-scoped to the log they watch) before
+  latching — and re-push on first adoption, so the proof **transitively floods** the
+  pinned mesh, terminating via the `d.proof` once-per-node latch (`make witness-e2e`,
+  `VerifyEquivocation`, `TestDaemonAdoptsRelayedProof`, `TestDaemonRelayIsTransitiveOncePerNode`).
+  Only the robustness layer (anti-entropy, eclipse resistance) + discovery/membership
   stay frontier, scoped in [`DESIGN_WITNESS_GOSSIP.md`](DESIGN_WITNESS_GOSSIP.md).
 - **Sign endorsements (endorser authenticity).** ✅ A first slice: an ENDORSER
   signs a canonical endorsement body (`EndorsementBody`/`ParseEndorsement` +

@@ -1,11 +1,13 @@
 # Design: witness-to-witness gossip (frontier — design, not built)
 
 > Status: the **transferable fork proof** below is **SHIPPED** — produce + verify +
-> **one-hop relay among pinned peers**. Only **epidemic re-flooding** and
-> **discovery / membership** remain design-only and are honestly frontier. This doc
-> scopes the difference: the parts that were clean buildable slices (built) vs the
-> parts that would be a stub if rushed (not built). A planning artifact, not a claim
-> that the full mesh exists.
+> relay with **transitive flooding** (each node re-pushes once; the `d.proof` latch is
+> the seen-set, so the flood terminates) across the pinned mesh. Only the
+> **robustness** layer (anti-entropy so an offline node catches up; eclipse
+> resistance) and **discovery / membership** remain design-only and are honestly
+> frontier. This doc scopes the difference: the parts that were clean buildable slices
+> (built) vs the parts that would be a stub if rushed (not built). A planning artifact,
+> not a claim that a robust mesh exists.
 
 ## What ships today
 
@@ -76,13 +78,22 @@ is intentionally out of scope of this artifact.
   the split. Self-authenticating: a bogus POST can't force a false latch
   (`TestDaemonAdoptsRelayedProof`, `make witness-e2e`).
 
-Strictly within the already-pinned set, **one hop, no transitive re-flood**.
+- **Flood it (transitive)** ✅ — on the FIRST adoption (its own detection or a relayed
+  proof), a daemon re-pushes to its pinned peers. The `d.proof != nil` latch is the
+  seen-set: each node re-pushes **at most once**, so cycles can't loop and the flood
+  **terminates**. A fork detected anywhere spreads to every connected node in the
+  pinned mesh (`TestDaemonRelayIsTransitiveOncePerNode`).
+
+Strictly within the already-pinned set; **best-effort flood, no robustness layer** —
+see below.
 
 ## What stays frontier (would be a stub if rushed)
 
-- **Epidemic propagation under partial connectivity / churn** — push-pull anti-entropy,
-  fan-out, dedup, backoff, eclipse-resistance. A real distributed-systems build; a
-  small version would fake the hard parts (the failure modes are the point).
+- **Robustness under partial connectivity / churn / adversary** — push-pull
+  anti-entropy (an offline node catching up after the flood), retry/backoff, and
+  eclipse-resistance. The best-effort flood above does NOT do these; a small version
+  *would* fake the hard parts (the failure modes are the point). This is the real
+  distributed-systems build, separable from the basic flooding already shipped.
 - **Membership beyond a pinned list** — any discovery mechanism must preserve "every
   counted witness is an independently pinned key," so this is a governance/enrollment
   design question, not just code. Trust-on-first-use is explicitly **rejected** (it
@@ -92,10 +103,12 @@ Strictly within the already-pinned set, **one hop, no transitive re-flood**.
 
 ## Recommendation
 
-The **transferable fork proof** is **done** — produce, offline verify, and one-hop
-relay among pinned peers. What remains is genuinely frontier: **epidemic re-flooding**
-(transitive propagation under partial connectivity — fan-out, dedup, loop/eclipse
-resistance) and **discovery / membership** (which must preserve "every counted witness
-is an independently pinned key" — trust-on-first-use is rejected). Defer both until a
-concrete multi-operator deployment exists to design them against; until then they stay
-honestly listed as frontier in [`ROADMAP.md`](ROADMAP.md), not half-built.
+The **transferable fork proof** is **done** — produce, offline verify, and relay with
+terminating transitive flooding across the pinned mesh. What remains is genuinely
+frontier: the **robustness layer** (anti-entropy so an offline node catches up after
+the flood; retry/backoff; eclipse-resistance) and **discovery / membership** (which
+must preserve "every counted witness is an independently pinned key" —
+trust-on-first-use is rejected). Both are separable from the shipped flooding; defer
+them until a concrete multi-operator deployment exists to design them against. Until
+then they stay honestly listed as frontier in [`ROADMAP.md`](ROADMAP.md), not
+half-built.
