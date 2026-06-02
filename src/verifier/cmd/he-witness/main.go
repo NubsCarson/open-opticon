@@ -29,6 +29,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -99,7 +100,7 @@ func parseCommon(fs []string, extra func(addFlag)) config {
 			cli.Die("unexpected argument %q", a)
 		}
 		k := a[2:]
-		if eq := indexByte(k, '='); eq >= 0 {
+		if eq := strings.IndexByte(k, '='); eq >= 0 {
 			m[k[:eq]] = k[eq+1:]
 			continue
 		}
@@ -147,15 +148,6 @@ func parseCommon(fs []string, extra func(addFlag)) config {
 }
 
 type addFlag = func(string) string
-
-func indexByte(s string, c byte) int {
-	for i := 0; i < len(s); i++ {
-		if s[i] == c {
-			return i
-		}
-	}
-	return -1
-}
 
 func runCheck(args []string) {
 	cfg := parseCommon(args, nil)

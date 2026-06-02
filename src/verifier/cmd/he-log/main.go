@@ -112,18 +112,18 @@ func save(path string, l *verifier.MerkleLog) {
 	}
 }
 
+// loadKey adapts the shared verifier.PrivKeyFromHex (which validates the 32-byte
+// length) to this CLI's die-on-error style.
 func loadKey(privHex string) *ecdsa.PrivateKey {
-	d, err := hex.DecodeString(privHex)
+	k, err := verifier.PrivKeyFromHex(privHex)
 	if err != nil {
-		cli.Die("bad --key hex: %v", err)
+		cli.Die("bad --key: %v", err)
 	}
-	k := new(ecdsa.PrivateKey)
-	k.PublicKey.Curve = elliptic.P256()
-	k.D = new(big.Int).SetBytes(d)
-	k.PublicKey.X, k.PublicKey.Y = elliptic.P256().ScalarBaseMult(d)
 	return k
 }
 
+// pad32 left-pads a big.Int to 32 bytes (used for the private scalar print;
+// public X/Y go through verifier.PubXY).
 func pad32(n *big.Int) []byte {
 	b := make([]byte, 32)
 	n.FillBytes(b)
@@ -176,9 +176,10 @@ func main() {
 		if err != nil {
 			cli.Die("%v", err)
 		}
+		x, y := verifier.PubXY(k)
 		fmt.Printf("priv : %x\n", pad32(k.D))
-		fmt.Printf("pub_x: %x\n", pad32(k.PublicKey.X))
-		fmt.Printf("pub_y: %x\n", pad32(k.PublicKey.Y))
+		fmt.Printf("pub_x: %x\n", x)
+		fmt.Printf("pub_y: %x\n", y)
 
 	case "add":
 		entry, err := hex.DecodeString(flag.Arg(0))
@@ -206,9 +207,10 @@ func main() {
 		if err != nil {
 			cli.Die("%v", err)
 		}
+		px, py := verifier.PubXY(key)
 		fmt.Printf("%s", verifier.CheckpointBody(*origin, l.Size(), root))
 		fmt.Printf("sig  : %x\n", sig)
-		fmt.Printf("log_pub_x: %x\nlog_pub_y: %x\n", pad32(key.PublicKey.X), pad32(key.PublicKey.Y))
+		fmt.Printf("log_pub_x: %x\nlog_pub_y: %x\n", px, py)
 
 	case "prove":
 		if *keyHex == "" {
@@ -225,13 +227,14 @@ func main() {
 		if err != nil {
 			cli.Die("%v", err)
 		}
+		px, py := verifier.PubXY(key)
 		pb := proofBundle{
 			Entry:      hex.EncodeToString(l.Leaves[*index]),
 			Index:      *index,
 			Checkpoint: string(verifier.CheckpointBody(*origin, l.Size(), root)),
 			CheckSig:   hex.EncodeToString(sig),
-			LogPubX:    hex.EncodeToString(pad32(key.PublicKey.X)),
-			LogPubY:    hex.EncodeToString(pad32(key.PublicKey.Y)),
+			LogPubX:    hex.EncodeToString(px),
+			LogPubY:    hex.EncodeToString(py),
 		}
 		for _, node := range proof {
 			pb.Proof = append(pb.Proof, hex.EncodeToString(node[:]))
@@ -275,10 +278,11 @@ func main() {
 		if err != nil {
 			cli.Die("%v", err)
 		}
+		px, py := verifier.PubXY(key)
 		cb := cosignBundle{
 			Witness: *witness,
-			PubX:    hex.EncodeToString(pad32(key.PublicKey.X)),
-			PubY:    hex.EncodeToString(pad32(key.PublicKey.Y)),
+			PubX:    hex.EncodeToString(px),
+			PubY:    hex.EncodeToString(py),
 			Sig:     hex.EncodeToString(sig),
 		}
 		out, _ := json.MarshalIndent(cb, "", "  ")
