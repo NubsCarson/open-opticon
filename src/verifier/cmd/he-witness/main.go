@@ -799,9 +799,11 @@ func (d *daemon) handleEquivocationIntake(w http.ResponseWriter, r *http.Request
 	// re-push to our own pinned peers so the proof spreads across the pinned mesh.
 	// The `d.proof != nil` latch is the dedup/seen-set, so every node re-pushes AT
 	// MOST ONCE — the flood terminates (a node that already has the proof returns 200
-	// but does not re-push, so cycles can't loop). This is basic gossip within the
-	// pinned set; anti-entropy (an offline node never catching up), eclipse resistance,
-	// and discovery stay frontier (docs/DESIGN_WITNESS_GOSSIP.md).
+	// but does not re-push, so cycles can't loop). The single slot means a node only
+	// propagates the FIRST distinct fork it adopts, but the 503 alarm below is
+	// unconditional + permanent so the safety verdict is unaffected. This is basic
+	// gossip within the pinned set; anti-entropy (an offline node catching up),
+	// eclipse resistance, and discovery stay frontier (docs/DESIGN_WITNESS_GOSSIP.md).
 	if first {
 		if client == nil {
 			client = cli.HTTPClient()

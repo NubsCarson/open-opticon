@@ -81,8 +81,14 @@ is intentionally out of scope of this artifact.
 - **Flood it (transitive)** ✅ — on the FIRST adoption (its own detection or a relayed
   proof), a daemon re-pushes to its pinned peers. The `d.proof != nil` latch is the
   seen-set: each node re-pushes **at most once**, so cycles can't loop and the flood
-  **terminates**. A fork detected anywhere spreads to every connected node in the
-  pinned mesh (`TestDaemonRelayIsTransitiveOncePerNode`).
+  **terminates** (total messages are O(edges), not exponential). A fork detected
+  anywhere spreads to every connected node in the pinned mesh
+  (`TestDaemonRelayIsTransitiveOncePerNode`). **Limitation (honest):** the single
+  `d.proof` slot means a node propagates only the *first* distinct fork it adopts — the
+  503 equivocation alarm is set unconditionally and is permanent, so the safety verdict
+  ("this log is dishonest") is unaffected, but *collecting every distinct proof at
+  every node* (multi-proof forensics) is part of the deferred robustness frontier below
+  (it would key `d.proof` by a canonical proof hash).
 
 Strictly within the already-pinned set; **best-effort flood, no robustness layer** —
 see below.
