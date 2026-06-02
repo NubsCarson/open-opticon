@@ -205,9 +205,18 @@ func main() {
 		fmt.Printf("pub_y: %x\n", y)
 
 	case "add":
+		// Fail closed: this is an append-only tamper-evident log. Forgetting the entry
+		// (NArg 0) or letting the shell word-split the hex (NArg >1) must NOT silently
+		// append an empty/truncated leaf with a green "added at index N".
+		if flag.NArg() != 1 {
+			cli.Die("add takes exactly one <entryHex> (usage: he-log add --log L <entryHex>)")
+		}
 		entry, err := hex.DecodeString(flag.Arg(0))
 		if err != nil {
 			cli.Die("entry must be hex (usage: he-log add --log L <entryHex>): %v", err)
+		}
+		if len(entry) == 0 {
+			cli.Die("entry must be non-empty hex")
 		}
 		l := load(*logPath)
 		i := l.Add(entry)

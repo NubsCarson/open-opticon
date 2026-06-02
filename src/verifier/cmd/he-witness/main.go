@@ -80,6 +80,26 @@ type pollResult struct {
 
 const usage = "usage: he-witness <check|serve|compare> [flags]"
 
+// Per-subcommand usage, printed on `he-witness <sub> --help`.
+const (
+	usageCheck   = "usage: he-witness check --name N --key <privHex> --log-url URL --log-pub-x X --log-pub-y Y [--origin O] [--state f]"
+	usageServe   = "usage: he-witness serve --name N --key <privHex> --log-url URL --log-pub-x X --log-pub-y Y [--origin O] [--state f] [--addr :9101] [--poll secs] [--peer name,url,pubXhex,pubYhex ...]"
+	usageCompare = "usage: he-witness compare --peer-url URL --peer-name N --peer-pub-x X --peer-pub-y Y [--origin O] [--state f]"
+)
+
+// helpRequested prints usage and returns true if args asks for help (-h/--help/help),
+// so `he-witness <sub> --help` shows that subcommand's flags instead of the parser's
+// "flag --help needs a value" error.
+func helpRequested(args []string, u string) bool {
+	for _, a := range args {
+		if a == "-h" || a == "--help" || a == "help" {
+			fmt.Println(u)
+			return true
+		}
+	}
+	return false
+}
+
 func main() {
 	if len(os.Args) < 2 {
 		cli.Die(usage)
@@ -173,6 +193,9 @@ func parseCommon(fs []string, extra func(addFlag)) config {
 type addFlag = func(string) string
 
 func runCheck(args []string) {
+	if helpRequested(args, usageCheck) {
+		return
+	}
 	cfg := parseCommon(args, nil)
 	st, err := loadState(cfg.statePath)
 	if err != nil {
@@ -296,6 +319,9 @@ func crossCheck(hasView bool, ourSize int, ourRoot [32]byte, peerSize int, peerR
 // runCompare: one-shot anti-equivocation cross-check against a peer witness. Read
 // only — it never cosigns or writes state.
 func runCompare(args []string) {
+	if helpRequested(args, usageCompare) {
+		return
+	}
 	m := flagMap(args)
 	need := func(k string) string {
 		v, ok := m[k]
@@ -383,6 +409,9 @@ func runCompare(args []string) {
 }
 
 func runServe(args []string) {
+	if helpRequested(args, usageServe) {
+		return
+	}
 	var addr, pollSecs string
 	cfg := parseCommon(args, func(get addFlag) {
 		addr = get("addr")

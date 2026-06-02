@@ -36,6 +36,25 @@ import (
 
 const usage = "usage: he-receipt <emit|verify> [flags]"
 
+// Per-subcommand usage, printed on `he-receipt <sub> --help`.
+const (
+	usageEmit   = "usage: he-receipt emit --session S --batch N --audio <file> --text <file|-> --key <privHex> [--prev <hex>] [--retained]"
+	usageVerify = "usage: he-receipt verify [--file receipt.json] [--expect-prev <hex>] [--pin-x <hex> --pin-y <hex>] [--require-not-retained]   (reads stdin if --file omitted)"
+)
+
+// helpRequested prints usage and returns true if args asks for help (-h/--help/help),
+// so `he-receipt <sub> --help` shows that subcommand's flags instead of the parser's
+// "flag --help needs a value" error.
+func helpRequested(args []string, u string) bool {
+	for _, a := range args {
+		if a == "-h" || a == "--help" || a == "help" {
+			fmt.Println(u)
+			return true
+		}
+	}
+	return false
+}
+
 func main() {
 	if len(os.Args) < 2 {
 		cli.Die(usage)
@@ -96,6 +115,9 @@ func sha256File(path string) []byte {
 }
 
 func runEmit(args []string) {
+	if helpRequested(args, usageEmit) {
+		return
+	}
 	m := flags(args)
 	need := func(k string) string {
 		if m[k] == "" {
@@ -149,6 +171,9 @@ func runEmit(args []string) {
 }
 
 func runVerify(args []string) {
+	if helpRequested(args, usageVerify) {
+		return
+	}
 	m := flags(args)
 	var raw []byte
 	var err error

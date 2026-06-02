@@ -71,6 +71,17 @@ flags:
 		cli.Die("bad --nonce hex: %v", err)
 	}
 
+	// Fail closed on misused mode flags rather than silently ignoring them: --root
+	// without --quorum would fall through to single mode and read stdin (a confusing
+	// "unexpected end of JSON" error), and --quorum + --co-attest together would let
+	// quorum win with no warning.
+	if len(roots) > 0 && *quorum == 0 {
+		cli.Die("--root is only used in quorum mode; pass --quorum K")
+	}
+	if *quorum > 0 && *coAttest > 0 {
+		cli.Die("--quorum and --co-attest are mutually exclusive")
+	}
+
 	if *quorum > 0 {
 		runQuorum(nonce, *quorum, roots, *lastCounter)
 		return

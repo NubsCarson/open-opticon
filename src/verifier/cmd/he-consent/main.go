@@ -31,6 +31,28 @@ import (
 
 const usage = "usage: he-consent <seal|reveal|disclose|verify-disclosure> [flags]"
 
+// Per-subcommand usage — one source of truth, printed both on a missing-flag error
+// and on `he-consent <sub> --help`.
+const (
+	usageSeal             = "usage: he-consent seal --in <file|-> --k K --n N --out-dir DIR"
+	usageReveal           = "usage: he-consent reveal --sealed sealed.json --share f1 [--share f2 ...]"
+	usageDisclose         = "usage: he-consent disclose --stream <file: one window per line> --index I"
+	usageVerifyDisclosure = "usage: he-consent verify-disclosure --disclosure d.json --root <hex>"
+)
+
+// helpRequested prints usage and returns true if args asks for help (-h/--help/help),
+// so `he-consent <sub> --help` shows that subcommand's flags instead of the custom
+// parser's "flag --help needs a value" error. Called first thing in each run*.
+func helpRequested(args []string, u string) bool {
+	for _, a := range args {
+		if a == "-h" || a == "--help" || a == "help" {
+			fmt.Println(u)
+			return true
+		}
+	}
+	return false
+}
+
 func main() {
 	if len(os.Args) < 2 {
 		cli.Die(usage)
@@ -129,10 +151,13 @@ func mustInt(s, name string) int {
 // seal: ThresholdSeal the input under a fresh key split k-of-n; write sealed.json
 // + one share-<x>.json per holder into --out-dir.
 func runSeal(args []string) {
+	if helpRequested(args, usageSeal) {
+		return
+	}
 	f, _ := flagMap(args)
 	in, outDir := f["in"], f["out-dir"]
 	if in == "" || outDir == "" || f["k"] == "" || f["n"] == "" {
-		cli.Die("usage: he-consent seal --in <file|-> --k K --n N --out-dir DIR")
+		cli.Die(usageSeal)
 	}
 	sr, err := verifier.ThresholdSeal(readInput(in), mustInt(f["k"], "k"), mustInt(f["n"], "n"))
 	if err != nil {
@@ -151,9 +176,12 @@ func runSeal(args []string) {
 // reveal: ThresholdOpen using the provided shares (>= k); writes plaintext to
 // stdout. Fewer than k shares is refused.
 func runReveal(args []string) {
+	if helpRequested(args, usageReveal) {
+		return
+	}
 	f, rep := flagMap(args)
 	if f["sealed"] == "" || len(rep["share"]) == 0 {
-		cli.Die("usage: he-consent reveal --sealed sealed.json --share f1 [--share f2 ...]")
+		cli.Die(usageReveal)
 	}
 	var sj sealedJSON
 	readJSON(f["sealed"], &sj)
@@ -181,9 +209,12 @@ func runReveal(args []string) {
 // disclose: build a Merkle log from the windows (one per line of --stream),
 // disclose window --index with its inclusion proof + the tree root.
 func runDisclose(args []string) {
+	if helpRequested(args, usageDisclose) {
+		return
+	}
 	f, _ := flagMap(args)
 	if f["stream"] == "" || f["index"] == "" {
-		cli.Die("usage: he-consent disclose --stream <file: one window per line> --index I")
+		cli.Die(usageDisclose)
 	}
 	log := buildLog(f["stream"])
 	d, err := log.DiscloseWindow(mustInt(f["index"], "index"))
@@ -205,9 +236,12 @@ func runDisclose(args []string) {
 // verify-disclosure: confirm the disclosed window is included under the root the
 // caller independently trusts (--root, e.g. from a he-log signed checkpoint).
 func runVerifyDisclosure(args []string) {
+	if helpRequested(args, usageVerifyDisclosure) {
+		return
+	}
 	f, _ := flagMap(args)
 	if f["disclosure"] == "" || f["root"] == "" {
-		cli.Die("usage: he-consent verify-disclosure --disclosure d.json --root <hex>")
+		cli.Die(usageVerifyDisclosure)
 	}
 	var dj disclosureJSON
 	readJSON(f["disclosure"], &dj)
