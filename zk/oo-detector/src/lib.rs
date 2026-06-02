@@ -135,4 +135,48 @@ mod tests {
         let silence = std::vec![0i16; n];
         assert_eq!(detect(&silence).event, 0, "silence must be none");
     }
+
+    // The FULL tone verdict (not just .event): a 3.1 kHz tone is alarm_tone with
+    // presence, no voice, tone frames dominating, and frames == n/frame_samples.
+    #[test]
+    fn tone_full_verdict_fields() {
+        let n = 16000usize;
+        let mut tone: Vec<i16> = Vec::with_capacity(n);
+        for i in 0..n {
+            let ang = (TWO_PI_Q28 * 3100 * i as i64) / SAMPLE_RATE - HALF_PI_Q28;
+            tone.push(((8000i64 * cos_q28(ang)) >> 28) as i16);
+        }
+        let r = detect(&tone);
+        assert_eq!(r.event, 2, "alarm_tone");
+        assert_eq!(r.presence, 1, "tone => presence");
+        assert_eq!(r.voice_active, 0, "a tone is not voice");
+        assert!(r.tone_frames > r.voice_frames, "tone frames dominate");
+        assert_eq!(r.frames, (n / 256) as u32, "frame count is n/frame_samples");
+    }
+
+    // The C reference's deterministic LCG noise_sample (test/test_detector.c:34-40).
+    fn lcg_noise(n: usize, amp: i32) -> Vec<i16> {
+        let mut rng: u32 = 0x1234_5678;
+        let mut buf = Vec::with_capacity(n);
+        for _ in 0..n {
+            rng = rng.wrapping_mul(1664525).wrapping_add(1013904223);
+            let v = ((rng >> 16) & 0xffff) as i32 - 32768;
+            buf.push(((v * amp) / 32768) as i16);
+        }
+        buf
+    }
+
+    // Broadband "voice-like" noise (amp 14000) => VOICE, matching the C reference;
+    // the same noise below the floor (amp 150) => NONE (privacy: a quiet room).
+    #[test]
+    fn broadband_is_voice_quiet_is_none() {
+        let r = detect(&lcg_noise(16000, 14000));
+        assert_eq!(r.event, 1, "broadband => VOICE");
+        assert_eq!(r.voice_active, 1, "broadband => voice_active");
+        assert!(r.voice_frames > r.tone_frames, "voice frames dominate");
+
+        let q = detect(&lcg_noise(16000, 150));
+        assert_eq!(q.event, 0, "below-floor noise => NONE");
+        assert_eq!(q.presence, 0, "below-floor => no presence");
+    }
 }

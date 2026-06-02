@@ -26,6 +26,13 @@ HE="$ROOT/sim/bin/he-detect"
 OO="$ROOT/zk/oo-detect/target/release/oo-detect"
 echo "  built he-detect (C) and oo-detect (Rust)"
 
+echo "== oo-detector in-crate unit tests =="
+if ( cd "$ROOT/zk/oo-detector" && cargo test >/dev/null 2>&1 ); then
+    ok "oo-detector cargo unit tests (tone/voice/silence verdicts)"
+else
+    bad "oo-detector cargo unit tests failed"
+fi
+
 echo "== fixtures =="
 python3 "$ROOT/test/gen_frames.py" "$FIX" >/dev/null || { echo "fixture gen failed"; exit 1; }
 echo "  generated silence/alarm/voice/quiet"
