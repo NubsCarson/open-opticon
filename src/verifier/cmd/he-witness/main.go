@@ -13,8 +13,12 @@
 //	      -> one poll: prints a cosignature JSON on accept, or "REFUSED" + exit 1.
 //
 //	he-witness serve --addr :9101 --name w1 --key <privHex> --log-url URL \
-//	    --log-pub-x <hex> --log-pub-y <hex> [--origin O] [--state f.json] [--poll 15]
+//	    --log-pub-x <hex> --log-pub-y <hex> [--origin O] [--state f.json] [--poll 15] \
+//	    [--peer name,url,pubXhex,pubYhex ...]
 //	      -> daemon: polls every --poll seconds; serves GET /cosignature and /health.
+//	         With --peer (repeatable), it ALSO continuously cross-checks each pinned
+//	         peer witness and reports equivocation in /health (anti-equivocation mesh
+//	         of explicit pinned peers; no discovery).
 //
 //	he-witness compare --peer-url URL --peer-name w2 \
 //	    --peer-pub-x <hex> --peer-pub-y <hex> --state f.json \
@@ -194,6 +198,44 @@ func runCheck(args []string) {
 	})
 }
 
+// peer is a pinned peer witness the serve daemon continuously cross-checks.
+type peer struct {
+	name, url  string
+	pubX, pubY []byte
+}
+
+// parsePeers scans args for repeated `--peer name,url,pubXhex,pubYhex` specs (the
+// peer's key is PINNED — discovery/trust-on-first-use is deliberately out of scope,
+// since the anti-equivocation guarantee depends on independent pinned keys).
+func parsePeers(args []string) []peer {
+	var specs []string
+	for i := 0; i < len(args); i++ {
+		if args[i] == "--peer" && i+1 < len(args) {
+			specs = append(specs, args[i+1])
+			i++
+		} else if strings.HasPrefix(args[i], "--peer=") {
+			specs = append(specs, args[i][len("--peer="):])
+		}
+	}
+	var peers []peer
+	for _, s := range specs {
+		f := strings.Split(s, ",")
+		if len(f) != 4 {
+			cli.Die("--peer must be name,url,pubXhex,pubYhex (got %q)", s)
+		}
+		px, err := hex.DecodeString(f[2])
+		if err != nil {
+			cli.Die("bad peer %q pub_x: %v", f[0], err)
+		}
+		py, err := hex.DecodeString(f[3])
+		if err != nil {
+			cli.Die("bad peer %q pub_y: %v", f[0], err)
+		}
+		peers = append(peers, peer{name: f[0], url: strings.TrimRight(f[1], "/"), pubX: px, pubY: py})
+	}
+	return peers
+}
+
 // crossVerdict is the outcome of a witness-to-witness cross-check.
 type crossVerdict int
 
@@ -352,31 +394,112 @@ func runServe(args []string) {
 	if err != nil {
 		cli.Die("%v", err)
 	}
-	d := &daemon{cfg: cfg, client: cli.HTTPClient(), st: st}
-	d.once() // poll immediately so /cosignature is populated before first tick
+	d := &daemon{cfg: cfg, client: cli.HTTPClient(), peers: parsePeers(args), st: st}
+	d.once()       // poll immediately so /cosignature is populated before first tick
+	d.checkPeers() // and cross-check pinned peers before serving /health
 	go func() {
 		t := time.NewTicker(interval)
 		defer t.Stop()
 		for range t.C {
 			d.once()
+			d.checkPeers()
 		}
 	}()
 
 	http.HandleFunc("/cosignature", d.handleCosignature)
 	http.HandleFunc("/health", d.handleHealth)
-	fmt.Fprintf(os.Stderr, "he-witness %q: polling %s every %s, serving %s\n",
-		cfg.name, cfg.logURL, interval, addr)
+	fmt.Fprintf(os.Stderr, "he-witness %q: polling %s every %s, cross-checking %d peer(s), serving %s\n",
+		cfg.name, cfg.logURL, interval, len(d.peers), addr)
 	cli.Die("server exited: %v", cli.Serve(addr))
 }
 
 type daemon struct {
 	cfg      config
 	client   *http.Client
+	peers    []peer
 	mu       sync.Mutex
 	st       *witnessState
 	latest   *pollResult
 	lastErr  string
 	healthOK bool
+	// peerStatus[name] = "agree" | "equivocation: ..." | "inconclusive: ..." | an
+	// error; equivocation is true if any peer's view diverged from ours.
+	peerStatus   map[string]string
+	equivocation bool
+}
+
+// checkPeers cross-checks each pinned peer's published cosignature against our own
+// view (reusing crossCheck). A detected equivocation — two independently-keyed
+// witnesses holding divergent roots at the same size — means the log equivocated;
+// we record it and mark unhealthy so a downstream quorum stops trusting this log.
+// Network I/O happens WITHOUT the lock; results are written under it.
+func (d *daemon) checkPeers() {
+	if len(d.peers) == 0 {
+		return
+	}
+	d.mu.Lock()
+	hasView := d.st.Root != ""
+	ourSize := d.st.Size
+	ourRootHex := d.st.Root
+	client := d.client
+	d.mu.Unlock()
+	if client == nil {
+		client = cli.HTTPClient()
+	}
+	var ourRoot [32]byte
+	if hasView {
+		ourRoot, _ = hexRoot(ourRootHex) // loadState validated it
+	}
+
+	status := make(map[string]string, len(d.peers))
+	anyEquiv := false
+	for _, p := range d.peers {
+		var pr peerCosigResp
+		if err := getJSON(client, p.url+"/cosignature", &pr); err != nil {
+			status[p.name] = "unreachable: " + err.Error()
+			continue
+		}
+		body := []byte(pr.CheckpointBody)
+		sig, err := hex.DecodeString(pr.Cosignature)
+		if err != nil {
+			status[p.name] = "bad cosignature hex"
+			continue
+		}
+		if !verifier.VerifyCheckpointSig(body, sig, p.pubX, p.pubY) {
+			status[p.name] = "cosignature not under pinned key"
+			continue
+		}
+		porg, psize, proot, err := verifier.ParseCheckpoint(body)
+		if err != nil || porg != d.cfg.origin {
+			status[p.name] = "checkpoint parse/origin mismatch"
+			continue
+		}
+		var peerProof [][32]byte
+		if hasView && psize > ourSize {
+			var cr consistencyResp
+			if getJSON(client, fmt.Sprintf("%s/consistency?from=%d", d.cfg.logURL, ourSize), &cr) == nil {
+				peerProof, _ = decodeProof(cr.Proof)
+			}
+		}
+		v, reason := crossCheck(hasView, ourSize, ourRoot, psize, proot, peerProof)
+		switch v {
+		case crossAgree:
+			status[p.name] = "agree: " + reason
+		case crossEquivocation:
+			status[p.name] = "EQUIVOCATION: " + reason
+			anyEquiv = true
+		default:
+			status[p.name] = "inconclusive: " + reason
+		}
+	}
+
+	d.mu.Lock()
+	d.peerStatus = status
+	if anyEquiv {
+		d.equivocation = true // latch: once an equivocation is seen, stay alarmed
+		d.healthOK = false
+	}
+	d.mu.Unlock()
 }
 
 func (d *daemon) once() {
@@ -432,13 +555,18 @@ func (d *daemon) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	if !d.healthOK {
 		code = 503
 	}
-	cli.WriteJSON(w, code, map[string]any{
+	out := map[string]any{
 		"witness":    d.cfg.name,
 		"ok":         d.healthOK,
 		"size":       d.st.Size,
 		"root":       d.st.Root,
 		"last_error": d.lastErr,
-	})
+	}
+	if len(d.peers) > 0 {
+		out["peers"] = d.peerStatus
+		out["equivocation_detected"] = d.equivocation
+	}
+	cli.WriteJSON(w, code, out)
 }
 
 // poll fetches the current checkpoint, pins+verifies the log signature, checks

@@ -109,13 +109,15 @@ From this PoC to a defensible product, in order of trust-impact.
   one it last cosigned, and **refuses to cosign a forked or rewound history**
   (pinning the log key). A 2-of-3 witness quorum verifies and a fork is refused
   end-to-end in `make witness-e2e` (plus deterministic httptest unit tests).
-  ✅ Witnesses now also **cross-check each other**: `he-witness compare` fetches a
-  peer witness's published cosignature, verifies it under the peer's pinned key,
-  and flags equivocation (a divergent root at the same size) — a bounded one-shot
-  1:1 check (proven in `make witness-e2e` + `TestCrossCheck`). Remaining: a true
-  gossiping mesh — peer discovery, N-peer fan-out, and continuous in-daemon
-  cross-checking across genuinely separate network operators (deployment + a
-  larger protocol step, not this 1:1 slice).
+  ✅ Witnesses now also **cross-check each other**, two ways: `he-witness compare`
+  (one-shot 1:1) and — wired into the daemon — `he-witness serve --peer
+  name,url,x,y …`, which CONTINUOUSLY cross-checks each pinned peer every tick and
+  reports per-peer agreement / equivocation in `/health` (going unhealthy + latching
+  on a detected equivocation). Both reuse the pure `crossCheck` decision; proven in
+  `make witness-e2e` (honest agree path + the 1:1 equivocation case) + `TestCrossCheck`.
+  Remaining (genuinely future, not a clean slice now): peer DISCOVERY / a witness
+  registry / trust-on-first-use (the guarantee needs pinned independent keys), and a
+  true p2p gossip overlay (transitive flooding, peer-of-peer fan-out, NAT traversal).
 - **Sign endorsements (endorser authenticity).** ✅ A first slice: an ENDORSER
   signs a canonical endorsement body (`EndorsementBody`/`ParseEndorsement` +
   the shared `SignNote`/`VerifyCheckpointSig`), the SAME signed body is logged,

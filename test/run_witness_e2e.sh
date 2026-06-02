@@ -18,12 +18,14 @@ ORIGIN="honest-ear.log/v1"
 LOG="$W/log.json"
 LOGD_PID=""
 W2D_PID=""
+W1D_PID=""
 pass=0; fail=0
 ok()  { printf '  \033[1;32mok\033[0m:   %s\n' "$1"; pass=$((pass+1)); }
 bad() { printf '  \033[1;31mFAIL\033[0m: %s\n' "$1"; fail=$((fail+1)); }
 cleanup() {
   [ -n "$LOGD_PID" ] && kill "$LOGD_PID" 2>/dev/null
   [ -n "$W2D_PID" ] && kill "$W2D_PID" 2>/dev/null
+  [ -n "$W1D_PID" ] && kill "$W1D_PID" 2>/dev/null
   rm -rf "$W"
 }
 trap cleanup EXIT
@@ -128,6 +130,24 @@ if cmp_peer --state "$W/wfork.json" >/dev/null 2>&1; then
 else
   ok "cross-check detects equivocation (divergent root at same size)"
 fi
+
+# Continuous cross-check IN the daemon: start w1 as a serve daemon with w2 as a
+# pinned --peer; its /health must report the peer agreeing, no equivocation.
+PORT3=$((PORT + 2))
+"$W/he-witness" serve --addr "127.0.0.1:$PORT3" --name w1 --key "$W1_PRIV" \
+  --log-url "$URL" --log-pub-x "$LOG_X" --log-pub-y "$LOG_Y" --origin "$ORIGIN" \
+  --state "$W/w1serve.json" --poll 1 \
+  --peer "w2,$URL2,$W2_X,$W2_Y" >/dev/null 2>&1 &
+W1D_PID=$!
+hready=""
+for _ in $(seq 1 100); do curl -fsS "http://127.0.0.1:$PORT3/health" >/dev/null 2>&1 && { hready=1; break; }; sleep 0.1; done
+H=$(curl -fsS "http://127.0.0.1:$PORT3/health" 2>/dev/null)
+if [ -n "$hready" ] && echo "$H" | python3 -c "import sys,json;d=json.load(sys.stdin);import re;assert d.get('equivocation_detected') is False;assert 'agree' in d.get('peers',{}).get('w2','')" 2>/dev/null; then
+  ok "serve daemon continuously cross-checks the pinned peer (/health: w2 agree, no equivocation)"
+else
+  bad "daemon peer cross-check /health did not report peer agreement"
+fi
+kill "$W1D_PID" 2>/dev/null; W1D_PID=""
 kill "$W2D_PID" 2>/dev/null; W2D_PID=""
 
 echo
