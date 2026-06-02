@@ -80,7 +80,7 @@ src/verifier/    Go (stdlib only) verifier:
                    cmd/he-dump     - decode a bundle to readable fields (no verify) — audit aid
                    cmd/he-attest-verify - verify a PSA attestation token (EAT) offline
                    cmd/he-receipt  - emit/verify portable "restraint receipts" (VoxTerm bridge)
-                   cmd/he-log      - operate/prove/verify the transparency log
+                   cmd/he-log      - operate/prove/verify the transparency log + signed endorsements
                    cmd/he-logd     - HTTP log server (checkpoints + consistency proofs)
                    cmd/he-witness  - witness daemon: consistency-check + cosign, refuse forks, cross-check peers
                    cmd/he-challenge - live nonce server + mobile verifier page (/v)

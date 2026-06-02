@@ -116,9 +116,16 @@ From this PoC to a defensible product, in order of trust-impact.
   gossiping mesh — peer discovery, N-peer fan-out, and continuous in-daemon
   cross-checking across genuinely separate network operators (deployment + a
   larger protocol step, not this 1:1 slice).
-- **Sign endorsements as CoRIM.** Provision Veraison with a COSE-signed CoRIM and
-  log the signed CoRIM as the transparency-log entry, so endorser authenticity
-  is covered end-to-end.
+- **Sign endorsements (endorser authenticity).** ✅ A first slice: an ENDORSER
+  signs a canonical endorsement body (`EndorsementBody`/`ParseEndorsement` +
+  the shared `SignNote`/`VerifyCheckpointSig`), the SAME signed body is logged,
+  and a verifier confirms BOTH the endorser signature (`he-log endorse-verify`
+  under the pinned endorser key) AND log inclusion (`he-log verify`) — separating
+  WHO vouched from the operator who merely appends. `make endorse-e2e` +
+  `TestSignedEndorsement`. Remaining: the IETF-CoRIM / COSE-CBOR wire format and a
+  Veraison-provisioned, manufacturer-rooted endorser (the endorser here is
+  self-provisioned P-256 — the role separation is real, a public trust anchor is
+  future/needs-hardware).
 
 ## On-chain hardening
 The `onchain/` layer is a PoC public-verification leg (its honest scope is in

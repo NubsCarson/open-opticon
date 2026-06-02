@@ -24,9 +24,11 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 )
 
 // MerkleLog is an append-only log of opaque entries (raw bytes). Callers decide
@@ -265,10 +267,50 @@ func ParseCheckpoint(body []byte) (origin string, size int, root [32]byte, err e
 	return origin, size, root, nil
 }
 
+// endorsementSchema tags the canonical endorser-signed body.
+const endorsementSchema = "honest-ear/endorsement/v1"
+
+// EndorsementBody is the canonical text an ENDORSER signs to vouch for a device
+// key: a schema line, the endorser's name, and the endorsed device's P-256 X and
+// Y (hex), each on its own line. Signing this (with SignNote) and logging it as a
+// leaf separates two roles the bare-pubkey entry conflated — WHO vouched for the
+// key (the endorser's signature) vs. that it was merely appended (the log
+// checkpoint). The verifier checks both: VerifyCheckpointSig over this body under
+// the endorser key, and CheckLoggedEndorsement for inclusion. The endorser name
+// must not contain a newline (it is one line of the body).
+func EndorsementBody(endorser string, devicePubX, devicePubY []byte) ([]byte, error) {
+	if strings.Contains(endorser, "\n") {
+		return nil, errors.New("endorser name must not contain a newline")
+	}
+	if len(devicePubX) != 32 || len(devicePubY) != 32 {
+		return nil, errors.New("device pub_x and pub_y must be 32 bytes each")
+	}
+	return []byte(fmt.Sprintf("%s\n%s\n%s\n%s\n", endorsementSchema, endorser,
+		hex.EncodeToString(devicePubX), hex.EncodeToString(devicePubY))), nil
+}
+
+// ParseEndorsement extracts (endorser, devicePubX, devicePubY) from a body after
+// its endorser signature has been verified (verify first, then trust the fields).
+func ParseEndorsement(body []byte) (endorser string, devicePubX, devicePubY []byte, err error) {
+	lines := bytes.Split(bytes.TrimRight(body, "\n"), []byte("\n"))
+	if len(lines) != 4 || string(lines[0]) != endorsementSchema {
+		return "", nil, nil, errors.New("not a v1 endorsement body")
+	}
+	x, err := hex.DecodeString(string(lines[2]))
+	if err != nil || len(x) != 32 {
+		return "", nil, nil, errors.New("bad device pub_x")
+	}
+	y, err := hex.DecodeString(string(lines[3]))
+	if err != nil || len(y) != 32 {
+		return "", nil, nil, errors.New("bad device pub_y")
+	}
+	return string(lines[1]), x, y, nil
+}
+
 // CheckLoggedEndorsement is the verifier-side gate: it confirms an endorsement
-// (e.g. pub_x||pub_y of a trusted device key) is included in a checkpoint that
-// the log operator actually signed. Reuses verifySig for the checkpoint
-// signature so there is one ECDSA verification path in the package.
+// (e.g. pub_x||pub_y of a trusted device key, or an EndorsementBody) is included
+// in a checkpoint that the log operator actually signed. Reuses verifySig for the
+// checkpoint signature so there is one ECDSA verification path in the package.
 func CheckLoggedEndorsement(entry []byte, index int, proof [][32]byte,
 	cpBody, cpSig, logPubX, logPubY []byte) error {
 	if err := verifySig(cpBody, cpSig, logPubX, logPubY); err != nil {

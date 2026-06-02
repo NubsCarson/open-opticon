@@ -1,6 +1,7 @@
 package verifier
 
 import (
+	"bytes"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -206,5 +207,70 @@ func TestWitnessCosigning(t *testing.T) {
 	imposter := Cosignature{Witness: "witness-a", PubX: mint.PubX, PubY: mint.PubY, Sig: rsig}
 	if got := VerifyCheckpointWitnesses(cpBody, []Cosignature{imposter}, enrolled); len(got) != 0 {
 		t.Errorf("enrolled name with wrong key counted: %v", got)
+	}
+}
+
+// A signed endorsement separates the ENDORSER (who vouches for a device key) from
+// the log operator (who only appends). The verifier checks both: the endorser's
+// signature over the canonical body, AND that the body is logged under a signed
+// checkpoint. Reuses SignNote / VerifyCheckpointSig (no new crypto path).
+func TestSignedEndorsement(t *testing.T) {
+	endorserKey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	epx, epy := PubXY(endorserKey)
+	deviceKey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	dpx, dpy := PubXY(deviceKey)
+
+	body, err := EndorsementBody("acme-provisioning", dpx, dpy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sig, err := SignNote(body, endorserKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The endorser genuinely signed this body.
+	if !VerifyCheckpointSig(body, sig, epx, epy) {
+		t.Fatal("genuine endorsement signature rejected")
+	}
+	// Parsed fields match (after verifying, the device key is trustworthy).
+	gotName, gotX, gotY, err := ParseEndorsement(body)
+	if err != nil || gotName != "acme-provisioning" || !bytes.Equal(gotX, dpx) || !bytes.Equal(gotY, dpy) {
+		t.Fatalf("parse mismatch: %q %x %x %v", gotName, gotX, gotY, err)
+	}
+	// A different endorser key must NOT verify (anti-impersonation).
+	other, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	ox, oy := PubXY(other)
+	if VerifyCheckpointSig(body, sig, ox, oy) {
+		t.Error("endorsement verified under a wrong endorser key")
+	}
+	// A tampered body (swap in a different device key) breaks the signature.
+	badBody, _ := EndorsementBody("acme-provisioning", ox, oy)
+	if VerifyCheckpointSig(badBody, sig, epx, epy) {
+		t.Error("tampered endorsement body verified")
+	}
+	// Malformed bodies are rejected by the parser.
+	if _, _, _, err := ParseEndorsement([]byte("not an endorsement")); err == nil {
+		t.Error("parser accepted a non-endorsement body")
+	}
+	if _, err := EndorsementBody("bad\nname", dpx, dpy); err == nil {
+		t.Error("a newline in the endorser name was accepted")
+	}
+
+	// End-to-end: the signed body is logged, and a verifier confirms BOTH the
+	// endorser signature AND inclusion under the log's signed checkpoint.
+	logKey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	lpx, lpy := PubXY(logKey)
+	l := &MerkleLog{}
+	idx := l.Add(body)
+	root := l.Root()
+	cpBody := CheckpointBody("honest-ear.log/v1", l.Size(), root)
+	cpSig, _ := SignCheckpoint("honest-ear.log/v1", l.Size(), root, logKey)
+	proof, _ := l.InclusionProof(idx)
+	if !VerifyCheckpointSig(body, sig, epx, epy) {
+		t.Fatal("endorser signature failed in the logged case")
+	}
+	if err := CheckLoggedEndorsement(body, idx, proof, cpBody, cpSig, lpx, lpy); err != nil {
+		t.Fatalf("signed endorsement not confirmed as logged: %v", err)
 	}
 }

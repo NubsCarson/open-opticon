@@ -50,6 +50,19 @@ type proofBundle struct {
 	LogPubY    string   `json:"log_pub_y"`
 }
 
+// endorsement is a device key vouched for by an ENDORSER: the canonical signed
+// body plus the endorser's signature and key. EntryHex is the body bytes to
+// `he-log add` (so the SAME signed body becomes the log leaf, and `he-log verify`
+// then proves it was logged).
+type endorsement struct {
+	Endorser     string `json:"endorser"`
+	Body         string `json:"body"`
+	Sig          string `json:"endorser_sig"`
+	EndorserPubX string `json:"endorser_pub_x"`
+	EndorserPubY string `json:"endorser_pub_y"`
+	EntryHex     string `json:"entry_hex"`
+}
+
 // consistencyBundle proves the current tree is an append-only extension of an
 // earlier tree of size old_size (RFC 9162 consistency proof). Auditors gossip
 // these so the log cannot fork or rewrite history.
@@ -144,6 +157,8 @@ commands (subcommand first, then flags):
   cosign --checkpoint <body> --key <privHex> --witness NAME   witness-cosign a checkpoint
   cosign-verify --checkpoint <body> --cosigs <c.json> --enrolled name:x:y --witness-threshold k
   verify --proof <proof.json>                        check an inclusion-proof bundle
+  endorse --key <endorserPrivHex> --endorser NAME --device-x X --device-y Y   signed endorsement
+  endorse-verify --file <e.json> --endorser-x X --endorser-y Y   check the endorser signature
 
 State is a JSON file (--log, default he-log.json). Stdlib only.`
 
@@ -166,6 +181,12 @@ func main() {
 	witness := flag.String("witness", "", "witness name, for cosign")
 	cosigsPath := flag.String("cosigs", "", "cosignatures JSON array, for cosign-verify")
 	threshold := flag.Int("witness-threshold", 1, "min enrolled witness cosigs, for cosign-verify")
+	endorser := flag.String("endorser", "", "endorser name, for endorse")
+	deviceX := flag.String("device-x", "", "endorsed device pub X (hex), for endorse")
+	deviceY := flag.String("device-y", "", "endorsed device pub Y (hex), for endorse")
+	endorserX := flag.String("endorser-x", "", "pinned endorser pub X (hex), for endorse-verify")
+	endorserY := flag.String("endorser-y", "", "pinned endorser pub Y (hex), for endorse-verify")
+	filePath := flag.String("file", "", "signed endorsement JSON, for endorse-verify")
 	var enrolledWitnesses witnessList
 	flag.Var(&enrolledWitnesses, "enrolled", "enrolled witness as name:pubXhex:pubYhex (repeatable, for cosign-verify)")
 	flag.CommandLine.Parse(os.Args[2:]) // subcommand-first; flags follow it
@@ -365,6 +386,53 @@ func main() {
 			os.Exit(1)
 		}
 		fmt.Printf("%s  endorsement is in the signed, append-only log (index %d)\n", cli.Pass(), pb.Index)
+
+	case "endorse":
+		if *keyHex == "" {
+			cli.Die("endorse needs --key <endorserPrivHex>")
+		}
+		body, err := verifier.EndorsementBody(*endorser, mustHex(*deviceX, "device-x"), mustHex(*deviceY, "device-y"))
+		if err != nil {
+			cli.Die("%v", err)
+		}
+		key := loadKey(*keyHex)
+		sig, err := verifier.SignNote(body, key)
+		if err != nil {
+			cli.Die("%v", err)
+		}
+		ex, ey := verifier.PubXY(key)
+		out, _ := json.MarshalIndent(endorsement{
+			Endorser: *endorser, Body: string(body), Sig: hex.EncodeToString(sig),
+			EndorserPubX: hex.EncodeToString(ex), EndorserPubY: hex.EncodeToString(ey),
+			EntryHex: hex.EncodeToString(body),
+		}, "", "  ")
+		fmt.Println(string(out))
+
+	case "endorse-verify":
+		// Confirms ENDORSER authenticity (who vouched). Logged-inclusion is the
+		// separate `verify --proof` gate; the two together are the full check.
+		if *filePath == "" {
+			cli.Die("endorse-verify needs --file <endorsement.json> and --endorser-x/--endorser-y")
+		}
+		raw, err := os.ReadFile(*filePath)
+		if err != nil {
+			cli.Die("reading %s: %v", *filePath, err)
+		}
+		var e endorsement
+		if err := json.Unmarshal(raw, &e); err != nil {
+			cli.Die("parsing endorsement: %v", err)
+		}
+		body := []byte(e.Body)
+		if !verifier.VerifyCheckpointSig(body, mustHex(e.Sig, "endorser_sig"),
+			mustHex(*endorserX, "endorser-x"), mustHex(*endorserY, "endorser-y")) {
+			fmt.Printf("%s  endorsement signature does not verify under the pinned endorser key\n", cli.Fail())
+			os.Exit(1)
+		}
+		name, dx, dy, err := verifier.ParseEndorsement(body)
+		if err != nil {
+			cli.Die("%v", err)
+		}
+		fmt.Printf("%s  endorser %q vouches for device pub_x=%x pub_y=%x\n", cli.Pass(), name, dx, dy)
 
 	default:
 		fmt.Fprintf(os.Stderr, "unknown command %q\n\n%s\n", cmd, usage)
