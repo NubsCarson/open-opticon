@@ -235,7 +235,10 @@
     </div>
     <p>The verifier is <span class="mono">honest-ear/verifier</span> compiled with
        <span class="mono">GOOS=js GOARCH=wasm</span> (<span class="mono">tools/build_wasm.sh</span>).
-       Rebuild it yourself and diff the bytes. MIT licensed.</p>
+       Rebuild it from source, or confirm the file you loaded matches the committed bytes:
+       <span class="mono">cd docs &amp;&amp; sha256sum -c verify.wasm.sha256</span>
+       (digest in <a href="https://github.com/NubsCarson/open-opticon/blob/main/docs/verify.wasm.sha256">verify.wasm.sha256</a>;
+       byte-for-byte rebuild is Go-toolchain-specific — see REPRODUCIBLE.md). MIT licensed.</p>
   </div>
 </footer>
 

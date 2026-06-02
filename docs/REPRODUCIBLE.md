@@ -44,6 +44,19 @@ committed binary to the CI build — a strict byte-match gate would require pinn
 an exact Go version, which is deferred. The trust anchor is the source + the smoke
 test, not the prebuilt bytes; anyone can rebuild and diff.
 
+**Download-integrity digest.** Separately from *rebuild* reproducibility, the
+SHA-256 of the exact bytes this repo ships is published in
+[`verify.wasm.sha256`](verify.wasm.sha256), so a downloader can confirm the file
+they fetched is the one committed here (catching a tampered CDN/mirror), even
+without a matching Go toolchain:
+
+```sh
+cd docs && sha256sum -c verify.wasm.sha256   # OK = your bytes == the committed bytes
+```
+
+This is integrity-of-download, not a claim that you can rebuild these exact bytes
+(that is toolchain-specific, above). The source remains the anchor.
+
 ### CI publishes + attests the manifest (SLSA provenance)
 
 On every push, the `reproducible-build` CI job runs the same check, writes the
