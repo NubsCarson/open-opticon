@@ -26,6 +26,12 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y build-essential libssl-dev openssl python3
       - name: Run all host tests
         run: make test
+      - name: Committed WASM matches its published digest
+        # Runs BEFORE the rebuild step below (which overwrites docs/verify.wasm):
+        # asserts the COMMITTED verify.wasm + wasm_exec.js match docs/verify.wasm.sha256,
+        # so a downloader's `sha256sum -c` holds. Catches a wasm refresh that forgot
+        # to update the digest. (Reproducibility is covered by the rebuild + repro job.)
+        run: make wasm-verify
       - name: Build + smoke-test the in-browser WASM verifier
         # Builds verify.wasm and drives it through the Go wasm runtime under node
         # (ubuntu-latest ships node), asserting the browser path matches the CLI's

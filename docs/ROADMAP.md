@@ -4,10 +4,20 @@ From this PoC to a defensible product, in order of trust-impact.
 
 ## Done in this PoC
 
-- **Multi-prover quorum (verifier side).** `he-verify --quorum k` requires *k* of
-  *n* enrolled independent roots to verify and agree
-  ([`quorum.go`](../src/verifier/quorum.go)). Wiring up genuinely heterogeneous
-  provers (a second-vendor TEE, a TPM quote) is the remaining integration.
+- **Multi-prover quorum, with a genuinely heterogeneous root.** `he-verify
+  --quorum k` requires *k* of *n* enrolled independent roots to verify and agree
+  ([`quorum.go`](../src/verifier/quorum.go)). This is no longer verifier-side
+  only: `make quorum-hetero-e2e` stands up a real 2-of-2 where a sim P-256 root
+  **and** a **TPM-resident** P-256 key (its private half never leaves the TPM)
+  sign the same bound output, and `he-verify --quorum 2` accepts both — concrete
+  evidence the quorum path is root-agnostic across a genuinely different keystore
+  (its own CI job, `tpm-hetero-root`). HONEST SCOPE: that leg runs against
+  **swtpm — a software TPM, not separate hardware**; it is a TPM-resident
+  **signing key, not a TPM quote** (no PCR / measured-boot binding); and it did
+  **not** observe the audio — so it demonstrates a heterogeneous *root*, not a
+  second *witness* of the event (see [`HARDWARE.md`](HARDWARE.md)). Still
+  remaining: a second-vendor TEE, a real TPM **quote** bound to a firmware
+  measurement, and a prover that independently observes the event.
 - **Endorsement transparency log + witness cosigning.** RFC 6962 append-only
   Merkle log with inclusion + consistency proofs and a signed checkpoint
   (`he-log`, [`transparency.go`](../src/verifier/transparency.go)); the verifier

@@ -31,6 +31,9 @@ run "byte-reproducible host build (two independent trees)" bash tools/repro.sh
 echo
 echo "Cross-root + Track-6 + accountability:"
 run "cross-root demo (TEE + ZK + audio binding agree)" make demo
+# Download-integrity of the committed in-browser verifier — checked BEFORE the
+# rebuild below overwrites docs/verify.wasm, so it asserts the COMMITTED artifact.
+run "published verify.wasm matches its committed SHA-256 digest" make wasm-verify
 if command -v node >/dev/null 2>&1; then
   ( bash tools/build_wasm.sh && node test/wasm_verify_test.js ) >/tmp/va.log 2>&1 \
     && PASS "in-browser WASM verifier matches the CLI" || { FAIL "WASM verifier smoke"; tail -3 /tmp/va.log | sed 's/^/      /'; }

@@ -17,6 +17,7 @@
 #   make voxterm-demo - narrated walkthrough of the restraint-receipt bridge
 #   make port-diff  - C detector == Rust zk port, differential test (needs cargo)
 #   make demo       - whole thesis on one clip: TEE + ZK + on-chain 2-of-2 agree
+#   make wasm-verify - committed docs/verify.wasm + wasm_exec.js match their pinned SHA-256
 #   make gui/sites/fuzz/repro/cross - GUI, static site, fuzzing, reproducible-build,
 #                     Raspberry Pi cross-compile
 #   make clean      - remove build artifacts
@@ -27,7 +28,7 @@
 
 VERIFIER = src/verifier
 
-.PHONY: help test units sim verifier-test e2e vision-e2e chain-e2e cose-e2e witness-e2e voxterm-e2e multimodal-e2e consent-e2e endorse-e2e eat-e2e tpm-e2e quorum-hetero-e2e voxterm-demo verify-all port-diff demo tamper-test gui sites wasm fuzz repro cross clean
+.PHONY: help test units sim verifier-test e2e vision-e2e chain-e2e cose-e2e witness-e2e voxterm-e2e multimodal-e2e consent-e2e endorse-e2e eat-e2e tpm-e2e quorum-hetero-e2e voxterm-demo verify-all port-diff demo tamper-test gui sites wasm wasm-verify fuzz repro cross clean
 
 test: units verifier-test e2e vision-e2e chain-e2e cose-e2e witness-e2e voxterm-e2e multimodal-e2e consent-e2e endorse-e2e eat-e2e tamper-test
 	@echo ""
@@ -153,6 +154,15 @@ sites:
 # (docs/verify.html) — same code path as he-verify, no server, no install.
 wasm:
 	bash tools/build_wasm.sh
+
+# Download-integrity gate: the committed in-browser artifacts (docs/verify.wasm +
+# wasm_exec.js) must match the published digest in docs/verify.wasm.sha256, so a
+# `sha256sum -c` after downloading them confirms they weren't tampered with. This
+# checks the COMMITTED pair (not a rebuild) — it catches a verify.wasm refresh
+# that forgot to update the digest. Reproducibility of the build is a separate
+# guarantee (`make repro` + the wasm smoke test rebuild it from source).
+wasm-verify:
+	cd docs && sha256sum -c verify.wasm.sha256
 
 # Fuzz the CBOR decoder (Ctrl-C to stop; the seed corpus runs under `make test`).
 fuzz:
