@@ -128,6 +128,8 @@ From this PoC to a defensible product, in order of trust-impact.
   Remaining (genuinely future, not a clean slice now): peer DISCOVERY / a witness
   registry / trust-on-first-use (the guarantee needs pinned independent keys), and a
   true p2p gossip overlay (transitive flooding, peer-of-peer fan-out, NAT traversal).
+  The next slice that IS clean (a transferable fork proof + relay among pinned peers)
+  vs. what stays frontier is scoped in [`DESIGN_WITNESS_GOSSIP.md`](DESIGN_WITNESS_GOSSIP.md).
 - **Sign endorsements (endorser authenticity).** ✅ A first slice: an ENDORSER
   signs a canonical endorsement body (`EndorsementBody`/`ParseEndorsement` +
   the shared `SignNote`/`VerifyCheckpointSig`), the SAME signed body is logged,
