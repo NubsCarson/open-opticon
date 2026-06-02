@@ -17,10 +17,15 @@ URL="http://127.0.0.1:$PORT"
 ORIGIN="honest-ear.log/v1"
 LOG="$W/log.json"
 LOGD_PID=""
+W2D_PID=""
 pass=0; fail=0
 ok()  { printf '  \033[1;32mok\033[0m:   %s\n' "$1"; pass=$((pass+1)); }
 bad() { printf '  \033[1;31mFAIL\033[0m: %s\n' "$1"; fail=$((fail+1)); }
-cleanup() { [ -n "$LOGD_PID" ] && kill "$LOGD_PID" 2>/dev/null; rm -rf "$W"; }
+cleanup() {
+  [ -n "$LOGD_PID" ] && kill "$LOGD_PID" 2>/dev/null
+  [ -n "$W2D_PID" ] && kill "$W2D_PID" 2>/dev/null
+  rm -rf "$W"
+}
 trap cleanup EXIT
 
 echo "== build =="
@@ -80,6 +85,50 @@ if "$W/he-log" cosign-verify --checkpoint "$W/body.txt" --cosigs "$W/cosigs.json
 else
   bad "threshold cosign-verify failed on honest log"
 fi
+
+echo
+echo "== witness-to-witness cross-check (anti-equivocation) =="
+# Run w2 as a serve daemon watching the SAME honest log, then have w1 cross-check
+# the peer's published cosignature against w1's own view.
+PORT2=$((PORT + 1))
+URL2="http://127.0.0.1:$PORT2"
+"$W/he-witness" serve --addr "127.0.0.1:$PORT2" --name w2 --key "$W2_PRIV" \
+  --log-url "$URL" --log-pub-x "$LOG_X" --log-pub-y "$LOG_Y" --origin "$ORIGIN" \
+  --state "$W/w2serve.json" --poll 1 >/dev/null 2>&1 &
+W2D_PID=$!
+ready=""
+for _ in $(seq 1 100); do
+  curl -fsS "$URL2/cosignature" >/dev/null 2>&1 && { ready=1; break; }
+  sleep 0.1
+done
+[ -n "$ready" ] && ok "peer witness w2 is serving its cosignature" || bad "w2 daemon never came up"
+
+cmp_peer() { # extra args -> run compare from w1's view against w2
+  "$W/he-witness" compare --peer-url "$URL2" --peer-name w2 \
+    --peer-pub-x "$W2_X" --peer-pub-y "$W2_Y" --origin "$ORIGIN" "$@"
+}
+if cmp_peer --state "$W/w1.json" >/dev/null 2>&1; then
+  ok "w1 cross-check AGREES with peer w2 (same root, same size)"
+else
+  bad "honest peers disagreed in cross-check"
+fi
+
+# Wrong pinned peer key (w3's key, not w2's) -> the cosignature must not verify.
+if "$W/he-witness" compare --peer-url "$URL2" --peer-name w2 \
+     --peer-pub-x "$W3_X" --peer-pub-y "$W3_Y" --origin "$ORIGIN" --state "$W/w1.json" >/dev/null 2>&1; then
+  bad "cross-check accepted the peer under a wrong pinned key"
+else
+  ok "cross-check rejects the peer under a wrong pinned key"
+fi
+
+# EQUIVOCATION: a view holding a DIFFERENT root at the same size as w2 -> detected.
+python3 -c "import json; json.dump({'origin':'$ORIGIN','size':3,'root':'aa'*32}, open('$W/wfork.json','w'))"
+if cmp_peer --state "$W/wfork.json" >/dev/null 2>&1; then
+  bad "cross-check missed an equivocation (divergent root at same size)"
+else
+  ok "cross-check detects equivocation (divergent root at same size)"
+fi
+kill "$W2D_PID" 2>/dev/null; W2D_PID=""
 
 echo
 echo "== the log FORKS: witnesses refuse the divergent history =="

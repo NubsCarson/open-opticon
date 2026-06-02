@@ -164,3 +164,59 @@ func TestWitnessRefusesWrongLogKey(t *testing.T) {
 		t.Fatal("accepted a checkpoint not signed by the pinned log key")
 	}
 }
+
+// crossCheck is the anti-equivocation decision used by `he-witness compare`:
+// given our view and a peer witness's (already sig-verified) checkpoint, does the
+// peer agree, equivocate, or is it inconclusive? Pure — no HTTP, no state writes.
+func TestCrossCheck(t *testing.T) {
+	ours := logOf("a", "b", "c") // our view: size 3
+	ourRoot := ours.Root()
+
+	// No local baseline -> inconclusive (never a false PASS).
+	if v, _ := crossCheck(false, 0, [32]byte{}, 3, ourRoot, nil); v != crossInconclusive {
+		t.Errorf("no-view: got %v, want inconclusive", v)
+	}
+
+	// Same size, same root -> agree.
+	if v, _ := crossCheck(true, 3, ourRoot, 3, ourRoot, nil); v != crossAgree {
+		t.Errorf("same root: got %v, want agree", v)
+	}
+
+	// Same size, DIVERGENT root -> equivocation (the whole point: two independently
+	// keyed witnesses holding different roots at the same size means the log forked).
+	forkAt3 := logOf("a", "b", "X").Root()
+	if v, _ := crossCheck(true, 3, ourRoot, 3, forkAt3, nil); v != crossEquivocation {
+		t.Errorf("divergent root: got %v, want equivocation", v)
+	}
+
+	// Peer ahead with a valid consistency proof that our tree extends to theirs -> agree.
+	peer := logOf("a", "b", "c", "d", "e") // size 5, genuinely extends ours
+	proof, err := peer.ConsistencyProof(3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v, _ := crossCheck(true, 3, ourRoot, 5, peer.Root(), proof); v != crossAgree {
+		t.Errorf("consistent extension: got %v, want agree", v)
+	}
+
+	// Peer ahead but NO proof supplied -> inconclusive (don't guess).
+	if v, _ := crossCheck(true, 3, ourRoot, 5, peer.Root(), nil); v != crossInconclusive {
+		t.Errorf("ahead no-proof: got %v, want inconclusive", v)
+	}
+
+	// Peer ahead but its tree is a FORK (differs before our size): its own
+	// consistency proof can't tie back to our root -> equivocation.
+	fork := logOf("a", "b", "Z", "d", "e") // diverges at leaf index 2
+	fProof, err := fork.ConsistencyProof(3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v, _ := crossCheck(true, 3, ourRoot, 5, fork.Root(), fProof); v != crossEquivocation {
+		t.Errorf("forked extension: got %v, want equivocation", v)
+	}
+
+	// We are ahead of the peer -> inconclusive (this slice doesn't prove the reverse direction).
+	if v, _ := crossCheck(true, 5, peer.Root(), 3, ourRoot, nil); v != crossInconclusive {
+		t.Errorf("peer behind: got %v, want inconclusive", v)
+	}
+}
