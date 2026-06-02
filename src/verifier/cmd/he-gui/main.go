@@ -83,7 +83,7 @@ func main() {
 	http.HandleFunc("/verify", verifyHandler)
 
 	log.Printf("open-opticon web UI on http://localhost%s  (sim: %s)", *addr, *sim)
-	log.Fatal(http.ListenAndServe(*addr, nil))
+	log.Fatal(cli.Serve(*addr))
 }
 
 // listenHandler validates the request, then runs the detect->sign->verify

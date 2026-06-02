@@ -21,6 +21,16 @@ What it is designed to prove, and what it is not, is documented in detail in
 Known limitations are listed in the threat model (device identity only on
 i.MX hardware, self-provisioned endorsement, theatre-grade enclosure, etc.).
 
+## Operational scope of the HTTP services
+
+The verifier services (`he-challenge`, `he-logd`, `he-witness`, `he-gui`) are
+PoC-scoped: session/log state is **in-memory and ephemeral** by design, they speak
+**plain HTTP** (terminate TLS at a reverse proxy for any non-loopback deployment),
+and they carry **no built-in auth or rate-limiting** beyond `he-challenge`'s
+session cap. They do set explicit HTTP read/write/idle timeouts (Slowloris) and
+bound request bodies, and the witness uses a timeout-bounded HTTP client, but
+production exposure still wants a proxy doing TLS, auth, and rate limiting.
+
 ## The embedded key is not a secret
 
 `src/common/he_testkey.h` contains a P-256 key that is **published and

@@ -8,7 +8,26 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"time"
 )
+
+// Serve runs the default mux on addr with explicit timeouts, so a slow or idle
+// client cannot hold a connection open indefinitely (Slowloris). One definition
+// shared by every verifier HTTP server; handler is nil = http.DefaultServeMux.
+func Serve(addr string) error {
+	srv := &http.Server{
+		Addr:              addr,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
+	}
+	return srv.ListenAndServe()
+}
+
+// HTTPClient returns an http.Client with a bounded timeout, so polling a hung or
+// slow peer cannot block a witness/daemon forever (the stdlib default has none).
+func HTTPClient() *http.Client { return &http.Client{Timeout: 10 * time.Second} }
 
 // Die prints "error: <msg>" to stderr and exits with status 2.
 func Die(format string, a ...any) {

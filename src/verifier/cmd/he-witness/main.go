@@ -155,7 +155,7 @@ func runCheck(args []string) {
 	if err != nil {
 		cli.Die("%v", err)
 	}
-	res, err := poll(http.DefaultClient, cfg.logURL, cfg.origin, cfg.logPubX, cfg.logPubY, cfg.key, cfg.name, st)
+	res, err := poll(cli.HTTPClient(), cfg.logURL, cfg.origin, cfg.logPubX, cfg.logPubY, cfg.key, cfg.name, st)
 	if err != nil {
 		cli.Die("poll: %v", err)
 	}
@@ -195,7 +195,7 @@ func runServe(args []string) {
 	if err != nil {
 		cli.Die("%v", err)
 	}
-	d := &daemon{cfg: cfg, st: st}
+	d := &daemon{cfg: cfg, client: cli.HTTPClient(), st: st}
 	d.once() // poll immediately so /cosignature is populated before first tick
 	go func() {
 		t := time.NewTicker(interval)
@@ -209,11 +209,12 @@ func runServe(args []string) {
 	http.HandleFunc("/health", d.handleHealth)
 	fmt.Fprintf(os.Stderr, "he-witness %q: polling %s every %s, serving %s\n",
 		cfg.name, cfg.logURL, interval, addr)
-	cli.Die("server exited: %v", http.ListenAndServe(addr, nil))
+	cli.Die("server exited: %v", cli.Serve(addr))
 }
 
 type daemon struct {
 	cfg      config
+	client   *http.Client
 	mu       sync.Mutex
 	st       *witnessState
 	latest   *pollResult
@@ -224,7 +225,11 @@ type daemon struct {
 func (d *daemon) once() {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	res, err := poll(http.DefaultClient, d.cfg.logURL, d.cfg.origin, d.cfg.logPubX, d.cfg.logPubY, d.cfg.key, d.cfg.name, d.st)
+	client := d.client
+	if client == nil {
+		client = cli.HTTPClient()
+	}
+	res, err := poll(client, d.cfg.logURL, d.cfg.origin, d.cfg.logPubX, d.cfg.logPubY, d.cfg.key, d.cfg.name, d.st)
 	if err != nil {
 		d.lastErr = err.Error()
 		d.healthOK = false

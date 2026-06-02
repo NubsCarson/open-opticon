@@ -50,7 +50,7 @@ func main() {
 	http.HandleFunc("/consistency", consistencyHandler(loadLog))
 
 	fmt.Fprintf(os.Stderr, "he-logd: serving %s on %s (origin %q)\n", *logPath, *addr, *origin)
-	log.Fatal(http.ListenAndServe(*addr, nil))
+	log.Fatal(cli.Serve(*addr))
 }
 
 // loadFunc loads the current log (re-read per request so appends are served live).

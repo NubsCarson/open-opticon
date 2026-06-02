@@ -143,7 +143,7 @@ func main() {
 	http.HandleFunc("/", s.handleRoot)
 
 	log.Printf("open-opticon challenge verifier listening on %s (base %s)", *addr, s.baseURL)
-	log.Fatal(http.ListenAndServe(*addr, nil))
+	log.Fatal(cli.Serve(*addr))
 }
 
 func randHex(n int) string {
