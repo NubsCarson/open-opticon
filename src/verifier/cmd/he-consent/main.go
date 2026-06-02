@@ -44,11 +44,12 @@ const (
 // so `he-consent <sub> --help` shows that subcommand's flags instead of the custom
 // parser's "flag --help needs a value" error. Called first thing in each run*.
 func helpRequested(args []string, u string) bool {
-	for _, a := range args {
-		if a == "-h" || a == "--help" || a == "help" {
-			fmt.Println(u)
-			return true
-		}
+	// Only the LEADING token (the `<sub> --help` gesture), not any later arg —
+	// otherwise a flag VALUE of "help"/"-h"/"--help" (e.g. a session/witness name
+	// or file path) would silently no-op the command with a success exit.
+	if len(args) > 0 && (args[0] == "-h" || args[0] == "--help" || args[0] == "help") {
+		fmt.Println(u)
+		return true
 	}
 	return false
 }

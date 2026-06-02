@@ -54,10 +54,16 @@ func TestParsePeersHappyPath(t *testing.T) {
 }
 
 func TestHelpRequested(t *testing.T) {
+	// The `<sub> --help` gesture: the help token leads (args = os.Args[2:]).
 	for _, a := range []string{"-h", "--help", "help"} {
-		if !helpRequested([]string{"check", a}, usageCheck) {
-			t.Errorf("helpRequested should be true for %q", a)
+		if !helpRequested([]string{a}, usageCheck) {
+			t.Errorf("helpRequested should be true for leading %q", a)
 		}
+	}
+	// A help token that is NOT leading — i.e. a flag's VALUE — must NOT trigger help
+	// (else `--name help` would silently no-op the command with a success exit).
+	if helpRequested([]string{"--name", "help"}, usageCheck) {
+		t.Error("helpRequested matched a flag VALUE of 'help'; it must only match the leading token")
 	}
 	if helpRequested([]string{"--name", "w1", "--key", "ab"}, usageCheck) {
 		t.Error("helpRequested should be false when no help token is present")
