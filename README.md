@@ -121,7 +121,7 @@ docs/            ARCHITECTURE, THREAT_MODEL, RUNBOOK, HARDWARE, ROADMAP,
 [Architecture](docs/ARCHITECTURE.md) · [Threat model & scope](docs/THREAT_MODEL.md) ·
 [Runbook](docs/RUNBOOK.md) · [Hardware & device](docs/HARDWARE.md) ·
 [Reproducible builds](docs/REPRODUCIBLE.md) · [Integrations (VoxTerm bridge)](docs/INTEGRATIONS.md) ·
-[Credible-sensors Track 3](docs/T3.md) · [Pi + ST secure element (design)](docs/PI_ST_ELEMENT.md) ·
+[Credible-sensors Track 3](docs/T3.md) · [Track 3 handoff](docs/HANDOFF.md) · [Pi + ST secure element (design)](docs/PI_ST_ELEMENT.md) ·
 [Roadmap](docs/ROADMAP.md) ·
 [Sample attestation (QEMU)](docs/SAMPLE_ATTESTATION.md) ·
 [ZK proof of the detector](zk/README.md) · [On-chain verification](onchain/README.md)
