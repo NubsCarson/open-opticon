@@ -187,6 +187,9 @@ func runQuorum(nonce []byte, k int, rootSpecs rootList, lastCounter uint64) {
 		if err != nil {
 			cli.Die("reading %s: %v", path, err)
 		}
+		if err := checkBundleParses(raw); err != nil {
+			cli.Die("%s: %v", path, err) // loud-fail a malformed file, don't silently drop it
+		}
 		inputs = append(inputs, raw)
 	}
 
@@ -213,6 +216,9 @@ func runCoAttest(opt verifier.Options, k int) {
 		if err != nil {
 			cli.Die("reading %s: %v", path, err)
 		}
+		if err := checkBundleParses(raw); err != nil {
+			cli.Die("%s: %v", path, err) // loud-fail a malformed file, don't silently drop it
+		}
 		inputs = append(inputs, raw)
 	}
 	res := verifier.VerifyCoAttestationJSON(inputs, opt, k)
@@ -232,6 +238,23 @@ func parseBundle(raw []byte) (verifier.Bundle, error) {
 		return b, fmt.Errorf("parsing bundle JSON: %w", err)
 	}
 	return b, nil
+}
+
+// checkBundleParses fails loudly (matching single mode) if a quorum/co-attest bundle
+// file isn't a recognizable raw or COSE envelope — so a typo'd or corrupt file is an
+// error the operator sees, not an input silently dropped from the count.
+func checkBundleParses(raw []byte) error {
+	var probe struct {
+		Payload string `json:"payload"`
+		COSE    string `json:"cose"`
+	}
+	if err := json.Unmarshal(raw, &probe); err != nil {
+		return fmt.Errorf("bad bundle JSON: %w", err)
+	}
+	if probe.Payload == "" && probe.COSE == "" {
+		return fmt.Errorf("bundle has neither a payload nor a cose field")
+	}
+	return nil
 }
 
 func printPredicate(p *verifier.Predicate) {
