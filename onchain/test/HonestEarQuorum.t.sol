@@ -35,6 +35,8 @@ contract HonestEarQuorumTest is Test {
     bytes sSig;
     bytes altPayload;
     bytes altSig;
+    bytes maxPayload;
+    bytes maxSig;
 
     function setUp() public {
         string memory pf = vm.readFile("./test/proof_fixture.json");
@@ -51,6 +53,8 @@ contract HonestEarQuorumTest is Test {
         sSig = vm.parseJsonBytes(qf, ".silence.sig");
         altPayload = vm.parseJsonBytes(qf, ".alarmAltNonce.payload");
         altSig = vm.parseJsonBytes(qf, ".alarmAltNonce.sig");
+        maxPayload = vm.parseJsonBytes(qf, ".alarmMaxCounter.payload");
+        maxSig = vm.parseJsonBytes(qf, ".alarmMaxCounter.sig");
 
         RiscZeroGroth16Verifier rv =
             new RiscZeroGroth16Verifier(ControlID.CONTROL_ROOT, ControlID.BN254_CONTROL_ID);
@@ -70,6 +74,20 @@ contract HonestEarQuorumTest is Test {
         // Re-submitting the same bundle (counter 1, not > 1) must be rejected.
         vm.expectRevert(bytes("counter must advance (anti-replay)"));
         q.recordVerdict(seal, journal, aPayload, aSig);
+    }
+
+    // Anti-brick: an otherwise-valid bundle whose counter == type(uint64).max must be
+    // REFUSED by recordVerdict, so the contract can never store a counter that makes
+    // every future "counter must advance" impossible. The bundle passes verdict() (the
+    // zk + device roots agree on alarm_tone for the same nonce+audio); the max-counter
+    // guard is what fires.
+    function test_RejectsCounterAtMax() public {
+        (uint32 ev, uint32 pres) = q.verdict(seal, journal, maxPayload, maxSig);
+        assertEq(ev, 2, "max-counter bundle still agrees on alarm_tone");
+        assertEq(pres, 1);
+        vm.expectRevert(bytes("counter at max"));
+        q.recordVerdict(seal, journal, maxPayload, maxSig);
+        assertEq(q.lastCounter(), 0, "a refused max-counter must not advance lastCounter");
     }
 
     function test_RejectsAudioMismatch() public {

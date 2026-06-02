@@ -37,11 +37,15 @@ PY
 alarm_json="$("$SIM/he-attest-sim" "$FIX/alarm_short.pcm" aabbccdd 1)"
 silence_json="$("$SIM/he-attest-sim" "$FIX/silence_short.pcm" aabbccdd 1)"
 alarmalt_json="$("$SIM/he-attest-sim" "$FIX/alarm_short.pcm" ffeeddcc 1)"
+# An otherwise-valid alarm bundle whose counter == type(uint64).max — for the
+# on-chain anti-brick test: recordVerdict must REFUSE it so it can never store a
+# counter that bricks every future "counter must advance".
+alarmmax_json="$("$SIM/he-attest-sim" "$FIX/alarm_short.pcm" aabbccdd 18446744073709551615)"
 
 OUT="$ROOT/onchain/test/quorum_fixture.json"
 TMP_OUT="$(mktemp)"
 trap 'rm -f "$TMP_OUT"' EXIT
-ALARM="$alarm_json" SILENCE="$silence_json" ALARMALT="$alarmalt_json" python3 - <<'PY' > "$TMP_OUT"
+ALARM="$alarm_json" SILENCE="$silence_json" ALARMALT="$alarmalt_json" ALARMMAX="$alarmmax_json" python3 - <<'PY' > "$TMP_OUT"
 import json, os
 
 N = 0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551
@@ -66,7 +70,8 @@ def leg(raw):
 
 print(json.dumps({"alarm": leg(os.environ["ALARM"]),
                   "silence": leg(os.environ["SILENCE"]),
-                  "alarmAltNonce": leg(os.environ["ALARMALT"])}, indent=2))
+                  "alarmAltNonce": leg(os.environ["ALARMALT"]),
+                  "alarmMaxCounter": leg(os.environ["ALARMMAX"])}, indent=2))
 PY
 
 mv "$TMP_OUT" "$OUT" # only overwrite the committed fixture on full success
