@@ -370,7 +370,8 @@ func TestSimulateWalkUpLoop(t *testing.T) {
 	}
 
 	// Second simulate on the SAME session: ctr = lastCounter+1, must still PASS and
-	// the counter must strictly advance — the anti-replay gate through the sim path.
+	// the counter must strictly advance — the monotonic-counter (lastCounter+1) wiring
+	// through the sim path (replay *rejection* is covered by TestVerifyAndRecordConcurrentReplay).
 	if m2 := simulate(); m2["verdict"] != "PASS" {
 		t.Fatalf("second simulate = %+v, want PASS", m2)
 	}
