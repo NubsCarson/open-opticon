@@ -131,10 +131,12 @@ From this PoC to a defensible product, in order of trust-impact.
   ✅ A first piece of that shipped: a TRANSFERABLE equivocation proof — on a same-size
   split the daemon serves `/equivocation-proof` (its own + the divergent peer's
   cosigned checkpoints), and `he-witness verify-equivocation` lets ANYONE confirm the
-  log equivocated offline under the two pinned witness keys (`make witness-e2e`,
-  `VerifyEquivocation`). The remaining sub-slice (relay among pinned peers) vs. the
-  genuine frontier (epidemic gossip, discovery) is scoped in
-  [`DESIGN_WITNESS_GOSSIP.md`](DESIGN_WITNESS_GOSSIP.md).
+  log equivocated offline under the two pinned witness keys. A detecting daemon also
+  **relays** the proof one-hop to its pinned peers (`POST /equivocation-intake`), which
+  re-verify it under THEIR own pinned keys before latching — so a fork propagates
+  within the pinned set (`make witness-e2e`, `VerifyEquivocation`,
+  `TestDaemonAdoptsRelayedProof`). Only epidemic re-flooding + discovery/membership
+  stay frontier, scoped in [`DESIGN_WITNESS_GOSSIP.md`](DESIGN_WITNESS_GOSSIP.md).
 - **Sign endorsements (endorser authenticity).** ✅ A first slice: an ENDORSER
   signs a canonical endorsement body (`EndorsementBody`/`ParseEndorsement` +
   the shared `SignNote`/`VerifyCheckpointSig`), the SAME signed body is logged,

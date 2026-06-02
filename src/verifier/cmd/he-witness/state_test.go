@@ -214,3 +214,64 @@ func TestDaemonServesEquivocationProof(t *testing.T) {
 		t.Fatalf("served proof does not verify under the pinned keys: %s", reason)
 	}
 }
+
+// One-hop relay intake: a witness that PINNED the two witnesses adopts a POSTed proof
+// (latching itself) — but ONLY if it verifies under OUR pinned keys. An unpinned
+// witness or a tampered proof is rejected and does NOT latch (self-authenticating).
+func TestDaemonAdoptsRelayedProof(t *testing.T) {
+	origin := "honest-ear.log/v1"
+	waKey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	wbKey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	waX, waY := verifier.PubXY(waKey)
+	wbX, wbY := verifier.PubXY(wbKey)
+
+	ckpt := func(name string, k *ecdsa.PrivateKey, root [32]byte) equivCkpt {
+		body := verifier.CheckpointBody(origin, 3, root)
+		sig, err := verifier.CosignCheckpoint(body, k)
+		if err != nil {
+			t.Fatal(err)
+		}
+		px, py := verifier.PubXY(k)
+		return equivCkpt{Witness: name, CheckpointBody: string(body), Cosignature: hex.EncodeToString(sig),
+			WitnessPubX: hex.EncodeToString(px), WitnessPubY: hex.EncodeToString(py)}
+	}
+	proof := equivProof{Schema: equivProofSchema,
+		A: ckpt("wa", waKey, logOf("a", "b", "c").Root()),
+		B: ckpt("wb", wbKey, logOf("a", "b", "X").Root())}
+
+	post := func(d *daemon, p equivProof) int {
+		body, _ := json.Marshal(p)
+		rr := httptest.NewRecorder()
+		d.handleEquivocationIntake(rr, httptest.NewRequest("POST", "/equivocation-intake", bytes.NewReader(body)))
+		return rr.Code
+	}
+	bothPinned := func() *daemon {
+		return &daemon{cfg: config{name: "wc", origin: origin},
+			peers: []peer{{name: "wa", pubX: waX, pubY: waY}, {name: "wb", pubX: wbX, pubY: wbY}},
+			st:    &witnessState{Origin: origin}, healthOK: true}
+	}
+
+	// Adopt a valid relayed proof: 200, latched, stored for re-serving.
+	d := bothPinned()
+	if code := post(d, proof); code != 200 {
+		t.Fatalf("valid relayed proof = %d, want 200", code)
+	}
+	if !d.equivocation || d.healthOK || d.proof == nil {
+		t.Errorf("adopting did not latch/store: equiv=%v healthOK=%v proof=%v", d.equivocation, d.healthOK, d.proof != nil)
+	}
+
+	// Reject a proof naming a witness we did NOT pin (only wb pinned) — no latch.
+	d2 := &daemon{cfg: config{name: "wc", origin: origin},
+		peers: []peer{{name: "wb", pubX: wbX, pubY: wbY}}, st: &witnessState{Origin: origin}, healthOK: true}
+	if code := post(d2, proof); code != 400 || d2.equivocation {
+		t.Errorf("unpinned-witness proof: code=%d equiv=%v, want 400 + no latch", code, d2.equivocation)
+	}
+
+	// Reject a tampered proof (B body corrupted -> cosig fails) — no latch.
+	bad := proof
+	bad.B.CheckpointBody = proof.B.CheckpointBody + "x"
+	d3 := bothPinned()
+	if code := post(d3, bad); code != 400 || d3.equivocation {
+		t.Errorf("tampered proof: code=%d equiv=%v, want 400 + no latch", code, d3.equivocation)
+	}
+}

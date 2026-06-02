@@ -1,10 +1,11 @@
 # Design: witness-to-witness gossip (frontier — design, not built)
 
-> Status: the **transferable fork proof** below is now **SHIPPED** (produce +
-> verify — see "The clean slice" section); the gossip **mesh / discovery** remain
-> design-only and are honestly frontier. This doc scopes the difference: the part
-> that was a clean buildable slice (built) vs the part that would be a stub if
-> rushed (not built). A planning artifact, not a claim that the mesh exists.
+> Status: the **transferable fork proof** below is **SHIPPED** — produce + verify +
+> **one-hop relay among pinned peers**. Only **epidemic re-flooding** and
+> **discovery / membership** remain design-only and are honestly frontier. This doc
+> scopes the difference: the parts that were clean buildable slices (built) vs the
+> parts that would be a stub if rushed (not built). A planning artifact, not a claim
+> that the full mesh exists.
 
 ## What ships today
 
@@ -67,11 +68,15 @@ saw conflicting roots* → the log equivocated. It covers the **same-size** spli
 inconsistent-extension case (different sizes) needs a failing consistency proof and
 is intentionally out of scope of this artifact.
 
-**Still to build (the next sub-slice, not a stub):** *relay* — on latching, a daemon
-POSTs the proof to its pinned peers' intake so a peer that verifies it latches too.
-Propagation **without** discovery, strictly within the already-pinned set. Deferred
-only because it adds an intake endpoint with its own auth surface; produce+verify is
-complete and valuable standalone (the detecting witness already holds both halves).
+- **Relay it (one-hop)** ✅ — on assembling a proof, a serve daemon best-effort POSTs
+  it to each pinned peer's `POST /equivocation-intake`; the receiver **re-verifies it
+  under ITS OWN pinned keys** (resolving each witness name from self + `--peer`,
+  never the self-reported keys) and only then latches + re-serves it. So a verified
+  fork propagates to a peer that pinned the two witnesses but had not yet cross-checked
+  the split. Self-authenticating: a bogus POST can't force a false latch
+  (`TestDaemonAdoptsRelayedProof`, `make witness-e2e`).
+
+Strictly within the already-pinned set, **one hop, no transitive re-flood**.
 
 ## What stays frontier (would be a stub if rushed)
 
@@ -87,8 +92,10 @@ complete and valuable standalone (the detecting witness already holds both halve
 
 ## Recommendation
 
-The **transferable fork proof** (produce + verify) is **done** — the local
-equivocation latch is now shareable, offline-verifiable evidence. The next sub-slice
-is *relay among pinned peers*; after that, defer epidemic gossip and discovery until
-there is a concrete multi-operator deployment to design them against. Until then they
-remain honestly listed as frontier in [`ROADMAP.md`](ROADMAP.md), not half-built.
+The **transferable fork proof** is **done** — produce, offline verify, and one-hop
+relay among pinned peers. What remains is genuinely frontier: **epidemic re-flooding**
+(transitive propagation under partial connectivity — fan-out, dedup, loop/eclipse
+resistance) and **discovery / membership** (which must preserve "every counted witness
+is an independently pinned key" — trust-on-first-use is rejected). Defer both until a
+concrete multi-operator deployment exists to design them against; until then they stay
+honestly listed as frontier in [`ROADMAP.md`](ROADMAP.md), not half-built.

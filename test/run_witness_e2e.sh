@@ -22,6 +22,7 @@ W1D_PID=""
 LOGDF_PID=""
 W2F_PID=""
 W1F_PID=""
+W3R_PID=""
 pass=0; fail=0
 ok()  { printf '  \033[1;32mok\033[0m:   %s\n' "$1"; pass=$((pass+1)); }
 bad() { printf '  \033[1;31mFAIL\033[0m: %s\n' "$1"; fail=$((fail+1)); }
@@ -32,6 +33,7 @@ cleanup() {
   [ -n "$LOGDF_PID" ] && kill "$LOGDF_PID" 2>/dev/null
   [ -n "$W2F_PID" ] && kill "$W2F_PID" 2>/dev/null
   [ -n "$W1F_PID" ] && kill "$W1F_PID" 2>/dev/null
+  [ -n "$W3R_PID" ] && kill "$W3R_PID" 2>/dev/null
   rm -rf "$W"
 }
 trap cleanup EXIT
@@ -204,6 +206,29 @@ if [ -n "$proof" ] && "$W/he-witness" verify-equivocation --file "$W/proof.json"
 else
   ok "the proof rejects a wrong pinned key"
 fi
+
+# One-hop relay: a 3rd witness that PINNED w1 + w2 adopts the proof via its intake
+# endpoint (here delivered by curl; a serve daemon auto-pushes the same POST to its
+# pinned peers on detection). Self-authenticating — it verifies under ITS pinned keys.
+PORT7=$((PORT + 6)); URL7="http://127.0.0.1:$PORT7"
+"$W/he-witness" serve --addr "127.0.0.1:$PORT7" --name w3 --key "$W3_PRIV" \
+  --log-url "$URL" --log-pub-x "$LOG_X" --log-pub-y "$LOG_Y" --origin "$ORIGIN" \
+  --state "$W/w3relay.json" --poll 30 \
+  --peer "w1,$URL5,$W1_X,$W1_Y" --peer "w2,$URL6,$W2_X,$W2_Y" >/dev/null 2>&1 &
+W3R_PID=$!
+for _ in $(seq 1 100); do curl -fsS "$URL7/health" >/dev/null 2>&1 && break; sleep 0.1; done
+if [ -n "$proof" ] && curl -fsS -X POST --data-binary @"$W/proof.json" "$URL7/equivocation-intake" 2>/dev/null | grep -q adopted; then
+  ok "a pinned peer ADOPTS the relayed proof via /equivocation-intake"
+else
+  bad "relay intake did not adopt a valid proof"
+fi
+# A daemon that did NOT pin the named witnesses (w2 has no --peer) must reject it.
+if [ -n "$proof" ] && curl -fsS -X POST --data-binary @"$W/proof.json" "$URL6/equivocation-intake" >/dev/null 2>&1; then
+  bad "intake adopted a proof naming a witness it never pinned"
+else
+  ok "intake rejects a proof naming an unpinned witness (self-authenticating)"
+fi
+kill "$W3R_PID" 2>/dev/null; W3R_PID=""
 kill "$W1F_PID" 2>/dev/null; W1F_PID=""
 kill "$W2F_PID" 2>/dev/null; W2F_PID=""
 kill "$LOGDF_PID" 2>/dev/null; LOGDF_PID=""

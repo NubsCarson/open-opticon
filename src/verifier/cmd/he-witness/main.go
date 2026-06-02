@@ -33,6 +33,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto/ecdsa"
 	"encoding/hex"
 	"encoding/json"
@@ -523,6 +524,7 @@ func runServe(args []string) {
 	http.HandleFunc("/cosignature", d.handleCosignature)
 	http.HandleFunc("/health", d.handleHealth)
 	http.HandleFunc("/equivocation-proof", d.handleEquivocationProof)
+	http.HandleFunc("/equivocation-intake", d.handleEquivocationIntake)
 	fmt.Fprintf(os.Stderr, "he-witness %q: polling %s every %s, cross-checking %d peer(s), serving %s\n",
 		cfg.name, cfg.logURL, interval, len(d.peers), addr)
 	cli.Die("server exited: %v", cli.Serve(addr))
@@ -633,6 +635,7 @@ func (d *daemon) checkPeers() {
 	}
 	// Assemble the transferable proof once, from our own cosigned view (A) + the
 	// divergent peer (B). Needs d.latest (our cosignature over OUR root at this size).
+	var fresh *equivProof
 	if proofPeer != nil && d.proof == nil && d.latest != nil {
 		c := d.latest.Cosignature
 		d.proof = &equivProof{
@@ -646,8 +649,19 @@ func (d *daemon) checkPeers() {
 			},
 			B: *proofPeer,
 		}
+		fresh = d.proof
 	}
 	d.mu.Unlock()
+
+	// One-hop relay (best-effort, OUTSIDE the lock): push the just-assembled proof to
+	// each pinned peer's intake so a peer that hasn't yet seen the split latches too.
+	// Strictly within the pinned set; no transitive re-flood (that is frontier).
+	if fresh != nil {
+		body, _ := json.Marshal(fresh)
+		for _, p := range d.peers {
+			pushProof(client, p.url+"/equivocation-intake", body)
+		}
+	}
 }
 
 func (d *daemon) once() {
@@ -707,6 +721,78 @@ func (d *daemon) handleEquivocationProof(w http.ResponseWriter, _ *http.Request)
 		return
 	}
 	cli.WriteJSON(w, 200, d.proof)
+}
+
+// pinnedKey resolves a witness NAME to the key we PINNED for it — self (cfg.key) or
+// a --peer. cfg.name/cfg.key and d.peers are set once at startup and never mutated,
+// so no lock is needed. ok=false means we never pinned that witness (can't trust it).
+func (d *daemon) pinnedKey(name string) (x, y []byte, ok bool) {
+	if name == d.cfg.name {
+		px, py := verifier.PubXY(d.cfg.key)
+		return px, py, true
+	}
+	for _, p := range d.peers {
+		if p.name == name {
+			return p.pubX, p.pubY, true
+		}
+	}
+	return nil, nil, false
+}
+
+// handleEquivocationIntake adopts an equivocation proof POSTed by a pinned peer
+// (one-hop relay). It is SELF-AUTHENTICATING: it verifies each half under OUR pinned
+// key for that witness name (never the self-reported key), so a bogus POST can't make
+// us falsely latch — only a proof that genuinely verifies under keys we already trust
+// is adopted. This propagates a detected fork to a witness that pinned the two
+// witnesses but had not yet cross-checked the divergence itself. It does NOT re-flood
+// onward (epidemic gossip is frontier, see docs/DESIGN_WITNESS_GOSSIP.md).
+func (d *daemon) handleEquivocationIntake(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		cli.WriteJSON(w, 405, map[string]string{"error": "POST a proof"})
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+	var p equivProof
+	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
+		cli.WriteJSON(w, 400, map[string]string{"error": "bad proof: " + err.Error()})
+		return
+	}
+	aX, aY, okA := d.pinnedKey(p.A.Witness)
+	bX, bY, okB := d.pinnedKey(p.B.Witness)
+	if !okA || !okB {
+		cli.WriteJSON(w, 400, map[string]string{"error": "proof names a witness we have not pinned; cannot verify"})
+		return
+	}
+	cosigA, err1 := hex.DecodeString(p.A.Cosignature)
+	cosigB, err2 := hex.DecodeString(p.B.Cosignature)
+	if err1 != nil || err2 != nil {
+		cli.WriteJSON(w, 400, map[string]string{"error": "bad cosignature hex"})
+		return
+	}
+	ok, reason := verifier.VerifyEquivocation(
+		[]byte(p.A.CheckpointBody), cosigA, aX, aY,
+		[]byte(p.B.CheckpointBody), cosigB, bX, bY)
+	if !ok {
+		cli.WriteJSON(w, 400, map[string]string{"error": "proof does not verify under our pinned keys: " + reason})
+		return
+	}
+	d.mu.Lock()
+	if d.proof == nil {
+		d.proof = &p
+	}
+	d.equivocation = true // a verified relayed proof latches us too
+	d.healthOK = false
+	d.mu.Unlock()
+	cli.WriteJSON(w, 200, map[string]string{"adopted": reason})
+}
+
+// pushProof POSTs a freshly-assembled proof to a pinned peer's intake (best-effort,
+// one-hop; errors ignored — relay is opportunistic, not a delivery guarantee).
+func pushProof(client *http.Client, url string, body []byte) {
+	resp, err := client.Post(url, "application/json", bytes.NewReader(body))
+	if err == nil {
+		_ = resp.Body.Close()
+	}
 }
 
 func (d *daemon) handleHealth(w http.ResponseWriter, _ *http.Request) {
