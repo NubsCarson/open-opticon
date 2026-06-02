@@ -135,3 +135,19 @@ jobs:
           go-version: '1.23'
       - name: Fuzz DecodePayload (30s)
         run: cd src/verifier && GOPROXY=off go test -run x -fuzz FuzzDecodePayload -fuzztime 30s .
+
+  # Heterogeneous-root demo: a P-256 key generated INSIDE a (software) TPM signs an
+  # artifact the unmodified verifier accepts — proves the verifier is root-agnostic.
+  # Separate from host-tests so the core suite needs no TPM tooling; the script also
+  # self-skips if the packages are unavailable.
+  tpm-hetero-root:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+      - name: Install swtpm + tpm2-tools + OpenSSL
+        run: sudo apt-get update && sudo apt-get install -y swtpm swtpm-tools tpm2-tools openssl python3
+      - name: TPM-rooted signature verifies (make tpm-e2e)
+        run: make tpm-e2e

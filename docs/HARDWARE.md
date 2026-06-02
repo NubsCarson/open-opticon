@@ -143,6 +143,17 @@ attestation** (StrongBox/Keystore) is a legitimate independent attestation root.
 In the 2-of-3 multi-prover plan, a phone could be one leg alongside the OP-TEE
 device and a TPM — different silicon, different failure mode.
 
+**TPM as a heterogeneous root — demonstrated (`make tpm-e2e`).** A P-256 key
+generated INSIDE a TPM (its private half never leaves the chip) signs an Honest
+Ear artifact that the *unmodified* stdlib verifier accepts after enrolling only
+its public X/Y — concrete evidence the verifier is root-agnostic and substantiates
+the "TPM on PC" claim with genuinely different silicon than the QEMU test key. It
+runs against a **software TPM (swtpm)** in a dedicated CI job; on a real TPM set
+`TPM2TOOLS_TCTI=device:/dev/tpmrm0`. HONEST SCOPE: the TPM did **not** observe the
+audio and there is no measured-boot/PCR binding of the detector to this key — it
+is a signing-root demonstration, **not** a second witness of the event, and is
+strictly weaker than the OP-TEE Tier-1 attest+bind+verify.
+
 ## Honest gaps that only close on real hardware
 
 | Gap | Status |

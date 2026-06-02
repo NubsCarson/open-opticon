@@ -233,6 +233,14 @@ but the right place for the verifier).
   require agreement. HONEST SCOPE: proves the key signed a fresh verdict per
   modality for one challenge; does NOT prove they observed the same physical
   scene, nor (Tier-1 shared key) a specific device.
+- **TPM as a heterogeneous root.** ✅ `make tpm-e2e` (dedicated CI job): a P-256
+  key generated INSIDE a software TPM (swtpm; private half never exported) signs
+  an artifact the *unmodified* verifier accepts after enrolling only its public
+  X/Y — concrete proof the verifier is root-agnostic, and substantiates the "TPM
+  on PC" claim with genuinely different silicon. HONEST SCOPE: the TPM did not
+  observe the audio (no PCR/measured-boot binding) — a signing-root demonstration,
+  NOT a second witness; weaker than the OP-TEE Tier-1 attest+bind. See
+  [`HARDWARE.md`](HARDWARE.md).
 
 ## Ops
 - **Reproducible builds:** host artifacts are byte-reproducible today
