@@ -145,6 +145,7 @@ contract HonestEarQuorum {
     /// reader; it stops once those eight fields are seen, so the trailing
     /// prev_digest(10, the stream hash-chain link) is simply not read on-chain.
     function _readDevice(bytes calldata p) internal pure returns (Device memory d) {
+        require(p.length > 0, "empty payload"); // else p[0] is an opaque OOB panic
         require(uint8(p[0]) == 0xab, "not an 11-map"); // CBOR map of 11 pairs
         uint256 i = 1;
         uint256 seen;
@@ -164,6 +165,7 @@ contract HonestEarQuorum {
             }
             prevKey = key;
             i += 1;
+            require(i < p.length, "value truncated"); // a key byte at the end -> opaque OOB; guards _val/_bstrSpan/_bstr32 (vstart == i)
             uint256 vstart = i;
             (uint64 v, uint256 ni) = _val(p, i);
             i = ni;

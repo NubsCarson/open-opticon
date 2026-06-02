@@ -125,6 +125,17 @@ contract HonestEarQuorumTest is Test {
         // (earlier + clearer than _bstr32's), so the truncation is still rejected.
         vm.expectRevert(bytes("cbor bstr data truncated"));
         h.readVersion(hex"ab0958201111111111111111111111111111111111");
+
+        // Boundary cases (not mid-value): an empty payload, and a key byte sitting at
+        // the very end with no value. Without the length guards these read p[0] / p[i]
+        // out of bounds and panic with an opaque OOB (Panic 0x32) instead of the clean
+        // reason the contract documents as its invariant.
+        vm.expectRevert(bytes("empty payload"));
+        h.readVersion(hex""); // no map header at all
+        vm.expectRevert(bytes("value truncated"));
+        h.readVersion(hex"ab00"); // key 0, then EOF (no value byte)
+        vm.expectRevert(bytes("value truncated"));
+        h.readVersion(hex"ab000101"); // version=1 read, then key 1 at EOF (no value)
     }
 
     // Deterministic-CBOR conformance: integer keys must be strictly ascending, so a
