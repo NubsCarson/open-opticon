@@ -150,4 +150,28 @@ contract HonestEarQuorumTest is Test {
         vm.expectRevert(bytes("cbor keys not ascending"));
         h.readVersion(hex"ab02000100"); // key 2 then key 1 (out of order)
     }
+
+    // The remaining terminal reverts of the CBOR reader: a wrong map header, a
+    // well-formed header with no required fields, and key 9 (input_hash) carrying a
+    // value that is not a 32-byte bstr. Each must revert with its documented clear
+    // reason, never an opaque OOB. (Exercised via the keyless harness.)
+    function test_ReaderRejectsMalformedHeaders() public {
+        QuorumHarness h = new QuorumHarness();
+        vm.expectRevert(bytes("not an 11-map"));
+        h.readVersion(hex"aa"); // 0xaa = a 10-map, not the 11-field device map
+        vm.expectRevert(bytes("payload fields missing"));
+        h.readVersion(hex"ab"); // valid 11-map header, but zero fields present
+        vm.expectRevert(bytes("input_hash not bstr32"));
+        h.readVersion(hex"ab090700"); // key 9 with a uint value, not a 0x58 0x20 bstr32
+        vm.expectRevert(bytes("bstr32 header truncated"));
+        h.readVersion(hex"ab0909"); // key 9, no room for the bstr32 header's 2nd byte
+    }
+
+    // The device-signature LENGTH guard fires before P256.verify, so a wrong-length
+    // signature is rejected without needing the device key. Uses the real committed
+    // zk fixture (seal+journal) so the prior groth16 + journal-length gates pass.
+    function test_RejectsWrongLengthDeviceSig() public {
+        vm.expectRevert(bytes("sig len"));
+        q.verdict(seal, journal, aPayload, hex"00"); // 1-byte signature, not 64
+    }
 }

@@ -45,4 +45,13 @@ contract CheckpointAnchorTest is Test {
         vm.expectRevert(bytes("size must strictly increase"));
         anchor.anchor(oldSize, oldRoot, proof, ""); // size 3 <= 5
     }
+
+    // A larger size with the GENUINE new root but an EMPTY consistency proof must be
+    // refused: without the proof the anchor can't verify the 3->5 extension, so it
+    // fails closed rather than recording an unproven advance.
+    function test_RejectsEmptyProof() public {
+        anchor.anchor(oldSize, oldRoot, new bytes32[](0), ""); // seed at size 3
+        vm.expectRevert(bytes("inconsistent: not an append-only extension"));
+        anchor.anchor(newSize, newRoot, new bytes32[](0), ""); // real newRoot, no proof
+    }
 }
