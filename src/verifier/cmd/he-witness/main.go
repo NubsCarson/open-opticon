@@ -79,7 +79,7 @@ type pollResult struct {
 	Cosignature verifier.Cosignature
 }
 
-const usage = "usage: he-witness <check|serve|compare|verify-equivocation> [flags]"
+const usage = "usage: he-witness <check|serve|compare|verify-equivocation|fetch-proof> [flags]"
 
 // Per-subcommand usage, printed on `he-witness <sub> --help`.
 const (
@@ -87,6 +87,7 @@ const (
 	usageServe       = "usage: he-witness serve --name N --key <privHex> --log-url URL --log-pub-x X --log-pub-y Y [--origin O] [--state f] [--addr :9101] [--poll secs] [--peer name,url,pubXhex,pubYhex ...]"
 	usageCompare     = "usage: he-witness compare --peer-url URL --peer-name N --peer-pub-x X --peer-pub-y Y [--origin O] [--state f]"
 	usageVerifyEquiv = "usage: he-witness verify-equivocation --file proof.json --a-pub-x X --a-pub-y Y --b-pub-x X --b-pub-y Y"
+	usageFetchProof  = "usage: he-witness fetch-proof --peer-url URL --a-pub-x X --a-pub-y Y --b-pub-x X --b-pub-y Y [--origin O]"
 )
 
 // helpRequested prints usage and returns true if args asks for help (-h/--help/help),
@@ -118,8 +119,10 @@ func main() {
 		runCompare(os.Args[2:])
 	case "verify-equivocation":
 		runVerifyEquivocation(os.Args[2:])
+	case "fetch-proof":
+		runFetchProof(os.Args[2:])
 	default:
-		cli.Die("unknown subcommand %q (want check|serve|compare|verify-equivocation)", os.Args[1])
+		cli.Die("unknown subcommand %q (want check|serve|compare|verify-equivocation|fetch-proof)", os.Args[1])
 	}
 }
 
@@ -484,6 +487,59 @@ func runVerifyEquivocation(args []string) {
 	}
 	fmt.Printf("%s  %s\n", cli.Pass(), reason)
 	fmt.Printf("  witness A: %s\n  witness B: %s\n", p.A.Witness, p.B.Witness)
+}
+
+// runFetchProof is a read-only relying-party tool: GET a peer witness's
+// /equivocation-proof and verify it OFFLINE under the two CALLER-PINNED witness keys
+// (not the self-reported ones). With --origin it also confirms the proof convicts the
+// log the caller cares about. Exit 0 + print the convicted log/size on a valid proof.
+func runFetchProof(args []string) {
+	if helpRequested(args, usageFetchProof) {
+		return
+	}
+	m := flagMap(args)
+	need := func(k string) string {
+		v, ok := m[k]
+		if !ok || v == "" {
+			cli.Die("--%s is required", k)
+		}
+		return v
+	}
+	hx := func(k string) []byte {
+		b, err := hex.DecodeString(need(k))
+		if err != nil {
+			cli.Die("bad --%s hex: %v", k, err)
+		}
+		return b
+	}
+	url := strings.TrimRight(need("peer-url"), "/")
+	aX, aY, bX, bY := hx("a-pub-x"), hx("a-pub-y"), hx("b-pub-x"), hx("b-pub-y")
+	var p equivProof
+	if err := getJSON(cli.HTTPClient(), url+"/equivocation-proof", &p); err != nil {
+		cli.Die("fetch proof from %s: %v", url, err)
+	}
+	cosigA, err := hex.DecodeString(p.A.Cosignature)
+	if err != nil {
+		cli.Die("bad checkpoint A cosignature hex: %v", err)
+	}
+	cosigB, err := hex.DecodeString(p.B.Cosignature)
+	if err != nil {
+		cli.Die("bad checkpoint B cosignature hex: %v", err)
+	}
+	ok, reason := verifier.VerifyEquivocation(
+		[]byte(p.A.CheckpointBody), cosigA, aX, aY,
+		[]byte(p.B.CheckpointBody), cosigB, bX, bY)
+	if !ok {
+		cli.Die("%s  no valid equivocation proof from %s: %s", cli.Fail(), url, reason)
+	}
+	// Optional: confirm the proof convicts the log the caller actually cares about.
+	if want := m["origin"]; want != "" {
+		if porg, _, _, perr := verifier.ParseCheckpoint([]byte(p.A.CheckpointBody)); perr != nil || porg != want {
+			cli.Die("%s  proof origin is not %q", cli.Fail(), want)
+		}
+	}
+	fmt.Printf("%s  %s\n", cli.Pass(), reason)
+	fmt.Printf("  served by : %s\n  witness A : %s\n  witness B : %s\n", url, p.A.Witness, p.B.Witness)
 }
 
 func runServe(args []string) {

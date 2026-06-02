@@ -2,8 +2,15 @@ package main
 
 import (
 	"bytes"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
 	"strings"
 	"testing"
+
+	verifier "honest-ear/verifier"
 )
 
 // A real genesis bundle (alarm clip, published test key) — same shape the host
@@ -51,6 +58,44 @@ func TestRenderDecodeError(t *testing.T) {
 	render(&out, nil, pred, nil, err)
 	if !strings.Contains(out.String(), "FAILED") {
 		t.Errorf("expected FAILED banner, got:\n%s", out.String())
+	}
+}
+
+// he-dump is THE "decode a bundle to readable fields" audit aid, advertised with no
+// COSE carve-out — but it used to read only Bundle.Payload, silently failing on a
+// COSE_Sign1 bundle. decodeBundle now extracts the inner payload from `cose` too.
+func TestDecodeBundleCOSE(t *testing.T) {
+	// The same payload as sampleBundle, delivered inside a COSE_Sign1 envelope.
+	const payloadHex = "ab00010148d15ea5edc0ffee00020203f40401050c0618c0070108582051e7de71c7f04ed661fcd4588a5399eafa51553fd6a0ac9b2d173eadab73f9d009582076fce813fbb5a4c577d78eb957bcb37962a16a89d3c1151b801acdb96b9b0e2a0a58200000000000000000000000000000000000000000000000000000000000000000"
+	payload, err := hex.DecodeString(payloadHex)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	msg, err := verifier.SignCOSESign1(payload, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	px, py := verifier.PubXY(key)
+	raw, err := json.Marshal(verifier.COSEBundle{
+		Schema: "honest-ear/cose-sign1/v1", COSE: hex.EncodeToString(msg),
+		PubX: hex.EncodeToString(px), PubY: hex.EncodeToString(py),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, got, pred, derr := decodeBundle(raw)
+	if derr != nil {
+		t.Fatalf("decodeBundle on a COSE bundle errored: %v", derr)
+	}
+	if !bytes.Equal(got, payload) {
+		t.Error("extracted COSE payload mismatch")
+	}
+	if pred == nil || pred.EventName() != "alarm_tone" {
+		t.Errorf("COSE bundle predicate not decoded (pred=%v)", pred)
+	}
+	if b.Schema != "honest-ear/cose-sign1/v1" {
+		t.Errorf("COSE schema not surfaced in metadata: %q", b.Schema)
 	}
 }
 

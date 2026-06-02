@@ -75,6 +75,21 @@ func decodeBundle(raw []byte) (*verifier.Bundle, []byte, *verifier.Predicate, er
 	if err := json.Unmarshal(raw, &b); err != nil {
 		cli.Die("parsing bundle JSON: %v", err)
 	}
+	// A COSE_Sign1 bundle carries the predicate inside the `cose` field (not `payload`).
+	// Decode the inner payload from the envelope (parsing only — he-dump never verifies;
+	// he-verify --cose does the actual verification).
+	if b.Payload == "" {
+		var cb verifier.COSEBundle
+		if json.Unmarshal(raw, &cb) == nil && cb.COSE != "" {
+			payload, err := verifier.COSEPayload(cb.COSE)
+			if err != nil {
+				return &b, nil, nil, fmt.Errorf("bad COSE bundle: %w", err)
+			}
+			b.Schema = cb.Schema // surface the COSE schema in the rendered metadata
+			pred, derr := verifier.DecodePayload(payload)
+			return &b, payload, pred, derr
+		}
+	}
 	payload, err := hex.DecodeString(b.Payload)
 	if err != nil {
 		return &b, nil, nil, fmt.Errorf("bad payload hex: %w", err)

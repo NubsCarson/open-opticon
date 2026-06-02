@@ -155,3 +155,27 @@ func TestBstrHeadNoTruncation(t *testing.T) {
 		}
 	}
 }
+
+// COSEPayload extracts the inner payload of a COSE_Sign1 (parsing only, no crypto) —
+// used by he-dump to decode a COSE bundle. Round-trips with SignCOSESign1; rejects
+// non-COSE bytes rather than panicking.
+func TestCOSEPayloadRoundTrip(t *testing.T) {
+	key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	msg, err := SignCOSESign1(golden, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := COSEPayload(hex.EncodeToString(msg))
+	if err != nil {
+		t.Fatalf("COSEPayload: %v", err)
+	}
+	if !bytes.Equal(got, golden) {
+		t.Errorf("COSEPayload round-trip mismatch: got %x, want %x", got, golden)
+	}
+	if _, err := COSEPayload("00"); err == nil {
+		t.Error("COSEPayload accepted non-COSE bytes")
+	}
+	if _, err := COSEPayload("zz"); err == nil {
+		t.Error("COSEPayload accepted invalid hex")
+	}
+}

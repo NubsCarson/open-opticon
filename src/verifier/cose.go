@@ -62,6 +62,22 @@ func VerifyCOSEBundle(b COSEBundle, opt Options) VerifyResult {
 	return gatesAfterSig(payload, opt)
 }
 
+// COSEPayload returns the inner payload bytes of a hex-encoded COSE_Sign1 message,
+// parsing ONLY — it performs NO cryptographic check. For audit/decode tools (he-dump)
+// that inspect what a device committed without verifying; use VerifyCOSEBundle to
+// actually verify a COSE bundle.
+func COSEPayload(coseHex string) ([]byte, error) {
+	raw, err := hex.DecodeString(coseHex)
+	if err != nil {
+		return nil, err
+	}
+	_, payload, _, _, err := parseCOSESign1(raw)
+	if err != nil {
+		return nil, err
+	}
+	return payload, nil
+}
+
 // coseSigStruct rebuilds the COSE_Sign1 Sig_structure that was signed:
 // [ "Signature1", protected, external_aad(empty), payload ]. The protected and
 // payload bstrs are spliced in verbatim (their exact on-wire bytes), so the
