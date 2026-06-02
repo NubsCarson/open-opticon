@@ -34,11 +34,15 @@ import (
 	"honest-ear/verifier/internal/cli"
 )
 
+const usage = "usage: he-receipt <emit|verify> [flags]"
+
 func main() {
 	if len(os.Args) < 2 {
-		cli.Die("usage: he-receipt <emit|verify> [flags]")
+		cli.Die(usage)
 	}
 	switch os.Args[1] {
+	case "-h", "--help", "help":
+		fmt.Println(usage)
 	case "emit":
 		runEmit(os.Args[2:])
 	case "verify":

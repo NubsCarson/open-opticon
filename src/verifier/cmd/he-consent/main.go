@@ -29,11 +29,15 @@ import (
 	"honest-ear/verifier/internal/cli"
 )
 
+const usage = "usage: he-consent <seal|reveal|disclose|verify-disclosure> [flags]"
+
 func main() {
 	if len(os.Args) < 2 {
-		cli.Die("usage: he-consent <seal|reveal|disclose|verify-disclosure> [flags]")
+		cli.Die(usage)
 	}
 	switch os.Args[1] {
+	case "-h", "--help", "help":
+		fmt.Println(usage)
 	case "seal":
 		runSeal(os.Args[2:])
 	case "reveal":
