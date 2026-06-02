@@ -1,5 +1,6 @@
 # Honest Ear — top-level developer convenience targets (host side).
 #
+#   make verify-all - run every laptop check (no r0vm) with PASS/SKIP — see docs/VERIFY.md
 #   make test       - all host tests (C units, Go units, e2e + vision + chain, tamper)
 #   make sim        - build the host simulators + CLIs
 #   make e2e        - audio end-to-end pipeline;  make vision-e2e - vision pipeline
@@ -23,7 +24,7 @@
 
 VERIFIER = src/verifier
 
-.PHONY: test units sim verifier-test e2e vision-e2e chain-e2e cose-e2e witness-e2e voxterm-e2e multimodal-e2e consent-e2e tpm-e2e voxterm-demo port-diff demo tamper-test gui sites wasm fuzz repro cross clean
+.PHONY: test units sim verifier-test e2e vision-e2e chain-e2e cose-e2e witness-e2e voxterm-e2e multimodal-e2e consent-e2e tpm-e2e voxterm-demo verify-all port-diff demo tamper-test gui sites wasm fuzz repro cross clean
 
 test: units verifier-test e2e vision-e2e chain-e2e cose-e2e witness-e2e voxterm-e2e multimodal-e2e consent-e2e tamper-test
 	@echo ""
@@ -82,6 +83,13 @@ multimodal-e2e:
 # disclosure (he-consent, wrapping threshold.go).
 consent-e2e:
 	bash test/run_consent_e2e.sh
+
+# Skeptic's entry point: run every laptop-runnable, no-r0vm check and print
+# PASS/SKIP per check (host suite, port-diff, repro, demo, wasm, TPM, on-chain).
+# Maps to the claim->command->tier table in docs/VERIFY.md. Not in `test` (heavy
+# meta-target; CI runs these individually).
+verify-all:
+	bash tools/verify_all.sh
 
 # Heterogeneous-root demo: a TPM-resident P-256 key (private half never leaves the
 # TPM) signs an artifact the unmodified verifier accepts — shows the verifier is

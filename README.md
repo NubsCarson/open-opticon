@@ -118,7 +118,7 @@ docs/            ARCHITECTURE, THREAT_MODEL, RUNBOOK, HARDWARE, ROADMAP,
 ## Docs
 
 [Use cases](docs/USE_CASES.md) · [Why a TEE? (vs ZK/FHE)](docs/WHY_TEE.md) ·
-[Architecture](docs/ARCHITECTURE.md) · [Threat model & scope](docs/THREAT_MODEL.md) ·
+[Architecture](docs/ARCHITECTURE.md) · [Threat model & scope](docs/THREAT_MODEL.md) · [Verify it yourself](docs/VERIFY.md) ·
 [Runbook](docs/RUNBOOK.md) · [Hardware & device](docs/HARDWARE.md) ·
 [Reproducible builds](docs/REPRODUCIBLE.md) · [Integrations (VoxTerm bridge)](docs/INTEGRATIONS.md) ·
 [Credible-sensors Track 3](docs/T3.md) · [Track 3 handoff](docs/HANDOFF.md) · [Pi + ST secure element (design)](docs/PI_ST_ELEMENT.md) ·

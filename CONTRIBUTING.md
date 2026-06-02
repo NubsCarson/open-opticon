@@ -8,7 +8,8 @@ is "clean, tested, honestly scoped."
 Everything host-runnable is gated by one command — no Docker, no Arm hardware:
 
 ```sh
-make test          # C + Go units, audio/vision/chain/COSE/witness e2e, tamper self-test
+make test          # C + Go units, audio/vision/chain/COSE/witness/voxterm/multimodal/consent e2e, tamper self-test
+make verify-all    # every laptop check at once, PASS/SKIP per check (see docs/VERIFY.md)
 ```
 
 Requirements: `gcc`, `go` (>=1.23), `openssl`, `python3`. CI runs exactly this

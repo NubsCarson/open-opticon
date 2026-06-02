@@ -484,6 +484,7 @@ pre .k{color:var(--dim2)}
 .mono{font-family:ui-monospace,Menlo,Consolas,monospace}</style></head><body>
 <div class="wrap">
 <h1>open-opticon · live verification</h1>
+<noscript><div id="sub">This live verifier needs JavaScript enabled to poll the result.</div></noscript>
 <div id="card"><div class="spin"></div></div>
 <div id="sub">waiting for the device to prove itself…</div>
 <div id="why"></div>
