@@ -82,8 +82,8 @@ the missing oracle layer for the physical world:
 - **"What counts as an event" is policy, and policy must be open** — that's why
   the detector config is hashed into the signed output (auditable, not a hidden
   knob).
-- **Integrity ≠ model accuracy.** Attestation proves the audited code ran, not
-  that the detector is never wrong.
+- **Integrity ≠ model accuracy.** Attestation proves the published, auditable code
+  ran, not that the detector is never wrong.
 - **Not confidentiality** against a physical / side-channel adversary — it's
   integrity + provenance. It *minimizes* what a broken enclave could leak.
 - **Sealed-clip-under-warrant** (video) is its own key-custody design, not built.
