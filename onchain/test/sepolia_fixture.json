@@ -1,0 +1,16 @@
+{
+  "_note": "Fixtures matching the IMMUTABLE live Sepolia deployment of HonestEarQuorum (0x05DAa5dc9C21f4d17e930a158A3fc636de5D1815). That contract was deployed from repo rev e47cf21 (audio+nonce-bound 2-of-2), BEFORE commit 25b89ff added the streaming-hash-chain prev_digest (CBOR key 10) that grew the device payload from a 10-map to an 11-map. The live bytecode is frozen at the 10-map schema, so the current onchain/test/quorum_fixture.json (11-map, used by the LOCAL forge test at the current schema) reverts 'not a 10-map' against it. These era-matched fixtures are what onchain/call-sepolia.sh feeds the live contract so the public-chain check actually verifies. Provenance: git show e47cf21:onchain/test/{proof,quorum}_fixture.json.",
+  "quorum": "0x05DAa5dc9C21f4d17e930a158A3fc636de5D1815",
+  "imageId": "0x7b3b6516a727718282f79230824c557da58b0edc9b4641f44d9aa240424996aa",
+  "seal": "0x73c457ba166aa9d260e526dbb46b895c9bd9649183782f4d14806ca16ed2ca4a312eb324056751ecf1f932d2669e3f3354ab9db5ddd46dd73b8c0df89cab92e2756999d22e023e9d437e19d28e25fbd8c5e57ab868a2b03c218b8074dde61f7c572bf59b2f0ba31bc13b8db63a7bd0520917d9ab60e1a6354002f26e21d0ad6116135b1d1c4f580d7cd22cb88cd09de4e24263a0a7f5cc7c7060e571942af867f9a649640e5a9667467e25b0f87a4337758552c360a1b3e60fb62ff066bc443cff3fbd722ff751f9695eecdd575cd062a0b655a3ed4269c87304f315e07c7d344e211e1122365c45bab2d80b5e9d44b2ff627781b1101c5a8a6dfdf9d4cedcf113a38af9",
+  "journal": "0x0200000001000000000000000c0000000c000000000c00008d70d691c822d55638b6e7fd54cd94170c87d19eb1f628b757506ede5688d29776fce813fbb5a4c577d78eb957bcb37962a16a89d3c1151b801acdb96b9b0e2a",
+  "payload": "0xaa00010144aabbccdd020203f40401050c0618c0070108582051e7de71c7f04ed661fcd4588a5399eafa51553fd6a0ac9b2d173eadab73f9d009582076fce813fbb5a4c577d78eb957bcb37962a16a89d3c1151b801acdb96b9b0e2a",
+  "sig": "0xc4b17ccfcf611ddbcc7f18689b3367799c026706c5083342269f8fa615db2063403d53d4e690bea0b3175a0f5d0c4338a6aa3931503229f7681c2df5123cd3e4",
+  "pubX": "0x30a0424cd21c2944838a2d75c92b37e76ea20d9f00893a3b4eee8a3c0aafec3e",
+  "pubY": "0xe04b65e92456d9888b52b379bdfbd51ee869ef1f0fc65b6659695b6cce081723",
+  "expect": {
+    "event": 2,
+    "event_name": "alarm_tone",
+    "presence": 1
+  }
+}

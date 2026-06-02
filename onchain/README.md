@@ -77,10 +77,19 @@ can call it permissionlessly (no trust in this repo or its operator):
 
 The two `CheckpointAnchor.anchor()` transactions (a consistency-proven 3→5
 extension) executed on-chain, and a live `eth_call` to `HonestEarQuorum.verdict`
-with the committed fixtures returns `(2, 1)` — alarm_tone, presence — i.e. the ZK
-proof and the device signature, bound to the SAME nonce and the SAME audio, agree
-on a public chain. (Deployed from a disposable testnet key; in production you'd
-reuse RISC Zero's canonical verifier router rather than deploy your own.)
+returns `(2, 1)` — alarm_tone, presence — i.e. the ZK proof and the device
+signature, bound to the SAME nonce and the SAME audio, agree on a public chain.
+(Deployed from a disposable testnet key; in production you'd reuse RISC Zero's
+canonical verifier router rather than deploy your own.)
+
+**Schema freeze (honest):** this contract is an *immutable* PoC snapshot deployed
+from rev `e47cf21`, before commit `25b89ff` added the streaming-hash-chain
+`prev_digest` (CBOR key 10) that grew the device payload from a 10-map to an
+11-map. So the live `eth_call` uses [`test/sepolia_fixture.json`](test/sepolia_fixture.json)
+— the era-matched 10-map fixtures the contract was deployed against. The *current*
+11-map fixtures (`test/quorum_fixture.json`) drive the **local** `forge test` at
+today's schema and would revert `not a 10-map` against the frozen deploy; that gap
+(deployed bytecode vs current source) closes only on a redeploy.
 
 Verify it yourself (view-only, no funds): `bash onchain/call-sepolia.sh`.
 
