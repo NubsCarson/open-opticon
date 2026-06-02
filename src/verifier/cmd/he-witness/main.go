@@ -776,6 +776,15 @@ func (d *daemon) handleEquivocationIntake(w http.ResponseWriter, r *http.Request
 		cli.WriteJSON(w, 400, map[string]string{"error": "proof does not verify under our pinned keys: " + reason})
 		return
 	}
+	// Scope the proof to the log WE watch (mirroring poll + checkPeers, which both
+	// bind origin to cfg.origin). VerifyEquivocation only proves the two halves share
+	// SOME common origin — without this, a genuine equivocation of a DIFFERENT log
+	// (feasible if pinned peers reuse keys across logs) would falsely latch us to 503.
+	// Both halves share an origin, so checking A alone is sufficient.
+	if porg, _, _, perr := verifier.ParseCheckpoint([]byte(p.A.CheckpointBody)); perr != nil || porg != d.cfg.origin {
+		cli.WriteJSON(w, 400, map[string]string{"error": "proof origin is not the log we watch"})
+		return
+	}
 	d.mu.Lock()
 	if d.proof == nil {
 		d.proof = &p

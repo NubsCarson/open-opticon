@@ -274,4 +274,25 @@ func TestDaemonAdoptsRelayedProof(t *testing.T) {
 	if code := post(d3, bad); code != 400 || d3.equivocation {
 		t.Errorf("tampered proof: code=%d equiv=%v, want 400 + no latch", code, d3.equivocation)
 	}
+
+	// Reject a GENUINE proof for a DIFFERENT log: it verifies under our pinned keys but
+	// its origin is not the log we watch, so adopting it would falsely latch us (origin
+	// scoping — the poll + cross-check paths bind origin; intake must too).
+	foreign := func(name string, k *ecdsa.PrivateKey, root [32]byte) equivCkpt {
+		body := verifier.CheckpointBody("evil.other/v1", 3, root)
+		sig, err := verifier.CosignCheckpoint(body, k)
+		if err != nil {
+			t.Fatal(err)
+		}
+		px, py := verifier.PubXY(k)
+		return equivCkpt{Witness: name, CheckpointBody: string(body), Cosignature: hex.EncodeToString(sig),
+			WitnessPubX: hex.EncodeToString(px), WitnessPubY: hex.EncodeToString(py)}
+	}
+	cross := equivProof{Schema: equivProofSchema,
+		A: foreign("wa", waKey, logOf("a", "b", "c").Root()),
+		B: foreign("wb", wbKey, logOf("a", "b", "X").Root())}
+	d4 := bothPinned() // watches "honest-ear.log/v1", not "evil.other/v1"
+	if code := post(d4, cross); code != 400 || d4.equivocation {
+		t.Errorf("cross-origin proof: code=%d equiv=%v, want 400 + no latch (origin scoping)", code, d4.equivocation)
+	}
 }
