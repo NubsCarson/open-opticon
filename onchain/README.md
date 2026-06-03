@@ -70,10 +70,10 @@ can call it permissionlessly (no trust in this repo or its operator):
 
 | Contract | Address |
 |---|---|
-| HonestEarQuorum (ZK + device P-256, audio+nonce-bound 2-of-2) | [`0x05DAa5dc9C21f4d17e930a158A3fc636de5D1815`](https://sepolia.etherscan.io/address/0x05DAa5dc9C21f4d17e930a158A3fc636de5D1815) |
-| HonestEarVerifier (zk receipt) | [`0xdf52D19185CE798b7842874649344Ae5de5e40e2`](https://sepolia.etherscan.io/address/0xdf52D19185CE798b7842874649344Ae5de5e40e2) |
-| CheckpointAnchor (log anchor) | [`0xB6F85c08e35799300Fa66dD421D10C3467b54634`](https://sepolia.etherscan.io/address/0xB6F85c08e35799300Fa66dD421D10C3467b54634) |
-| RiscZeroGroth16Verifier | [`0x819162b456674F8B98f560d1aB375aD4e5401507`](https://sepolia.etherscan.io/address/0x819162b456674F8B98f560d1aB375aD4e5401507) |
+| HonestEarQuorum (ZK + device P-256, audio+nonce-bound 2-of-2) | [`0x31695C1842d558b396Ec8fE07E595D24cBabe487`](https://sepolia.etherscan.io/address/0x31695C1842d558b396Ec8fE07E595D24cBabe487) |
+| HonestEarVerifier (zk receipt) | [`0xFEBFAdf633a79a3dB1e0e02D5a26656a3a05ED36`](https://sepolia.etherscan.io/address/0xFEBFAdf633a79a3dB1e0e02D5a26656a3a05ED36) |
+| CheckpointAnchor (log anchor) | [`0x742Ad4567bE9c1EFB1F89D3B42EED160C04b6b86`](https://sepolia.etherscan.io/address/0x742Ad4567bE9c1EFB1F89D3B42EED160C04b6b86) |
+| RiscZeroGroth16Verifier | [`0x956CD96147D71530892730cBBab1109E2EA7aCC9`](https://sepolia.etherscan.io/address/0x956CD96147D71530892730cBBab1109E2EA7aCC9) |
 
 The two `CheckpointAnchor.anchor()` transactions (a consistency-proven 3→5
 extension) executed on-chain, and a live `eth_call` to `HonestEarQuorum.verdict`
@@ -82,15 +82,12 @@ signature, bound to the SAME nonce and the SAME audio, agree on a public chain.
 (Deployed from a disposable testnet key; in production you'd reuse RISC Zero's
 canonical verifier router rather than deploy your own.)
 
-**Schema freeze (honest):** this contract is an *immutable* PoC snapshot deployed
-from rev `e47cf21`, before commit `25b89ff` added the streaming-hash-chain
-`prev_digest` (CBOR key 10) that grew the device payload from a 10-map to an
-11-map. So the live `eth_call` uses [`test/sepolia_fixture.json`](test/sepolia_fixture.json)
-— the era-matched 10-map fixtures the contract was deployed against. The *current*
-11-map fixtures (`test/quorum_fixture.json`) drive the **local** `forge test` at
-today's schema and would revert `not a 10-map` against the frozen deploy; that gap
-(deployed bytecode vs current source) closes only on a redeploy — the runbook for
-that (verified locally; needs only a funded key + your go) is [`REDEPLOY.md`](REDEPLOY.md).
+**Schema (honest):** this deployment tracks the **current** device-payload schema
+(the 11-map with the streaming-hash-chain `prev_digest` at CBOR key 10), so the live
+`eth_call` reads the *same* `test/proof_fixture.json` + `test/quorum_fixture.json`
+that drive the local `forge test` — no era-matched fixture needed. The contracts are
+still an *immutable* PoC snapshot, so a future device-schema change would need another
+redeploy; the runbook is [`REDEPLOY.md`](REDEPLOY.md).
 
 Verify it yourself (view-only, no funds): `bash onchain/call-sepolia.sh`.
 

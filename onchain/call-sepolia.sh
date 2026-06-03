@@ -5,26 +5,25 @@
 # and decodes (event, presence). View-only: no key, no funds, no state change.
 # Needs `cast` (Foundry) + network.
 #
-# IMPORTANT — schema freeze: the live contract is an IMMUTABLE PoC snapshot deployed
-# from repo rev e47cf21, BEFORE commit 25b89ff added the streaming-hash-chain
-# prev_digest (CBOR key 10) that grew the device payload from a 10-map to an 11-map.
-# So this live check uses onchain/test/sepolia_fixture.json (the era-matched 10-map
-# fixtures the contract was deployed against); the CURRENT 11-map fixtures
-# (onchain/test/quorum_fixture.json) drive the LOCAL forge test at today's schema and
-# would revert "not a 10-map" against the frozen deploy. See onchain/README.md.
+# The live contract speaks the CURRENT device-payload schema (11-map, with the
+# streaming-hash-chain prev_digest at CBOR key 10), so this check feeds it the same
+# fixtures the local `forge test` uses — no era-matched copy needed: the zk receipt
+# (seal+journal) comes from test/proof_fixture.json and the device bundle
+# (payload+sig) from test/quorum_fixture.json's alarm clip.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)/onchain"
-FIX="$ROOT/test/sepolia_fixture.json"
+PROOF="$ROOT/test/proof_fixture.json"
+QF="$ROOT/test/quorum_fixture.json"
 RPC="${RPC:-https://sepolia.drpc.org}"
-QUORUM="${QUORUM:-0x05DAa5dc9C21f4d17e930a158A3fc636de5D1815}" # audio+nonce-bound 2-of-2
+QUORUM="${QUORUM:-0x31695C1842d558b396Ec8fE07E595D24cBabe487}" # audio+nonce-bound 2-of-2
 
 command -v cast >/dev/null || { echo "need Foundry's 'cast' (https://getfoundry.sh)"; exit 1; }
 
-get() { python3 -c "import json;print(json.load(open('$FIX'))['$1'])"; }
-expect() { python3 -c "import json;print(json.load(open('$FIX'))['expect']['$1'])"; }
-seal=$(get seal); journal=$(get journal); payload=$(get payload); sig=$(get sig)
-want_ev=$(expect event); want_pres=$(expect presence)
+jget() { python3 -c "import json,sys;print(json.load(open(sys.argv[1]))$1)" "$2"; }
+seal=$(jget "['seal']" "$PROOF");   journal=$(jget "['journal']" "$PROOF")
+payload=$(jget "['alarm']['payload']" "$QF"); sig=$(jget "['alarm']['sig']" "$QF")
+want_ev=2; want_pres=1   # the alarm clip's agreed verdict: event=alarm_tone(2), presence=1
 
 echo "calling HonestEarQuorum.verdict() at $QUORUM on $RPC ..."
 out=$(cast call "$QUORUM" "verdict(bytes,bytes,bytes,bytes)(uint32,uint32)" \

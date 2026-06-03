@@ -69,7 +69,7 @@ if command -v forge >/dev/null 2>&1 && [ -d "$ROOT/onchain/lib/forge-std" ]; the
     fi
 else
     echo "   (forge/deps absent — skipping local run; the same contract is live on"
-    echo "    Sepolia: sepolia.etherscan.io/address/0x05DAa5dc9C21f4d17e930a158A3fc636de5D1815)"
+    echo "    Sepolia: sepolia.etherscan.io/address/0x31695C1842d558b396Ec8fE07E595D24cBabe487)"
 fi
 echo
 

@@ -1,17 +1,22 @@
 # Redeploying to Sepolia — closing the schema-freeze gap
 
-The live Sepolia contracts are an **immutable PoC snapshot** deployed from rev
-`e47cf21`, before commit `25b89ff` grew the device payload from a 10-map to an
-11-map (the `prev_digest` hash-chain link, CBOR key 10). So the frozen
-`HonestEarQuorum` can only decode the old 10-map fixture
-([`test/sepolia_fixture.json`](test/sepolia_fixture.json)), and the *current* source
-+ fixtures are an 11-map. The only way to make the **live** deployment track today's
-source is to **redeploy** — this is the runbook for that.
+> **✅ Executed 2026-06-03.** The stack was redeployed at the **current 11-map
+> schema** (path A below), so the live deployment now tracks `src/`. The live
+> `eth_call` reads the same `test/proof_fixture.json` + `test/quorum_fixture.json`
+> as the local `forge test`; the era-matched `test/sepolia_fixture.json` was removed
+> (path-B step). Current live addresses are in [`README.md`](README.md) — HonestEarQuorum
+> `0x31695C18…`, HonestEarVerifier `0xFEBFAdf6…`, CheckpointAnchor `0x742Ad456…`,
+> RiscZeroGroth16Verifier `0x956CD961…`. This runbook is retained for any **future**
+> redeploy (e.g. another device-schema change).
 
-This is the one genuinely-open gap that's purely gated on a funded key + an explicit
-decision. Everything below the broadcast step has been verified locally; the deploy
-itself needs *your* key and *your* go — it is a real, irreversible public-chain
-action, so it is not automated here.
+Background: the *previous* live contracts were an immutable PoC snapshot deployed
+from rev `e47cf21`, before commit `25b89ff` grew the device payload from a 10-map to
+an 11-map (the `prev_digest` hash-chain link, CBOR key 10). The frozen `HonestEarQuorum`
+could only decode the old 10-map fixture, while the current source + fixtures are an
+11-map — so the live deployment had to be **redeployed** to track today's source.
+
+Everything below the broadcast step is verified locally first; the deploy itself is a
+real, irreversible public-chain action, so it is run deliberately with a funded key.
 
 ## What's already verified (no key, no funds)
 
