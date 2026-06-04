@@ -190,6 +190,32 @@ func leftPad(b []byte, n int) []byte {
 	return out
 }
 
+// Gate 1b: a malleated high-s device signature (still a valid ECDSA sig over
+// the same payload) must be rejected, exactly as the on-chain OZ P256 verifier
+// rejects it — so the host/WASM verifier and the chain never disagree.
+func TestVerifyRejectsHighS(t *testing.T) {
+	b, px, py := signGolden(t, golden) // canonical low-s
+	sig, err := hex.DecodeString(b.Sig)
+	if err != nil || len(sig) != 64 {
+		t.Fatalf("bad sig fixture: %v", err)
+	}
+	if !lowS(sig) {
+		t.Fatal("signGolden should emit canonical low-s")
+	}
+	s := new(big.Int).SetBytes(sig[32:])
+	new(big.Int).Sub(elliptic.P256().Params().N, s).FillBytes(sig[32:]) // s -> N-s (high-s)
+	b.Sig = hex.EncodeToString(sig)
+	res := VerifyBundle(b, Options{
+		ExpectedNonce: mustHex("aabb"),
+		PinPubX:       px,
+		PinPubY:       py,
+		LastCounter:   6,
+	})
+	if res.OK {
+		t.Fatal("VerifyBundle accepted a high-s (malleated) device signature; want rejection")
+	}
+}
+
 func TestNormalizeLowS(t *testing.T) {
 	N := elliptic.P256().Params().N
 	half := new(big.Int).Rsh(N, 1)

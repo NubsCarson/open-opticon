@@ -171,6 +171,14 @@ func VerifyBundle(b Bundle, opt Options) VerifyResult {
 	if err := verifySig(payload, sig, px, py); err != nil {
 		return VerifyResult{Reason: "signature: " + err.Error()}
 	}
+	// Gate 1b: the DEVICE signature must be canonical low-s, matching the
+	// on-chain OpenZeppelin P256 verifier (which rejects high-s). This makes the
+	// host/WASM verifier's acceptance set identical to the chain's even for a
+	// MALLEATED sig. (Scoped to the device bundle only — witness/COSE/endorsement
+	// cosignatures verified via verifySig are off-chain and not low-s-gated.)
+	if !lowS(sig) {
+		return VerifyResult{Reason: "signature: non-canonical high-s (must be low-s to match the on-chain verifier)"}
+	}
 
 	// Gates 2-4 (+ version/decode) are identical for the raw and COSE envelopes.
 	return gatesAfterSig(payload, opt)
@@ -254,20 +262,25 @@ func verifySig(payload, sig, px, py []byte) error {
 	return nil
 }
 
+// lowS reports whether a 64-byte r||s P-256 signature is canonical low-s
+// (s <= N/2). Used to gate the DEVICE signature so the host/WASM verifier's
+// acceptance set matches the on-chain OpenZeppelin P256 verifier exactly,
+// including for a malleated high-s signature. Honest signers emit low-s (see
+// NormalizeLowS, sim/he_bundle.c sign_rs); off-chain cosignatures verified via
+// verifySig are intentionally not gated.
+func lowS(sig []byte) bool {
+	if len(sig) != 64 {
+		return false
+	}
+	s := new(big.Int).SetBytes(sig[32:])
+	halfN := new(big.Int).Rsh(elliptic.P256().Params().N, 1)
+	return s.Cmp(halfN) <= 0
+}
+
 // NormalizeLowS returns the canonical low-s form of an ECDSA P-256 s value
 // (s' = N - s when s > N/2). Signers should emit canonical low-s so a bundle is
 // accepted identically by this verifier and the on-chain OpenZeppelin P256
 // verifier; ecdsa.Sign returns a random s (high ~half the time).
-//
-// This verifier intentionally does NOT reject high-s (the on-chain P256.verify
-// does). Freshness and anti-replay bind to the nonce and counter INSIDE the
-// SHA-256(payload) that is signed, and no path keys on signature bytes
-// (he-challenge dedups on session id, the transparency log dedups cosigners by
-// name, on-chain anti-replay keys on the counter). So a malleated high-s sig
-// re-encodes the identical claim and is caught by the nonce/counter gates — it
-// cannot mint a new verdict. Matching the chain on malleated sigs too would
-// require regenerating the committed verify.wasm with the pinned Go toolchain:
-// a deferred, defense-in-depth-only follow-up, not a correctness gap.
 func NormalizeLowS(s *big.Int) *big.Int {
 	halfN := new(big.Int).Rsh(elliptic.P256().Params().N, 1)
 	if s.Cmp(halfN) > 0 {
