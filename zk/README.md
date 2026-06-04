@@ -42,9 +42,14 @@ cargo run --release -- ../path/to.pcm [nonce_hex]   # prove + verify in zero kno
 ```
 
 Expected (a real STARK proof captured on a 12-frame alarm clip, ~6 min on a
-laptop CPU — the `image_id` is the published guest measurement anyone can
-recompute from source; `nonce_sha256`/`audio_sha256` bind the proof to the
-verifier challenge and to the exact input):
+laptop CPU — the `image_id` is this committed fixture's guest measurement.
+risc0 image ids are **toolchain- and guest-revision-locked**: recomputing the
+same value needs the same risc0 guest toolchain (rzup) and guest source that
+built this snapshot — a newer rzup or a guest change yields a different id, so
+this is not a from-any-checkout reproducibility claim. Regenerate the fixture
+(image_id + journal + seal together) via `test/gen_proof_fixture.sh`, which runs
+the Groth16 prover (needs Docker/r0vm). `nonce_sha256`/`audio_sha256` bind the
+proof to the verifier challenge and to the exact input):
 
 ```
 ZK-VERIFIED  detector(audio) proven in zero knowledge
