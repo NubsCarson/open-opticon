@@ -8,8 +8,8 @@
 > *(internal codename: **Honest Ear**)*
 
 **A microphone that cryptographically proves it's only listening for the one
-thing it claims to — not recording you — and goes cryptographically dead the
-instant someone opens it.**
+thing it claims to — not recording you — and is designed to go cryptographically
+dead when its enclosure is opened.**
 
 > **Site:** <https://nubscarson.github.io/open-opticon/> (or open
 > [`docs/index.html`](docs/index.html) locally / `python3 -m http.server -d docs 8099`). &nbsp;·&nbsp;
