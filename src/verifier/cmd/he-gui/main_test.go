@@ -197,31 +197,40 @@ func mintReqKeepSig(t *testing.T, tamperedPayload []byte, nonceHex string) []byt
 // (the test/gen_quorum_fixture.sh Python re-normalization would otherwise mask
 // it in the committed on-chain fixture).
 func TestSimEmitsLowS(t *testing.T) {
-	sim := filepath.Join("..", "..", "..", "..", "sim", "bin", "he-attest-sim")
-	if _, err := os.Stat(sim); err != nil {
-		t.Skip("he-attest-sim not built (run `make sim`); skipping the C-signer low-s check")
-	}
-	pcm := filepath.Join("..", "..", "..", "..", "test", "fixtures", "alarm.pcm")
-	if _, err := os.Stat(pcm); err != nil {
-		t.Skipf("alarm fixture missing: %v", err)
-	}
 	half := new(big.Int).Rsh(elliptic.P256().Params().N, 1)
-	for i := 0; i < 16; i++ {
-		out, err := exec.Command(sim, pcm, "deadbeef", fmt.Sprint(i+1)).Output()
-		if err != nil {
-			t.Fatalf("sim run %d: %v", i, err)
-		}
-		var b verifier.Bundle
-		if err := json.Unmarshal(out, &b); err != nil {
-			t.Fatalf("sim run %d: bad bundle json: %v", i, err)
-		}
-		sig, err := hex.DecodeString(b.Sig)
-		if err != nil || len(sig) != 64 {
-			t.Fatalf("sim run %d: bad sig %q", i, b.Sig)
-		}
-		if new(big.Int).SetBytes(sig[32:]).Cmp(half) > 0 {
-			t.Fatalf("sim emitted HIGH-s on run %d — regression in sim/he_bundle.c low-s normalization", i)
-		}
+	root := filepath.Join("..", "..", "..", "..")
+	// Both C device signers ride the SAME sim/he_bundle.c sign_rs path; cover the
+	// audio AND the vision binary (two callers of one signer) so a regression in
+	// the low-s normalization is caught regardless of which modality exercises it.
+	for _, s := range []struct{ name, bin, input string }{
+		{"audio", filepath.Join(root, "sim", "bin", "he-attest-sim"), filepath.Join(root, "test", "fixtures", "alarm.pcm")},
+		{"vision", filepath.Join(root, "sim", "bin", "he-attest-vision"), filepath.Join(root, "test", "fixtures", "occupied.pgm")},
+	} {
+		t.Run(s.name, func(t *testing.T) {
+			if _, err := os.Stat(s.bin); err != nil {
+				t.Skipf("%s not built (run `make sim`); skipping the C-signer low-s check", filepath.Base(s.bin))
+			}
+			if _, err := os.Stat(s.input); err != nil {
+				t.Skipf("%s fixture missing: %v", s.name, err)
+			}
+			for i := 0; i < 16; i++ {
+				out, err := exec.Command(s.bin, s.input, "deadbeef", fmt.Sprint(i+1)).Output()
+				if err != nil {
+					t.Fatalf("%s run %d: %v", s.name, i, err)
+				}
+				var b verifier.Bundle
+				if err := json.Unmarshal(out, &b); err != nil {
+					t.Fatalf("%s run %d: bad bundle json: %v", s.name, i, err)
+				}
+				sig, err := hex.DecodeString(b.Sig)
+				if err != nil || len(sig) != 64 {
+					t.Fatalf("%s run %d: bad sig %q", s.name, i, b.Sig)
+				}
+				if new(big.Int).SetBytes(sig[32:]).Cmp(half) > 0 {
+					t.Fatalf("%s emitted HIGH-s on run %d — regression in sim/he_bundle.c low-s normalization", s.name, i)
+				}
+			}
+		})
 	}
 }
 

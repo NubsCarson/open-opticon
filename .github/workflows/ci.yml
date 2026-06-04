@@ -21,7 +21,11 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v6
         with:
-          go-version: '1.23'
+          # Pinned to the exact patch the committed verify.wasm was built with: the
+          # reproducibility step below rebuilds the wasm and asserts it is byte-identical
+          # to the published digest, and wasm output can differ across Go patch releases.
+          # Bump this together with a wasm rebuild + a new docs/verify.wasm.sha256.
+          go-version: '1.23.4'
           cache: false  # stdlib-only module (no go.sum) — nothing to cache; silences a spurious cache-restore warning
       - name: Install C toolchain + OpenSSL
         run: sudo apt-get update && sudo apt-get install -y build-essential libssl-dev openssl python3
@@ -40,10 +44,17 @@ jobs:
       - name: Build + smoke-test the in-browser WASM verifier
         # Builds verify.wasm and drives it through the Go wasm runtime under node
         # (ubuntu-latest ships node), asserting the browser path matches the CLI's
-        # verdicts (incl. fail-closed cases). Guards the in-browser verifier.
+        # verdicts (incl. fail-closed cases incl. high-s rejection). Guards the
+        # in-browser verifier.
         run: |
           bash tools/build_wasm.sh
           node test/wasm_verify_test.js
+      - name: Rebuilt WASM is byte-identical to the published digest (reproducible)
+        # The fresh build above overwrote docs/verify.wasm + wasm_exec.js but NOT the
+        # committed docs/verify.wasm.sha256, so `-c` now asserts the rebuild reproduces
+        # the published bytes exactly (with the pinned go1.23.4). Catches a source change
+        # that alters the wasm without a matching digest+commit, and any toolchain drift.
+        run: cd docs && sha256sum -c verify.wasm.sha256
       - name: Cross-root demo (TEE + ZK + audio binding agree)
         # `make demo` exits non-zero if the three roots disagree or aren't bound to
         # the same audio — guards the showcase against payload-format drift (the
@@ -65,7 +76,11 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v6
         with:
-          go-version: '1.23'
+          # Pinned to match the committed verify.wasm (repro.sh rebuilds it): wasm output
+          # varies across Go patch releases, so an unpinned patch would publish a manifest
+          # whose verify.wasm hash disagrees with docs/verify.wasm.sha256. Keep in lockstep
+          # with the host-tests pin and any wasm rebuild.
+          go-version: '1.23.4'
           cache: false  # stdlib-only module (no go.sum) — nothing to cache; silences a spurious cache-restore warning
       - name: Install C toolchain + OpenSSL
         run: sudo apt-get update && sudo apt-get install -y build-essential libssl-dev openssl python3

@@ -39,6 +39,42 @@
  */
 
 /*
+ * Normalize an ECDSA P-256 signature to canonical LOW-S in place: the signature
+ * is 64 bytes r||s big-endian, so this operates on sig[32..63] (s). If s > N/2 it
+ * is replaced with N - s. This is MANDATORY, not cosmetic: the host/WASM verifier
+ * (VerifyBundle / VerifyCOSEBundle Gate 1b) and the on-chain OpenZeppelin P256
+ * verifier BOTH reject high-s, while sign_ecdsa_sha256() returns a uniformly
+ * random s that is high ~half the time. Without this, ~50% of honest device
+ * bundles would be rejected by the very verifier they bind to. Done with plain
+ * big-endian byte arithmetic so it needs no bignum/crypto API in the TA.
+ */
+static void he_normalize_low_s(uint8_t *sig)
+{
+    /* secp256r1 group order N and floor(N/2), big-endian 32-byte constants. */
+    static const uint8_t N[32] = {
+        0xFF,0xFF,0xFF,0xFF,0x00,0x00,0x00,0x00,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,
+        0xBC,0xE6,0xFA,0xAD,0xA7,0x17,0x9E,0x84,0xF3,0xB9,0xCA,0xC2,0xFC,0x63,0x25,0x51
+    };
+    static const uint8_t N_HALF[32] = {
+        0x7F,0xFF,0xFF,0xFF,0x80,0x00,0x00,0x00,0x7F,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,
+        0xDE,0x73,0x7D,0x56,0xD3,0x8B,0xCF,0x42,0x79,0xDC,0xE5,0x61,0x7E,0x31,0x92,0xA8
+    };
+    uint8_t *s = sig + 32;
+    int gt = 0; /* s > N/2 ? compare big-endian, MSB first */
+    for (size_t i = 0; i < 32; i++) {
+        if (s[i] != N_HALF[i]) { gt = s[i] > N_HALF[i]; break; }
+    }
+    if (!gt)
+        return; /* already canonical low-s */
+    int borrow = 0; /* s = N - s, big-endian subtraction */
+    for (int i = 31; i >= 0; i--) {
+        int d = (int)N[i] - (int)s[i] - borrow;
+        if (d < 0) { d += 256; borrow = 1; } else { borrow = 0; }
+        s[i] = (uint8_t)d;
+    }
+}
+
+/*
  * PTA_REMOTE_ATTESTATION_SIGN_DATA
  *   [in]  memref[0]  message to sign (canonical bound-output payload)
  *   [out] memref[1]  signature out; INOUT or OUTPUT; >= 64 bytes; r||s on return
@@ -101,6 +137,11 @@ static TEE_Result cmd_sign_data(uint32_t param_types,
                             black_key_len);
     if (res != TEE_SUCCESS)
         return res;
+    if (sig_len != 64) /* P-256 r||s is exactly 64 bytes; refuse anything else */
+        return TEE_ERROR_GENERIC;
+
+    /* Canonicalize to low-s so the device matches the verifier/chain it binds to. */
+    he_normalize_low_s(sig);
 
     params[1].memref.size = sig_len; /* 64 for P-256 r||s */
     return TEE_SUCCESS;

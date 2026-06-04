@@ -57,6 +57,13 @@ func VerifyCOSEBundle(b COSEBundle, opt Options) VerifyResult {
 	if err := verifySig(coseSigStruct(protBstr, payloadBstr), sig, px, py); err != nil {
 		return VerifyResult{Reason: "signature: " + err.Error()}
 	}
+	// Gate 1b: low-s — COSE_Sign1 wraps the SAME device bound output as the raw
+	// bundle, so it must enforce the same canonical-low-s rule as VerifyBundle
+	// and the on-chain OZ P256 verifier; a malleated high-s verdict must not pass
+	// as COSE while being rejected as raw.
+	if !lowS(sig) {
+		return VerifyResult{Reason: "signature: non-canonical high-s (must be low-s to match the on-chain verifier)"}
+	}
 
 	// Gates 2-4 (+ version/decode) — identical to the raw envelope.
 	return gatesAfterSig(payload, opt)

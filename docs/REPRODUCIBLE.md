@@ -105,17 +105,22 @@ re-derivable:
 > host build already proves. This is the highest-leverage remaining hardening
 > item and is tracked in [`ROADMAP.md`](ROADMAP.md).
 
-## The zk guest image_id — recomputable from source
+## The zk guest image_id — a toolchain- and revision-locked measurement
 
 The RISC Zero guest's `image_id` is a hash of the *published detector* compiled
-for the zkVM — the same recompute-from-source property, in a second trust domain.
-Anyone with the pinned toolchain and the committed `Cargo.lock` rebuilds the
-guest and gets the same `image_id` (e.g. `0x7b3b6516…`), and the *same* receipt
-is checkable on an EVM against that id. So the detector's measurement is
-independently re-derivable two ways (TEE firmware hash + zk guest image id). This
-is re-derivable from source with a pinned toolchain — not a byte-identical
-two-tree rebuild like `make repro`. See [`zk/README.md`](../zk/README.md) and
-[`onchain/README.md`](../onchain/README.md).
+for the zkVM — a measurement in a second trust domain. It is **not** a
+build-from-any-checkout reproducible value like `make repro`: risc0 image ids are
+**toolchain- and guest-revision-locked**. Recomputing the committed id (e.g.
+`0x7b3b6516…`) needs the *same* risc0 guest toolchain (rzup) **and** the guest
+source that built this snapshot — the committed `Cargo.lock` pins the risc0
+crates, but a newer rzup or any change to the guest yields a *different* id. The
+value here is binding, not re-derivability: the committed `image_id`, journal,
+and Groth16 seal are one internally-consistent fixture (the on-chain Foundry test
+verifies the receipt against that id), and regenerating the trio together needs
+`test/gen_proof_fixture.sh` (Docker + r0vm). So the firmware path gives the
+reproducible measurement (`make repro`); the zk path gives an independently
+*verifiable* receipt pinned to its own measurement. See
+[`zk/README.md`](../zk/README.md) and [`onchain/README.md`](../onchain/README.md).
 
 ## Why not just sign the binary?
 

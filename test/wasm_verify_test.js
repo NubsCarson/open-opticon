@@ -120,6 +120,17 @@ function check(name, cond) {
   r = H(JSON.stringify(t), { nonce: NONCE, lastCounter: 0 });
   check("tampered payload fails", r.ok === false);
 
+  // Low-s gate (Gate 1b): malleate s -> N-s. The result is STILL a valid ECDSA
+  // signature over the same payload, but high-s — which the on-chain OZ P256
+  // verifier rejects. The wasm verifier must reject it too (not fail open), so
+  // its acceptance set matches the chain's even under malleability.
+  const SECP256R1_N = 0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551n;
+  const hs = JSON.parse(JSON.stringify(BUNDLE));
+  const sLow = BigInt("0x" + BUNDLE.sig.slice(64));
+  hs.sig = BUNDLE.sig.slice(0, 64) + (SECP256R1_N - sLow).toString(16).padStart(64, "0");
+  r = H(JSON.stringify(hs), { nonce: NONCE, lastCounter: 0 });
+  check("high-s (malleated) bundle rejected", r.ok === false);
+
   // Chain: genesis expects all-zero prev_digest -> PASS; non-zero -> FAIL (gap).
   r = H(JSON.stringify(BUNDLE), { nonce: NONCE, lastCounter: 0, expectPrev: ZERO64 });
   check("genesis chain verifies", r.ok === true);

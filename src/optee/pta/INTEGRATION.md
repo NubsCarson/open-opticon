@@ -19,11 +19,23 @@ After the existing command defines (`...GET_CBOR_EVIDENCE`, `...GENERATE_KEYPAIR
 
 ## 2. Add the function — `remote_attestation/remote_attestation.c`
 
-Paste the `cmd_sign_data()` body from `pta_sign_data.c` immediately **before**
-`invoke_command()`. Note it is intentionally **outside** the `#ifdef
-CFG_NXP_CAAM` block (it works on QEMU using the embedded key). It uses
-`sign_ecdsa_sha256()` (already declared via the existing `#include "sign.h"`)
-and the already-defined `MIN_KEY_PARAM_SIZE` / `PUBKEY_HEADER_SIZE`.
+Paste **both** the `he_normalize_low_s()` helper **and** the `cmd_sign_data()`
+body from `pta_sign_data.c` immediately **before** `invoke_command()` (the helper
+first — `cmd_sign_data` calls it). Note `cmd_sign_data` is intentionally
+**outside** the `#ifdef CFG_NXP_CAAM` block (it works on QEMU using the embedded
+key). It uses `sign_ecdsa_sha256()` (already declared via the existing `#include
+"sign.h"`) and the already-defined `MIN_KEY_PARAM_SIZE` / `PUBKEY_HEADER_SIZE`.
+`he_normalize_low_s()` needs no extra includes (plain byte arithmetic).
+
+### Low-s is mandatory, not cosmetic
+
+`sign_ecdsa_sha256()` returns a uniformly random `s`, which is **high-s ~half the
+time**. The host/WASM verifier (`VerifyBundle` / `VerifyCOSEBundle` Gate 1b) and
+the on-chain OpenZeppelin `P256` verifier both **reject high-s** (signature
+malleability). So `cmd_sign_data` calls `he_normalize_low_s()` to canonicalize
+`s -> N-s` before returning; **do not drop this call** when grafting, or ~50% of
+honest device bundles will be rejected by the very verifier they bind to. Keep
+the `sig_len != 64` guard too — `he_normalize_low_s` assumes a 64-byte `r||s`.
 
 ## 3. Add the dispatch case — `invoke_command()` in the same file
 

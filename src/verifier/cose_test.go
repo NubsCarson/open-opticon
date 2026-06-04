@@ -6,6 +6,7 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"encoding/hex"
+	"math/big"
 	"testing"
 )
 
@@ -42,6 +43,28 @@ func TestVerifyCOSEHappyPath(t *testing.T) {
 	}
 	if len(res.NextDigest) != 32 {
 		t.Errorf("NextDigest len = %d, want 32", len(res.NextDigest))
+	}
+}
+
+// Gate 1b on the COSE envelope: a malleated high-s device signature (still a
+// valid ECDSA sig over the same Sig_structure) must be rejected, just as the
+// raw envelope and the on-chain verifier reject it.
+func TestVerifyCOSERejectsHighS(t *testing.T) {
+	key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	b := signCOSE(t, golden, key) // SignCOSESign1 emits canonical low-s
+	raw := mustHex(b.COSE)
+	// COSE_Sign1's trailing 64 bytes are r||s; malleate s -> N-s (high-s).
+	s := new(big.Int).SetBytes(raw[len(raw)-32:])
+	new(big.Int).Sub(elliptic.P256().Params().N, s).FillBytes(raw[len(raw)-32:])
+	b.COSE = hex.EncodeToString(raw)
+	res := VerifyCOSEBundle(b, Options{
+		ExpectedNonce: mustHex("aabb"),
+		PinPubX:       leftPad(key.PublicKey.X.Bytes(), 32),
+		PinPubY:       leftPad(key.PublicKey.Y.Bytes(), 32),
+		LastCounter:   6,
+	})
+	if res.OK {
+		t.Fatal("VerifyCOSEBundle accepted a high-s (malleated) COSE device signature; want rejection")
 	}
 }
 

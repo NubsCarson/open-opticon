@@ -233,7 +233,9 @@
       <p class="small" style="margin-top:12px">The latest manifest is on the
         <a class="lnk" href="https://github.com/NubsCarson/open-opticon/actions/workflows/ci.yml">CI runs page</a>
         (each run's summary + the <span class="mono">repro-manifest</span> artifact). The OP-TEE TA
-        measurement and the zk guest image id are re-derivable from source with pinned toolchains — see
+        measurement is re-derivable from source with the documented deterministic build; the zk guest image id is a
+        <em>toolchain- and revision-locked</em> measurement (pinned to its rzup toolchain + guest snapshot, not a
+        from-any-checkout rebuild) — see
         <a class="lnk" href="https://github.com/NubsCarson/open-opticon/blob/main/docs/REPRODUCIBLE.md">REPRODUCIBLE.md</a>.</p>
     </div>
   </div>
