@@ -14,8 +14,9 @@ dead when its enclosure is opened.**
 > **Site:** <https://nubscarson.github.io/open-opticon/> (or open
 > [`docs/index.html`](docs/index.html) locally / `python3 -m http.server -d docs 8099`). &nbsp;·&nbsp;
 > **Walkthrough video:** [`docs/assets/walkthrough.mp4`](docs/assets/walkthrough.mp4)
-> — real captured output: the host pipeline, an OP-TEE attestation on QEMU, the
-> in-enclave bound output, and the tamper fail-closed path.
+> — a rendered walkthrough of the real captured values: the host pipeline, an
+> OP-TEE attestation on QEMU, the in-enclave bound output, and the tamper
+> fail-closed path.
 
 > ⚠️ **Status: proof-of-concept / d/acc art project.** The host pipeline is fully
 > tested (`make test`). The OP-TEE path has been **run end-to-end on QEMU to a
