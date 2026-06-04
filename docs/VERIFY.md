@@ -12,7 +12,7 @@ secure element) · **F** = frontier / not built. Full scope: [THREAT_MODEL.md](T
 |---|---|---|
 | The output is a small event predicate, signed by the attested key — not a recording | `make test` (verifier units + `e2e`); read `src/common/he_payload.h`, `src/verifier/bound.go` | L |
 | A bundle that is forged / replayed / stale-nonce / key-swapped / non-canonical is rejected | `make e2e` negatives; `src/verifier/bound_test.go`; `make fuzz` (CBOR decoder) | L |
-| The verifier's accept-set matches the on-chain P-256 verifier under malleability: a high-s (malleated) device bundle is rejected by the CLI, the browser, and the chain, and the device signers emit canonical low-s | `bound_test.go` (`TestVerifyRejectsHighS`), `cose_test.go` (`TestVerifyCOSERejectsHighS`), `test/wasm_verify_test.js` (high-s case), `cmd/he-gui` (`TestSimEmitsLowS`, audio+vision) | L |
+| The verifier's accept-set matches the on-chain P-256 verifier under malleability: a high-s (malleated) device bundle is rejected by the CLI, the browser, and the chain, and the device signers emit canonical low-s | CLI/browser: `bound_test.go` (`TestVerifyRejectsHighS`), `cose_test.go` (`TestVerifyCOSERejectsHighS`), `test/wasm_verify_test.js` (high-s case); signers: `cmd/he-gui` (`TestSimEmitsLowS`, audio+vision); chain: `onchain/test/HonestEarQuorum.t.sol` (`test_P256RejectsHighS`, via `cd onchain && forge test`) | L |
 | The browser verifier matches the CLI (same code, no server) | `bash tools/build_wasm.sh && node test/wasm_verify_test.js`; open [`verify.html`](verify.html) | L |
 | Streaming hash-chain detects a suppressed window | `make chain-e2e` | L |
 | COSE_Sign1 (RFC 9052) envelope verifies end to end | `make cose-e2e` | L |

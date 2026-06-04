@@ -56,7 +56,7 @@ verifier-test: sim fixtures
 # back to their built-in skip rather than failing the build.
 fixtures:
 	@if command -v python3 >/dev/null 2>&1; then \
-		python3 test/gen_frames.py test/fixtures >/dev/null; \
+		python3 test/gen_frames.py test/fixtures >/dev/null && \
 		python3 test/gen_vision_frames.py test/fixtures >/dev/null; \
 	else \
 		echo "  (python3 not found — skipping fixture generation; exec-based tests will skip)"; \
