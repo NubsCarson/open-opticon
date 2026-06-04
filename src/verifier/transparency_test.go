@@ -5,10 +5,31 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"testing"
 )
+
+// A consistency proof FROM the empty tree (oldSize 0) must pin the claimed old
+// root to the canonical empty-tree root (RFC 6962 MTH of "" = SHA-256 of ""),
+// otherwise a caller could "prove" newRoot extends an arbitrary made-up old root.
+func TestConsistencyFromEmptyTreePinsEmptyRoot(t *testing.T) {
+	log := buildLog(7)
+	newRoot := log.Root()
+	proof, err := log.ConsistencyProof(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !VerifyConsistency(0, 7, proof, sha256.Sum256(nil), newRoot) {
+		t.Fatal("consistency from the canonical empty root must verify")
+	}
+	var bogus [32]byte
+	bogus[0] = 0xab // any non-empty claimed old root
+	if VerifyConsistency(0, 7, proof, bogus, newRoot) {
+		t.Fatal("consistency from a non-empty claimed old root must be rejected")
+	}
+}
 
 // Anchored RFC 6962 vectors we are certain of: the empty tree hashes the empty
 // string, and a one-leaf tree hashes 0x00||leaf.

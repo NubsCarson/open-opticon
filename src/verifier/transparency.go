@@ -165,7 +165,10 @@ func VerifyConsistency(oldSize, newSize int, proof [][32]byte, oldRoot, newRoot 
 		return len(proof) == 0 && oldRoot == newRoot
 	}
 	if oldSize == 0 {
-		return len(proof) == 0
+		// A size-0 tree's root is defined (RFC 6962 MTH of the empty list =
+		// SHA-256 of ""). Require the claimed oldRoot to be exactly that, so a
+		// caller cannot "prove" newRoot extends an arbitrary made-up old root.
+		return len(proof) == 0 && oldRoot == sha256.Sum256(nil)
 	}
 	fn, sn := oldSize-1, newSize-1
 	for fn&1 == 1 {
@@ -213,9 +216,12 @@ func CheckpointBody(origin string, size int, root [32]byte) []byte {
 		origin, size, base64.StdEncoding.EncodeToString(root[:])))
 }
 
-// signNote signs an exact note body with a P-256 key, returning the 64-byte
-// r||s signature used everywhere else in this project. One signing path shared
-// by the log operator (SignCheckpoint) and witnesses (CosignCheckpoint).
+// signNote signs an exact note body with a P-256 key, returning a 64-byte r||s
+// signature. One signing path shared by the log operator (SignCheckpoint) and
+// witnesses (CosignCheckpoint). These checkpoint/cosignature notes are verified
+// only OFF-CHAIN (ecdsa.Verify, which accepts both s parities), never by the
+// on-chain OZ P256 verifier — so, unlike the device-bundle signers, they are
+// intentionally NOT low-s-normalized.
 func signNote(body []byte, key *ecdsa.PrivateKey) ([]byte, error) {
 	h := sha256.Sum256(body)
 	r, s, err := ecdsa.Sign(rand.Reader, key, h[:])

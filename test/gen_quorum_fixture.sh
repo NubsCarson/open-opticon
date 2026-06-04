@@ -56,6 +56,10 @@ def leg(raw):
     d = json.loads(raw)
     sig = bytes.fromhex(d["sig"])
     r, s = int.from_bytes(sig[:32], "big"), int.from_bytes(sig[32:], "big")
+    # The C signer (sim/he_bundle.c sign_rs) now emits canonical low-s itself, so
+    # this is a belt-and-suspenders guard (kept so fixtures stay valid even if
+    # regenerated with an older sim). The C signer is guarded by he-gui's
+    # TestSimEmitsLowS; here it should already hold.
     if s > HALF_N:                      # normalize to low-s for OZ P256
         s = N - s
     sig = r.to_bytes(32, "big") + s.to_bytes(32, "big")

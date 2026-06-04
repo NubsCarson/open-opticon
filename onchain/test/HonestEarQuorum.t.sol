@@ -6,6 +6,7 @@ import {RiscZeroGroth16Verifier} from "risc0/groth16/RiscZeroGroth16Verifier.sol
 import {ControlID} from "risc0/groth16/ControlID.sol";
 import {VerificationFailed, IRiscZeroVerifier} from "risc0/IRiscZeroVerifier.sol";
 import {HonestEarQuorum} from "../src/HonestEarQuorum.sol";
+import {P256} from "openzeppelin/contracts/utils/cryptography/P256.sol";
 
 /// Test-only harness exposing the internal CBOR reader so its bounds checks can
 /// be exercised directly. In production the reader is unreachable except behind
@@ -37,6 +38,8 @@ contract HonestEarQuorumTest is Test {
     bytes altSig;
     bytes maxPayload;
     bytes maxSig;
+    bytes32 devX;
+    bytes32 devY;
 
     function setUp() public {
         string memory pf = vm.readFile("./test/proof_fixture.json");
@@ -45,8 +48,8 @@ contract HonestEarQuorumTest is Test {
         seal = vm.parseJsonBytes(pf, ".seal");
 
         string memory qf = vm.readFile("./test/quorum_fixture.json");
-        bytes32 devX = vm.parseJsonBytes32(qf, ".alarm.pubX");
-        bytes32 devY = vm.parseJsonBytes32(qf, ".alarm.pubY");
+        devX = vm.parseJsonBytes32(qf, ".alarm.pubX");
+        devY = vm.parseJsonBytes32(qf, ".alarm.pubY");
         aPayload = vm.parseJsonBytes(qf, ".alarm.payload");
         aSig = vm.parseJsonBytes(qf, ".alarm.sig");
         sPayload = vm.parseJsonBytes(qf, ".silence.payload");
@@ -65,6 +68,26 @@ contract HonestEarQuorumTest is Test {
         (uint32 ev, uint32 pres) = q.verdict(seal, journal, aPayload, aSig);
         assertEq(ev, 2, "agreed event should be alarm_tone");
         assertEq(pres, 1, "agreed presence");
+    }
+
+    /// Pins the on-chain low-s rule (the chain half of cross-verifier agreement):
+    /// OpenZeppelin P256.verify accepts the committed device signature (canonical
+    /// low-s, emitted by sim/he_bundle.c sign_rs) and REJECTS its high-s
+    /// malleation (s -> N-s) over the same payload + key. Signers emit low-s so a
+    /// real bundle verifies here AND in the Go/WASM verifier alike.
+    function test_P256RejectsHighS() public view {
+        uint256 N = 0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551;
+        bytes memory sig = aSig;
+        bytes32 r;
+        bytes32 s;
+        assembly {
+            r := mload(add(sig, 32))
+            s := mload(add(sig, 64))
+        }
+        bytes32 h = sha256(aPayload);
+        assertTrue(P256.verify(h, r, s, devX, devY), "committed device sig must be low-s and verify");
+        bytes32 highS = bytes32(N - uint256(s));
+        assertFalse(P256.verify(h, r, highS, devX, devY), "high-s malleation must be rejected on-chain");
     }
 
     function test_RecordEnforcesAntiReplay() public {

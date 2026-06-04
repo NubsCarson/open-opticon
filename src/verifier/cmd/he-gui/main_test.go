@@ -8,9 +8,12 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
+	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -184,6 +187,42 @@ func mintReqKeepSig(t *testing.T, tamperedPayload []byte, nonceHex string) []byt
 		t.Fatal(err)
 	}
 	return body
+}
+
+// The C signer (sim/he_bundle.c sign_rs) MUST emit canonical low-s, or the
+// device bundle is rejected by the on-chain OpenZeppelin P256 verifier (which
+// rejects high-s) while the Go/WASM verifier accepts it — the verifiers would
+// disagree. ECDSA's s is random per signature, so without normalization ~half
+// of these runs would be high-s. Guards against a regression in the C low-s fix
+// (the test/gen_quorum_fixture.sh Python re-normalization would otherwise mask
+// it in the committed on-chain fixture).
+func TestSimEmitsLowS(t *testing.T) {
+	sim := filepath.Join("..", "..", "..", "..", "sim", "bin", "he-attest-sim")
+	if _, err := os.Stat(sim); err != nil {
+		t.Skip("he-attest-sim not built (run `make sim`); skipping the C-signer low-s check")
+	}
+	pcm := filepath.Join("..", "..", "..", "..", "test", "fixtures", "alarm.pcm")
+	if _, err := os.Stat(pcm); err != nil {
+		t.Skipf("alarm fixture missing: %v", err)
+	}
+	half := new(big.Int).Rsh(elliptic.P256().Params().N, 1)
+	for i := 0; i < 16; i++ {
+		out, err := exec.Command(sim, pcm, "deadbeef", fmt.Sprint(i+1)).Output()
+		if err != nil {
+			t.Fatalf("sim run %d: %v", i, err)
+		}
+		var b verifier.Bundle
+		if err := json.Unmarshal(out, &b); err != nil {
+			t.Fatalf("sim run %d: bad bundle json: %v", i, err)
+		}
+		sig, err := hex.DecodeString(b.Sig)
+		if err != nil || len(sig) != 64 {
+			t.Fatalf("sim run %d: bad sig %q", i, b.Sig)
+		}
+		if new(big.Int).SetBytes(sig[32:]).Cmp(half) > 0 {
+			t.Fatalf("sim emitted HIGH-s on run %d — regression in sim/he_bundle.c low-s normalization", i)
+		}
+	}
 }
 
 // process() is the live "listen" path: it mints a fresh nonce, execs he-attest-sim

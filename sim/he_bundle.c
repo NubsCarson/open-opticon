@@ -92,14 +92,22 @@ static int sign_rs(const uint8_t *msg, size_t msg_len, uint8_t out_sig[64])
             BN_free(slow);
             goto out;
         }
-        BN_rshift1(half, order);            /* half = N >> 1 */
-        if (BN_cmp(s, half) > 0)
-            BN_sub(slow, order, s);         /* slow = N - s  (low-s)  */
-        else
-            BN_copy(slow, s);
+        int ok = BN_rshift1(half, order);   /* half = N >> 1 */
+        if (ok) {
+            if (BN_cmp(s, half) > 0)
+                ok = (BN_sub(slow, order, s) == 1);   /* slow = N - s (low-s) */
+            else
+                ok = (BN_copy(slow, s) != NULL);
+        }
+        /* Fail closed: if any BN op fails (OOM), don't emit a malformed s. */
         memset(out_sig, 0, 64);
-        BN_bn2binpad(r, out_sig, 32);
-        BN_bn2binpad(slow, out_sig + 32, 32);
+        if (!ok ||
+            BN_bn2binpad(r, out_sig, 32) != 32 ||
+            BN_bn2binpad(slow, out_sig + 32, 32) != 32) {
+            BN_free(half);
+            BN_free(slow);
+            goto out;
+        }
         BN_free(half);
         BN_free(slow);
     }

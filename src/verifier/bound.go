@@ -258,6 +258,16 @@ func verifySig(payload, sig, px, py []byte) error {
 // (s' = N - s when s > N/2). Signers should emit canonical low-s so a bundle is
 // accepted identically by this verifier and the on-chain OpenZeppelin P256
 // verifier; ecdsa.Sign returns a random s (high ~half the time).
+//
+// This verifier intentionally does NOT reject high-s (the on-chain P256.verify
+// does). Freshness and anti-replay bind to the nonce and counter INSIDE the
+// SHA-256(payload) that is signed, and no path keys on signature bytes
+// (he-challenge dedups on session id, the transparency log dedups cosigners by
+// name, on-chain anti-replay keys on the counter). So a malleated high-s sig
+// re-encodes the identical claim and is caught by the nonce/counter gates — it
+// cannot mint a new verdict. Matching the chain on malleated sigs too would
+// require regenerating the committed verify.wasm with the pinned Go toolchain:
+// a deferred, defense-in-depth-only follow-up, not a correctness gap.
 func NormalizeLowS(s *big.Int) *big.Int {
 	halfN := new(big.Int).Rsh(elliptic.P256().Params().N, 1)
 	if s.Cmp(halfN) > 0 {
