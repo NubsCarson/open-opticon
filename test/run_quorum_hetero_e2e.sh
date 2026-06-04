@@ -73,18 +73,24 @@ b = bytes(int(x,16) for x in re.findall(r"[0-9a-f]{2}", m.group(1)))
 assert b[0] == 0x04 and len(b) == 65
 print(b[1:33].hex(), b[33:65].hex())')
 # Sign SHA-256(payload) with the TPM; convert its DER ECDSA sig to raw 64-byte r||s.
+# The TPM signs with a random s (high ~half the time); canonicalize to low-s
+# (s' = N - s when s > N/2) so the verifier's Gate 1b and the on-chain P256 verifier
+# accept this root — (r, N-s) is an equally valid ECDSA signature for the same key.
 python3 -c "import sys;open('$W/payload.bin','wb').write(bytes.fromhex('$PAYLOAD'))"
 openssl dgst -sha256 -binary "$W/payload.bin" > "$W/payload.dig"
 tpm2_sign -c "$W/k.ctx" -g sha256 -d -f plain -o "$W/sig.der" "$W/payload.dig" >/dev/null 2>&1
 TSIG=$(python3 - "$W/sig.der" <<'PY'
 import sys
+N = 0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551
 d = open(sys.argv[1], "rb").read()
 assert d[0] == 0x30
 i = 2 if d[1] < 0x80 else 2 + (d[1] & 0x7f)
 assert d[i] == 0x02; rlen = d[i+1]; r = d[i+2:i+2+rlen]; i = i+2+rlen
 assert d[i] == 0x02; slen = d[i+1]; s = d[i+2:i+2+slen]
+sv = int.from_bytes(s, "big")
+if sv > N // 2: sv = N - sv          # canonical low-s
 fix = lambda x: (b"\x00"*(32-len(x.lstrip(b"\x00")))) + x.lstrip(b"\x00")
-print((fix(r)+fix(s)).hex())
+print((fix(r) + sv.to_bytes(32, "big")).hex())
 PY
 )
 python3 -c "

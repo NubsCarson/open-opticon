@@ -100,6 +100,7 @@ openssl dgst -sha256 -binary "$W/body.txt" > "$W/body.dig"
 tpm2_sign -c "$W/key.ctx" -g sha256 -d -f plain -o "$W/sig.der" "$W/body.dig" >/dev/null 2>&1
 SIG=$(python3 - "$W/sig.der" <<'PY'
 import sys
+N = 0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551
 d = open(sys.argv[1], "rb").read()
 # Minimal DER ECDSA-Sig-Value parse: 0x30 len 0x02 rlen r 0x02 slen s.
 assert d[0] == 0x30, "not a DER SEQUENCE"
@@ -108,10 +109,15 @@ assert d[i] == 0x02, "expected INTEGER r"
 rlen = d[i+1]; r = d[i+2:i+2+rlen]; i = i+2+rlen
 assert d[i] == 0x02, "expected INTEGER s"
 slen = d[i+1]; s = d[i+2:i+2+slen]
+# The TPM signs with a random s (high ~half the time); canonicalize to low-s
+# (s' = N - s when s > N/2) so the verifier's Gate 1b accepts this root — (r, N-s)
+# is an equally valid ECDSA signature for the same key.
+sv = int.from_bytes(s, "big")
+if sv > N // 2: sv = N - sv
 def fix(x):
     x = x.lstrip(b"\x00")          # drop DER sign byte / leading zeros
     return (b"\x00"*(32-len(x))) + x  # left-pad to 32 bytes
-print((fix(r)+fix(s)).hex())
+print((fix(r) + sv.to_bytes(32, "big")).hex())
 PY
 )
 [ "${#SIG}" -eq 128 ] && ok "TPM ECDSA signature converted to 64-byte r||s" || bad "unexpected sig length (${#SIG} hex chars, want 128)"
