@@ -28,7 +28,7 @@
 
 VERIFIER = src/verifier
 
-.PHONY: help test units sim verifier-test e2e vision-e2e chain-e2e cose-e2e witness-e2e voxterm-e2e multimodal-e2e consent-e2e endorse-e2e eat-e2e tpm-e2e quorum-hetero-e2e voxterm-demo verify-all port-diff demo tamper-test gui sites wasm wasm-verify fuzz repro cross clean
+.PHONY: help test units sim verifier-test fixtures e2e vision-e2e chain-e2e cose-e2e witness-e2e voxterm-e2e multimodal-e2e consent-e2e endorse-e2e eat-e2e tpm-e2e quorum-hetero-e2e voxterm-demo verify-all port-diff demo tamper-test gui sites wasm wasm-verify fuzz repro cross clean
 
 test: units verifier-test e2e vision-e2e chain-e2e cose-e2e witness-e2e voxterm-e2e multimodal-e2e consent-e2e endorse-e2e eat-e2e tamper-test
 	@echo ""
@@ -44,9 +44,23 @@ units: sim
 	$(MAKE) -C sim test
 
 # Go verifier unit tests (stdlib runtime; offline; -race guards the concurrent
-# attest/anti-replay paths in he-challenge).
-verifier-test:
+# attest/anti-replay paths in he-challenge). Depends on sim + fixtures so the
+# exec-based tests (TestSimEmitsLowS audio/vision, TestProcessE2E) actually RUN
+# here instead of skipping — verifier-test runs before e2e/vision-e2e, which
+# would otherwise be the first thing to generate these fixtures.
+verifier-test: sim fixtures
 	cd $(VERIFIER) && CGO_ENABLED=1 GOPROXY=off go test -race ./...
+
+# Generated test fixtures (audio tones + vision frames; stdlib-python only) that
+# the exec-based verifier tests read. Best-effort: without python3 the tests fall
+# back to their built-in skip rather than failing the build.
+fixtures:
+	@if command -v python3 >/dev/null 2>&1; then \
+		python3 test/gen_frames.py test/fixtures >/dev/null; \
+		python3 test/gen_vision_frames.py test/fixtures >/dev/null; \
+	else \
+		echo "  (python3 not found — skipping fixture generation; exec-based tests will skip)"; \
+	fi
 
 # Full detect -> sign -> verify pipeline incl. negative attacks.
 e2e:
