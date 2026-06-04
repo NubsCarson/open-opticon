@@ -254,6 +254,18 @@ func verifySig(payload, sig, px, py []byte) error {
 	return nil
 }
 
+// NormalizeLowS returns the canonical low-s form of an ECDSA P-256 s value
+// (s' = N - s when s > N/2). Signers should emit canonical low-s so a bundle is
+// accepted identically by this verifier and the on-chain OpenZeppelin P256
+// verifier; ecdsa.Sign returns a random s (high ~half the time).
+func NormalizeLowS(s *big.Int) *big.Int {
+	halfN := new(big.Int).Rsh(elliptic.P256().Params().N, 1)
+	if s.Cmp(halfN) > 0 {
+		return new(big.Int).Sub(elliptic.P256().Params().N, s)
+	}
+	return s
+}
+
 // ---- minimal CBOR reader for the fixed payload schema ----
 
 type cborReader struct {

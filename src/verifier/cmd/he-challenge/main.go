@@ -146,10 +146,12 @@ func main() {
 	log.Fatal(cli.Serve(*addr))
 }
 
-func randHex(n int) string {
+func randHex(n int) (string, error) {
 	b := make([]byte, n)
-	_, _ = rand.Read(b)
-	return hex.EncodeToString(b)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
 }
 
 func (s *server) handleChallenge(w http.ResponseWriter, _ *http.Request) {
@@ -158,7 +160,11 @@ func (s *server) handleChallenge(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "rng failure", 500)
 		return
 	}
-	sid := randHex(8)
+	sid, err := randHex(8)
+	if err != nil {
+		http.Error(w, "rng failure", 500)
+		return
+	}
 
 	s.mu.Lock()
 	s.gcLocked()

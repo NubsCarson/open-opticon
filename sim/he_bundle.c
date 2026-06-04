@@ -75,9 +75,34 @@ static int sign_rs(const uint8_t *msg, size_t msg_len, uint8_t out_sig[64])
         goto out;
 
     ECDSA_SIG_get0(sig, &r, &s);
-    memset(out_sig, 0, 64);
-    BN_bn2binpad(r, out_sig, 32);
-    BN_bn2binpad(s, out_sig + 32, 32);
+
+    /* Normalize to low-s (s <= N/2). OpenSSL's ECDSA_do_sign returns a random s,
+     * high ~half the time; the on-chain OpenZeppelin P256 verifier rejects
+     * high-s (malleability), so without this the device would emit bundles the
+     * Go/host verifier accepts but the contract rejects — the verifiers would
+     * disagree. Canonical low-s (s' = N - s when s > N/2) makes all verifiers
+     * accept the same signatures. */
+    {
+        const EC_GROUP *grp = EC_KEY_get0_group(key);
+        const BIGNUM *order = grp ? EC_GROUP_get0_order(grp) : NULL;
+        BIGNUM *half = BN_new();
+        BIGNUM *slow = BN_new();
+        if (!order || !half || !slow) {
+            BN_free(half);
+            BN_free(slow);
+            goto out;
+        }
+        BN_rshift1(half, order);            /* half = N >> 1 */
+        if (BN_cmp(s, half) > 0)
+            BN_sub(slow, order, s);         /* slow = N - s  (low-s)  */
+        else
+            BN_copy(slow, s);
+        memset(out_sig, 0, 64);
+        BN_bn2binpad(r, out_sig, 32);
+        BN_bn2binpad(slow, out_sig + 32, 32);
+        BN_free(half);
+        BN_free(slow);
+    }
     rc = 0;
 
 out:

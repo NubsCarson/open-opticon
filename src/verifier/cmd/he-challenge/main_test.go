@@ -98,6 +98,7 @@ func signBundle(t *testing.T, payload []byte) verifier.Bundle {
 	if err != nil {
 		t.Fatalf("sign: %v", err)
 	}
+	s = verifier.NormalizeLowS(s) // canonical low-s, like a real device
 	sig := make([]byte, 64)
 	r.FillBytes(sig[:32])
 	s.FillBytes(sig[32:])
@@ -136,7 +137,11 @@ func TestChallengeFloodCapReturns503(t *testing.T) {
 	s := newServer()
 	now := time.Now()
 	for i := 0; i < maxSessions; i++ {
-		s.sessions[randHex(8)] = &session{nonce: []byte{1}, createdAt: now}
+		h, err := randHex(8)
+		if err != nil {
+			t.Fatal(err)
+		}
+		s.sessions[h] = &session{nonce: []byte{1}, createdAt: now}
 	}
 	rr := httptest.NewRecorder()
 	s.handleChallenge(rr, httptest.NewRequest(http.MethodGet, "/challenge", nil))

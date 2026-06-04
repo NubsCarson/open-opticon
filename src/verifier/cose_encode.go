@@ -40,6 +40,7 @@ func SignCOSESign1(payload []byte, key *ecdsa.PrivateKey) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	s = NormalizeLowS(s) // canonical low-s, matching the on-chain P256 verifier
 	sig := make([]byte, 64)
 	r.FillBytes(sig[:32])
 	s.FillBytes(sig[32:])

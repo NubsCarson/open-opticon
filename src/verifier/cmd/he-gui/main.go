@@ -123,7 +123,9 @@ func process(sim string, pcm []byte) result {
 	tmp.Close()
 
 	nb := make([]byte, 32)
-	_, _ = rand.Read(nb)
+	if _, err := rand.Read(nb); err != nil {
+		return result{Reason: "rng: " + err.Error()}
+	}
 	nonce := hex.EncodeToString(nb)
 	ctr := atomic.AddUint64(&counter, 1)
 

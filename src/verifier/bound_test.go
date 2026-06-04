@@ -157,6 +157,7 @@ func signWith(t *testing.T, payload []byte, key *ecdsa.PrivateKey) Bundle {
 	if err != nil {
 		t.Fatal(err)
 	}
+	s = NormalizeLowS(s) // canonical low-s (ecdsa.Sign returns a random s)
 	sig := make([]byte, 64)
 	r.FillBytes(sig[:32])
 	s.FillBytes(sig[32:])
@@ -187,6 +188,53 @@ func leftPad(b []byte, n int) []byte {
 	out := make([]byte, n)
 	copy(out[n-len(b):], b)
 	return out
+}
+
+func TestNormalizeLowS(t *testing.T) {
+	N := elliptic.P256().Params().N
+	half := new(big.Int).Rsh(N, 1)
+	if lo := big.NewInt(12345); NormalizeLowS(lo).Cmp(lo) != 0 {
+		t.Fatal("a low-s value must be returned unchanged")
+	}
+	hi := new(big.Int).Add(half, big.NewInt(1)) // just above N/2 -> high-s
+	got := NormalizeLowS(hi)
+	if got.Cmp(half) > 0 {
+		t.Fatal("normalized value is still high-s")
+	}
+	if got.Cmp(new(big.Int).Sub(N, hi)) != 0 {
+		t.Fatal("high-s must map to N - s")
+	}
+}
+
+// Signers must emit canonical low-s, so a device bundle is accepted identically
+// by this verifier and the on-chain OpenZeppelin P256 verifier (which rejects
+// high-s for malleability). Guards both Go signing paths — raw (signWith) and
+// COSE_Sign1 (SignCOSESign1). ecdsa.Sign returns a random s, so without
+// normalization ~half of 20 iterations would be high-s.
+func TestGoSignersEmitLowS(t *testing.T) {
+	half := new(big.Int).Rsh(elliptic.P256().Params().N, 1)
+	isLowS := func(sig []byte) bool { return new(big.Int).SetBytes(sig[32:]).Cmp(half) <= 0 }
+	for i := 0; i < 20; i++ {
+		b, _, _ := signGolden(t, golden)
+		raw, err := hex.DecodeString(b.Sig)
+		if err != nil || len(raw) != 64 {
+			t.Fatalf("bad raw sig: %v", err)
+		}
+		if !isLowS(raw) {
+			t.Fatalf("signWith emitted high-s on iter %d", i)
+		}
+		key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		if err != nil {
+			t.Fatal(err)
+		}
+		msg, err := SignCOSESign1(golden, key)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !isLowS(msg[len(msg)-64:]) { // COSE_Sign1's trailing 64 bytes are r||s
+			t.Fatalf("SignCOSESign1 emitted high-s on iter %d", i)
+		}
+	}
 }
 
 func TestVerifyHappyPath(t *testing.T) {

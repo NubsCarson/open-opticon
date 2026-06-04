@@ -89,6 +89,7 @@ func mintReq(t *testing.T, payload []byte, nonceHex string) []byte {
 	if err != nil {
 		t.Fatal(err)
 	}
+	s = verifier.NormalizeLowS(s) // canonical low-s, like a real device
 	sig := make([]byte, 64)
 	r.FillBytes(sig[:32])
 	s.FillBytes(sig[32:])
@@ -166,6 +167,7 @@ func mintReqKeepSig(t *testing.T, tamperedPayload []byte, nonceHex string) []byt
 	if err != nil {
 		t.Fatal(err)
 	}
+	s = verifier.NormalizeLowS(s) // canonical low-s, like a real device
 	sig := make([]byte, 64)
 	r.FillBytes(sig[:32])
 	s.FillBytes(sig[32:])
